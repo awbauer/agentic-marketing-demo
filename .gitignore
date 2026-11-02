@@ -10,3 +10,7 @@ dist/
 
 # Local Agentforce preview sessions (transcripts and traces)
 .sfdx/
+
+# Local Worker secrets (Neo4j credentials and similar) must never be committed.
+.dev.vars
+.dev.vars.*
