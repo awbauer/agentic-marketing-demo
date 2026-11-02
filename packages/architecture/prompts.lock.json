@@ -1,0 +1,50 @@
+{
+  "content-plan": {
+    "version": 1,
+    "hash": "f7bc208f"
+  },
+  "scenario": {
+    "version": 1,
+    "hash": "5385b973"
+  },
+  "brief": {
+    "version": 1,
+    "hash": "1e8b8fa9"
+  },
+  "reuse": {
+    "version": 1,
+    "hash": "903db0df"
+  },
+  "module-authoring": {
+    "version": 1,
+    "hash": "16e2ffed"
+  },
+  "atomization": {
+    "version": 1,
+    "hash": "12fe0d26"
+  },
+  "substantiation": {
+    "version": 1,
+    "hash": "fabe9d3d"
+  },
+  "readiness": {
+    "version": 1,
+    "hash": "c16adcc9"
+  },
+  "attribution": {
+    "version": 1,
+    "hash": "1c13b3dd"
+  },
+  "optimization": {
+    "version": 1,
+    "hash": "31edf12e"
+  },
+  "data-readiness": {
+    "version": 1,
+    "hash": "0b865adc"
+  },
+  "adversarial-farm": {
+    "version": 1,
+    "hash": "6012adb6"
+  }
+}

@@ -22,6 +22,7 @@ import { useAgent } from "agents/react";
 import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { ActionCards } from "./ActionCards";
+import { ArchitectureView } from "./architecture/ArchitectureView";
 import { MarketingWriteDetails, PermissionDetails } from "./ConfirmationDetails";
 import { EvaluationView } from "./EvaluationView";
 import { GraphEvidencePanel } from "./GraphEvidence";
@@ -220,7 +221,7 @@ export function App() {
     disabledTools: [],
   });
   const [view, setView] = useState<
-    "overview" | "history" | "evaluations" | "learn" | "graph" | "usecases"
+    "overview" | "history" | "evaluations" | "learn" | "graph" | "usecases" | "architecture"
   >("overview");
   const confirmationRef = useRef<HTMLElement>(null);
   const connectorStatusLoaded = useRef(false);
@@ -680,6 +681,14 @@ export function App() {
             >
               <span>▤</span>Use cases
             </button>
+            <button
+              type="button"
+              className={`nav-item ${view === "architecture" ? "active" : ""}`}
+              aria-current={view === "architecture" ? "page" : undefined}
+              onClick={() => setView("architecture")}
+            >
+              <span>◫</span>Architecture
+            </button>
           </div>
           <div>
             <p className="nav-label">Sources</p>
@@ -815,6 +824,7 @@ export function App() {
           />
         )}
         {view === "graph" && <GraphView onClose={() => setView("overview")} />}
+        {view === "architecture" && <ArchitectureView onClose={() => setView("overview")} />}
         {view === "usecases" && (
           <UseCasesView
             onClose={() => setView("overview")}

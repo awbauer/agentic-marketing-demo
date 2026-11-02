@@ -52,6 +52,7 @@ import {
   recordDecision,
   rememberDraft,
 } from "../../../packages/knowledge-graph/src/index.ts";
+import { authorizeTool } from "./architecture/context";
 import { LOCATIONS } from "./campaign-context/open-meteo";
 import {
   CAMPAIGN_CONTEXT_TOOL_PREFIX,
@@ -351,7 +352,14 @@ function localFixtureDraft(utterance: string, focus: FocusItem | null): FocusInp
 
 type ToolResultListener = (toolName: string, input: unknown, output: unknown) => void;
 
-function guardToolResults(tools: ToolSet, onResult?: ToolResultListener): ToolSet {
+/** Decides whether the gateway lets the orchestrator call a tool; a denial becomes a tool error. */
+type ToolAuthorizer = (toolName: string) => Promise<{ decision: "allow" | "deny"; reason: string }>;
+
+function guardToolResults(
+  tools: ToolSet,
+  onResult?: ToolResultListener,
+  authorize?: ToolAuthorizer,
+): ToolSet {
   return Object.fromEntries(
     Object.entries(tools).map(([name, definition]) => {
       if (!("execute" in definition) || typeof definition.execute !== "function")
@@ -362,6 +370,13 @@ function guardToolResults(tools: ToolSet, onResult?: ToolResultListener): ToolSe
         {
           ...definition,
           execute: async (...args: Parameters<typeof execute>) => {
+            const gate = await authorize?.(name);
+            if (gate?.decision === "deny")
+              return {
+                semanticStatus: "error",
+                message: `The agentic gateway denied ${name}: ${gate.reason}`,
+                upstream: null,
+              };
             const upstream = await resolveToolResult(execute(...args));
             const semanticStatus = classifyToolResult(upstream);
             // Successful results feed the chat's working set; a listener error never fails the tool.
@@ -712,6 +727,19 @@ export class MarketingOrchestrator extends AIChatAgent<
   maxPersistedMessages = 100;
   waitForMcpConnections = false;
   private principalSubject = "unknown";
+
+  /** Every model-called tool passes the agentic gateway as `tool:<name>`; a gateway fault fails closed. */
+  private async authorizeTool(toolName: string) {
+    try {
+      return await authorizeTool(this.env, this.principalSubject, toolName, crypto.randomUUID());
+    } catch (error) {
+      console.error(
+        "[gateway] tool authorization failed",
+        error instanceof Error ? error.message : error,
+      );
+      return { decision: "deny" as const, reason: "The gateway could not be reached." };
+    }
+  }
   private imageGenerationInFlight = false;
   /** Set when the Campaign Creation agent drafted the brief in focus during this turn. */
   private agentBriefThisTurn = false;
@@ -779,6 +807,7 @@ export class MarketingOrchestrator extends AIChatAgent<
         ),
       },
       (name, input, output) => this.ingestToolResult(name, input, output),
+      (name) => this.authorizeTool(name),
     );
     // Refinements of a saved brief always name it, whatever the model wrote.
     const savedBrief = this.state.workingSet.focus?.saved;

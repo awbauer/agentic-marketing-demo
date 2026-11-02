@@ -315,6 +315,86 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
       },
     ],
   },
+  "agent-lifecycle": {
+    label: "Plan to learn, with a person at every gate",
+    caption:
+      "People decide at each stage, agents do the narrow work, and every call between them passes the gateway. Performance re-enters planning inside the quarter.",
+    blocks: [
+      {
+        kind: "lanes",
+        lanes: [
+          {
+            label: "People decide",
+            steps: [
+              { title: "Brand planner", caption: "approves the plan", tone: "person", glyph: "?" },
+              {
+                title: "Marketer",
+                caption: "validates brief and reuse",
+                tone: "person",
+                glyph: "?",
+              },
+              {
+                title: "Content Lab",
+                caption: "approves every module",
+                tone: "person",
+                glyph: "?",
+              },
+              { title: "Compliance", caption: "owns the evidence", tone: "person", glyph: "?" },
+              {
+                title: "Reviewer",
+                caption: "decides, by state machine",
+                tone: "person",
+                glyph: "?",
+              },
+              {
+                title: "Brand lead",
+                caption: "disposes on optimization",
+                tone: "person",
+                glyph: "?",
+              },
+            ],
+          },
+          {
+            label: "Agents work",
+            steps: [
+              {
+                title: "Plan and scenario",
+                caption: "plan → structured demand",
+                tone: "tool",
+                glyph: "▸",
+              },
+              { title: "Brief and reuse", caption: "inherits the plan", tone: "tool", glyph: "▸" },
+              { title: "Module authoring", caption: "cites or refuses", tone: "tool", glyph: "▸" },
+              { title: "Substantiation", caption: "evidence per claim", tone: "tool", glyph: "▸" },
+              {
+                title: "Readiness and farm",
+                caption: "block until it passes",
+                tone: "guard",
+                glyph: "◆",
+              },
+              {
+                title: "Attribution and optimization",
+                caption: "signal → module → claim",
+                tone: "tool",
+                glyph: "▸",
+              },
+            ],
+          },
+          {
+            label: "Governed by",
+            steps: [
+              { title: "Governed objects", caption: "one id for life", tone: "store", glyph: "⋈" },
+              { title: "Gateway", caption: "default-deny · identity", tone: "guard", glyph: "◆" },
+              { title: "Registry", caption: "versioned · scoped", tone: "store", glyph: "▤" },
+              { title: "State machine", caption: "11 transitions", tone: "guard", glyph: "◆" },
+              { title: "Evaluators", caption: "13 · drift watch", tone: "guard", glyph: "✓" },
+              { title: "Channels", caption: "one card, four surfaces", tone: "output", glyph: "✎" },
+            ],
+          },
+        ],
+      },
+    ],
+  },
   "use-cases": {
     label: "Sales and service use cases",
     caption:

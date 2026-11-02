@@ -14,7 +14,7 @@ A hands-on course in how an agent uses context, how GraphRAG grounds answers in 
   - [2.1 RAG in one page](#21-rag-in-one-page)
   - [2.2 GraphRAG](#22-graphrag)
   - [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag)
-- [Part 3: Every concept in the demo](#part-3-every-concept-in-the-demo): Every moving part of the workbench (16 lessons, 20 min)
+- [Part 3: Every concept in the demo](#part-3-every-concept-in-the-demo): Every moving part of the workbench (20 lessons, 20 min)
   - [3.1 The orchestrator agent](#31-the-orchestrator-agent)
   - [3.2 The workspace: focus, context, and records](#32-the-workspace-focus-context-and-records)
   - [3.3 The model: gpt-oss-20b on Workers AI](#33-the-model-gpt-oss-20b-on-workers-ai)
@@ -30,7 +30,11 @@ A hands-on course in how an agent uses context, how GraphRAG grounds answers in 
   - [3.13 Campaign image workflow](#313-campaign-image-workflow)
   - [3.14 Campaign context: restaurant data and live weather](#314-campaign-context-restaurant-data-and-live-weather)
   - [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services)
-  - [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats)
+  - [3.16 Governed objects and workspaces](#316-governed-objects-and-workspaces)
+  - [3.17 The agentic gateway](#317-the-agentic-gateway)
+  - [3.18 The content lifecycle: plan to learn](#318-the-content-lifecycle-plan-to-learn)
+  - [3.19 Agents, prompts, models, and drift](#319-agents-prompts-models-and-drift)
+  - [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats)
 - [Glossary](#glossary)
 - [Reference: every concept in the code](#reference-every-concept-in-the-code)
 
@@ -373,7 +377,7 @@ Which question needs GraphRAG rather than plain vector RAG?
 
 ## Part 3: Every concept in the demo
 
-*Every moving part of the workbench* · 16 lessons · 20 min
+*Every moving part of the workbench* · 20 lessons · 20 min
 
 Each piece of the workbench, how it works, and where to see it.
 
@@ -426,6 +430,8 @@ The **orchestrator** is a Cloudflare **Agents SDK** chat agent running in a **Du
 A turn runs a **tool loop** of up to 6 steps. On each step the model either calls a tool or writes the answer. Its tools come from four MCP servers, connected per turn: Salesforce, campaign context, the knowledge graph, and external services (public holidays and weather alerts). The orchestrator decides which tools are available on each step (see *Routing*) and records a **turn trace** of every event.
 
 Around the loop, the orchestrator also handles the events the model must not: it prepares confirmed writes and, once you confirm, asks Marketing Cloud's Campaign Creation agent to save the brief or create the campaign, then reads the records back. It checks Salesforce before and after the agent call, so a retry links what an earlier attempt saved instead of saving it twice. When the model refines a saved brief's preview, the orchestrator adds the Brief ID to the request if the model left it out. While a confirmed write runs, it publishes each step as agent state, which the browser receives immediately over the WebSocket, so the progress is live rather than a spinner until the end. For an inventory check, it keeps the forecast, the graph's demand map, and the stock counts as they arrive, computes which items are low, and rebuilds the system prompt for the answer step so the model presents exactly that list. It writes **long-term memory** when a write is read back or you ask it to remember a draft, and it reopens a memory into the workspace when you choose **Reopen**. The Worker's hourly job prunes the 24-hour audit and deletes memory past its 14 days.
+
+**Every tool call passes the gateway.** Before a tool the model chose actually runs, the Worker asks the agentic gateway whether the orchestrator may call `tool:<name>`. The decision, its policy and the caller are recorded, and a denial comes back to the model as a tool error instead of a result. See *The agentic gateway*.
 
 **In this demo**
 
@@ -940,6 +946,8 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
 
 **Kill switches** (`WRITES_ENABLED`, `DISABLED_TOOLS`, `MEMORY_ENABLED`) are Worker secrets that operators can flip without a deploy. Graph tools read in read-only mode; only the server's fixed memory statements write, and only to the memory dataset. The external-services tools only read public data (holidays, weather alerts, and Federal Reserve press releases) and send nothing about customers. No customer PII enters prompts, logs, or the graph.
 
+**Agents have a kill switch too.** `DISABLED_AGENTS` switches a registry agent off: the gateway denies everything it tries. Approval is governed separately from writes to Salesforce: an object in the workbench only moves to *approved* through the state machine, by a person. See *Agents, prompts, models, and drift*.
+
 **In this demo**
 
 - Draft something → the Save to Salesforce action card in the chat → confirmation card with the permission check
@@ -978,6 +986,8 @@ flowchart LR
 - **Inventory case confirmation.** The card lists the store manager, the forecast, and a table of each low item: on hand, needed, and the dishes it goes into. After you confirm, a banner links to the Case.
 - **Use-case library.** A page of every scenario the demo runs, filterable by team, with its prompts, systems, and data flow. **Try it** puts a prompt in the chat box without sending it.
 - **Accessibility.** The UI targets WCAG 2.2 AA and is tested in Chrome and Edge.
+
+**Architecture workspaces.** The **Architecture** view is built differently from the chat: each tab is a *workspace manifest* (the roles, objects, tiles, agents and services it composes) drawn by one renderer, so a new workspace is data rather than a new screen. The same approval card also renders as an Adaptive Card, as data for a Lightning Web Component, and as an MCP Apps resource. See *Governed objects and workspaces*.
 
 **In this demo**
 
@@ -1274,7 +1284,327 @@ The graph and prompts carry the manager's name only, never contact details. Noth
 - Docs: [FINRA Rule 2210: communications with the public](https://www.finra.org/rules-guidance/rulebooks/finra-rules/2210)
 - Docs: [Model Context Protocol: introduction](https://modelcontextprotocol.io/docs/getting-started/intro)
 
-### 3.16 Long-term memory: remembering across chats
+### 3.16 Governed objects and workspaces
+
+*One identifier per plan, brief, module, claim and result, with governance attached, and screens composed from it.*
+
+**Diagram: Plan to learn, with a person at every gate**
+
+```mermaid
+flowchart TB
+  subgraph agent_lifecycle0_lane0["People decide"]
+    direction LR
+    agent_lifecycle0_0_0["? Brand planner<br/>approves the plan"]
+    agent_lifecycle0_0_1["? Marketer<br/>validates brief and reuse"]
+    agent_lifecycle0_0_2["? Content Lab<br/>approves every module"]
+    agent_lifecycle0_0_3["? Compliance<br/>owns the evidence"]
+    agent_lifecycle0_0_4["? Reviewer<br/>decides, by state machine"]
+    agent_lifecycle0_0_5["? Brand lead<br/>disposes on optimization"]
+    agent_lifecycle0_0_0 --> agent_lifecycle0_0_1 --> agent_lifecycle0_0_2 --> agent_lifecycle0_0_3 --> agent_lifecycle0_0_4 --> agent_lifecycle0_0_5
+  end
+  subgraph agent_lifecycle0_lane1["Agents work"]
+    direction LR
+    agent_lifecycle0_1_0["▸ Plan and scenario<br/>plan → structured demand"]
+    agent_lifecycle0_1_1["▸ Brief and reuse<br/>inherits the plan"]
+    agent_lifecycle0_1_2["▸ Module authoring<br/>cites or refuses"]
+    agent_lifecycle0_1_3["▸ Substantiation<br/>evidence per claim"]
+    agent_lifecycle0_1_4["◆ Readiness and farm<br/>block until it passes"]
+    agent_lifecycle0_1_5["▸ Attribution and optimization<br/>signal → module → claim"]
+    agent_lifecycle0_1_0 --> agent_lifecycle0_1_1 --> agent_lifecycle0_1_2 --> agent_lifecycle0_1_3 --> agent_lifecycle0_1_4 --> agent_lifecycle0_1_5
+  end
+  subgraph agent_lifecycle0_lane2["Governed by"]
+    direction LR
+    agent_lifecycle0_2_0["⋈ Governed objects<br/>one id for life"]
+    agent_lifecycle0_2_1["◆ Gateway<br/>default-deny · identity"]
+    agent_lifecycle0_2_2["▤ Registry<br/>versioned · scoped"]
+    agent_lifecycle0_2_3["◆ State machine<br/>11 transitions"]
+    agent_lifecycle0_2_4["✓ Evaluators<br/>13 · drift watch"]
+    agent_lifecycle0_2_5["✎ Channels<br/>one card, four surfaces"]
+    agent_lifecycle0_2_0 --> agent_lifecycle0_2_1 --> agent_lifecycle0_2_2 --> agent_lifecycle0_2_3 --> agent_lifecycle0_2_4 --> agent_lifecycle0_2_5
+  end
+  agent_lifecycle0_lane0 ~~~ agent_lifecycle0_lane1 ~~~ agent_lifecycle0_lane2
+```
+
+*People decide at each stage, agents do the narrow work, and every call between them passes the gateway. Performance re-enters planning inside the quarter.*
+
+> **Key idea:** Every plan, brief, module, claim and result is one object with an identifier it keeps for life. Governance travels with it, and everything else (lineage, screens, channels) is derived from it, never copied.
+
+Most marketing tools copy things forward: a plan becomes a brief, a brief becomes a module, and each copy has to be reconciled with the last. This demo does the opposite. Every **plan, brief, module, claim, piece of evidence, result, disclosure and gap** is a *governed object*:
+
+- a **urn**, such as `urn:northstar:module:hs-mod-fomc-push`, which it keeps for life
+- its **version**, and the version it **supersedes**
+- its **brand, market, owner and classification**
+- its **approval state**, who created it (a person or an agent), and when
+
+**Nothing is copied forward.** A brief holds only the urn of its plan and the wave it covers. When you open the brief, its audience, channel and timing are read from the plan *at that moment*, so changing the plan changes what the brief shows. Relationships such as `INHERITS`, `CITES`, `SUBSTANTIATED_BY`, `MEASURED_BY`, `VARIANT_OF` and `GAP_FOR` are *derived from the objects' attributes*, so there is no second copy of a relationship to fall out of date.
+
+**The object inspector** shows any object by urn: its attributes, the plan it inherits, its evidence, its lineage in both directions, its version chain, its append-only history, and the next decision open to you. Open it from a Command Center card, a table row, a search result, or a link in an agent's answer.
+
+**Workspaces are manifests.** A workspace says who it is for, which objects it lists, which tiles it composes, and which agents and services it calls. One renderer turns any manifest into a screen, with the same loading, empty, error and permission-denied states. The **Command Center** lists every object by lifecycle stage with the person whose decision it is waiting on; **Brief Builder**, **Module Library**, **Approvals** and **Performance** are other manifests over the same objects. Choose **Act as** to see a brand planner, a marketer, a reviewer or a brand lead's view of the same data. The persona is sent with each request, and the server enforces what it may do.
+
+**Channels.** An approval card is composed once, with brand rules (accent, disclosure label, rule version) applied, and then rendered four ways: React, an **Adaptive Card** for Teams and Outlook, **data for a Lightning Web Component**, and an **MCP Apps** resource for MCP clients such as Claude. Change one brand rule and all four renderings change. The preview renders these payloads on screen; nothing is sent to Teams, Outlook or Copilot.
+
+**Where the data lives.** Seed objects for Harborstone Wealth and Coastline Kitchen ship in code. What you create (a plan, a module, a gap, a new claim version) and every approval state go to D1, scoped to you, and expire with the 24-hour audit. They are not in the Neo4j graph; making them graph nodes is a later step.
+
+**Try it**
+
+- Open the Architecture view (opens the architecture view)
+
+**In this demo**
+
+- Architecture → Command Center, then open any card
+- Architecture → Act as: Brand planner, Marketer, Reviewer, Brand lead
+- Architecture → open a module → Channels (React, Adaptive Card, LWC data, MCP Apps)
+- packages/architecture/src/types.ts, world.ts, workspaces.ts, channels.ts
+
+**Learn more**
+
+- Spec: [MCP Apps specification and SDK](https://github.com/modelcontextprotocol/ext-apps)
+- Docs: [Adaptive Cards](https://adaptivecards.io/)
+- Docs: [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/)
+
+### 3.17 The agentic gateway
+
+*One choke point for every tool call: default-deny policy, a per-call identity, and a record of the decision.*
+
+**Diagram: Plan to learn, with a person at every gate**
+
+```mermaid
+flowchart TB
+  subgraph agent_lifecycle0_lane0["People decide"]
+    direction LR
+    agent_lifecycle0_0_0["? Brand planner<br/>approves the plan"]
+    agent_lifecycle0_0_1["? Marketer<br/>validates brief and reuse"]
+    agent_lifecycle0_0_2["? Content Lab<br/>approves every module"]
+    agent_lifecycle0_0_3["? Compliance<br/>owns the evidence"]
+    agent_lifecycle0_0_4["? Reviewer<br/>decides, by state machine"]
+    agent_lifecycle0_0_5["? Brand lead<br/>disposes on optimization"]
+    agent_lifecycle0_0_0 --> agent_lifecycle0_0_1 --> agent_lifecycle0_0_2 --> agent_lifecycle0_0_3 --> agent_lifecycle0_0_4 --> agent_lifecycle0_0_5
+  end
+  subgraph agent_lifecycle0_lane1["Agents work"]
+    direction LR
+    agent_lifecycle0_1_0["▸ Plan and scenario<br/>plan → structured demand"]
+    agent_lifecycle0_1_1["▸ Brief and reuse<br/>inherits the plan"]
+    agent_lifecycle0_1_2["▸ Module authoring<br/>cites or refuses"]
+    agent_lifecycle0_1_3["▸ Substantiation<br/>evidence per claim"]
+    agent_lifecycle0_1_4["◆ Readiness and farm<br/>block until it passes"]
+    agent_lifecycle0_1_5["▸ Attribution and optimization<br/>signal → module → claim"]
+    agent_lifecycle0_1_0 --> agent_lifecycle0_1_1 --> agent_lifecycle0_1_2 --> agent_lifecycle0_1_3 --> agent_lifecycle0_1_4 --> agent_lifecycle0_1_5
+  end
+  subgraph agent_lifecycle0_lane2["Governed by"]
+    direction LR
+    agent_lifecycle0_2_0["⋈ Governed objects<br/>one id for life"]
+    agent_lifecycle0_2_1["◆ Gateway<br/>default-deny · identity"]
+    agent_lifecycle0_2_2["▤ Registry<br/>versioned · scoped"]
+    agent_lifecycle0_2_3["◆ State machine<br/>11 transitions"]
+    agent_lifecycle0_2_4["✓ Evaluators<br/>13 · drift watch"]
+    agent_lifecycle0_2_5["✎ Channels<br/>one card, four surfaces"]
+    agent_lifecycle0_2_0 --> agent_lifecycle0_2_1 --> agent_lifecycle0_2_2 --> agent_lifecycle0_2_3 --> agent_lifecycle0_2_4 --> agent_lifecycle0_2_5
+  end
+  agent_lifecycle0_lane0 ~~~ agent_lifecycle0_lane1 ~~~ agent_lifecycle0_lane2
+```
+
+*People decide at each stage, agents do the narrow work, and every call between them passes the gateway. Performance re-enters planning inside the quarter.*
+
+> **Key idea:** Nothing acts except through one gateway: default-deny policy, a per-call identity, and a record of the decision. An agent that is denied leaves a trace; it never gets a second route.
+
+A governed system can't have side doors. In this demo **every architecture capability, and every tool the model calls, goes through one gateway**, and the gateway answers three questions before anything runs.
+
+**1. Is this allowed?** Policies are **default-deny**. A call is allowed only if a *permit* matches its caller, its action and the kind of object, and a matching *forbid* always wins, as in the Cedar policy language. Permits are compiled from the **agent registry**: an agent can call only the actions in its entry, on the object kind it is scoped to. Two rules are not configurable:
+- **Agents can never hold a decision.** A forbid covers `transition`, `supersede_claim` and `accept_optimization`. An agent may propose; only a person decides.
+- **Brand scope.** A call on a brand outside the signed-in user's scope is denied.
+
+The **Agents → Policies** panel shows every policy as Cedar text. The evaluator is a typed equivalent of Cedar written for this demo; the policies are shaped so they can be loaded into a Cedar engine.
+
+**2. Who is calling, and for whom?** The gateway mints a **short-lived token for each invocation**, signed, naming the caller (`agent:module-authoring`) and the user it acts for in an `act` claim, the pattern from OAuth token exchange. The service verifies that the token was minted for this action and this user before it runs. There are no shared credentials, and no agent acts as itself.
+
+**3. Was it recorded?** Every decision, allowed or denied, is logged with the policy that decided it, the caller, and a correlation id. The **Trust** view draws the **identity chain** for any call: the user, the surface (role, brand, market), the Worker, the gateway, the agent, and the service. A denied call stops at the gateway and says so.
+
+**The orchestrator is an agent too.** Each tool the model calls is authorized as `tool:<name>`. Existing kill switches still apply, and `DISABLED_AGENTS` switches a whole agent off.
+
+**Partner agents** are registered with a contract, an identity and a policy, and an **Agent Card** in the style of the A2A protocol (see **Agents**). Their prompts stay with their owner; the gateway governs the call, not the thinking.
+
+**The workbench as a channel.** `/mcp/workbench` exposes read tools, search, and `propose_transition` to MCP clients through the same gateway. It has no tool that approves, publishes, sends or deletes.
+
+**What it does not do yet.** Confirmed Salesforce writes keep their own signed-confirmation audit and do not pass the gateway log. The call to the Salesforce MCP portal is authorized as the orchestrator calling that tool, not as a separate hop.
+
+**Try it**
+
+- See the swimlane and policies (opens the architecture view)
+
+**In this demo**
+
+- Architecture → Agents → run an action as an agent, then try one it isn't granted
+- Architecture → Agents → Policies (Cedar text)
+- Architecture → Trust → recent gateway calls and their identity chains
+- packages/architecture/src/gateway.ts, apps/edge/src/architecture/context.ts
+
+**Learn more**
+
+- Docs: [Cedar policy language](https://www.cedarpolicy.com/)
+- Spec: [RFC 8693: OAuth 2.0 token exchange](https://datatracker.ietf.org/doc/html/rfc8693)
+- Spec: [Agent2Agent (A2A) protocol](https://a2a-protocol.org/latest/)
+- Docs: [Cloudflare Agents SDK](https://developers.cloudflare.com/agents/)
+
+### 3.18 The content lifecycle: plan to learn
+
+*Agents draft, check and measure; people decide at every stage; performance re-enters the plan.*
+
+**Diagram: Plan to learn, with a person at every gate**
+
+```mermaid
+flowchart TB
+  subgraph agent_lifecycle0_lane0["People decide"]
+    direction LR
+    agent_lifecycle0_0_0["? Brand planner<br/>approves the plan"]
+    agent_lifecycle0_0_1["? Marketer<br/>validates brief and reuse"]
+    agent_lifecycle0_0_2["? Content Lab<br/>approves every module"]
+    agent_lifecycle0_0_3["? Compliance<br/>owns the evidence"]
+    agent_lifecycle0_0_4["? Reviewer<br/>decides, by state machine"]
+    agent_lifecycle0_0_5["? Brand lead<br/>disposes on optimization"]
+    agent_lifecycle0_0_0 --> agent_lifecycle0_0_1 --> agent_lifecycle0_0_2 --> agent_lifecycle0_0_3 --> agent_lifecycle0_0_4 --> agent_lifecycle0_0_5
+  end
+  subgraph agent_lifecycle0_lane1["Agents work"]
+    direction LR
+    agent_lifecycle0_1_0["▸ Plan and scenario<br/>plan → structured demand"]
+    agent_lifecycle0_1_1["▸ Brief and reuse<br/>inherits the plan"]
+    agent_lifecycle0_1_2["▸ Module authoring<br/>cites or refuses"]
+    agent_lifecycle0_1_3["▸ Substantiation<br/>evidence per claim"]
+    agent_lifecycle0_1_4["◆ Readiness and farm<br/>block until it passes"]
+    agent_lifecycle0_1_5["▸ Attribution and optimization<br/>signal → module → claim"]
+    agent_lifecycle0_1_0 --> agent_lifecycle0_1_1 --> agent_lifecycle0_1_2 --> agent_lifecycle0_1_3 --> agent_lifecycle0_1_4 --> agent_lifecycle0_1_5
+  end
+  subgraph agent_lifecycle0_lane2["Governed by"]
+    direction LR
+    agent_lifecycle0_2_0["⋈ Governed objects<br/>one id for life"]
+    agent_lifecycle0_2_1["◆ Gateway<br/>default-deny · identity"]
+    agent_lifecycle0_2_2["▤ Registry<br/>versioned · scoped"]
+    agent_lifecycle0_2_3["◆ State machine<br/>11 transitions"]
+    agent_lifecycle0_2_4["✓ Evaluators<br/>13 · drift watch"]
+    agent_lifecycle0_2_5["✎ Channels<br/>one card, four surfaces"]
+    agent_lifecycle0_2_0 --> agent_lifecycle0_2_1 --> agent_lifecycle0_2_2 --> agent_lifecycle0_2_3 --> agent_lifecycle0_2_4 --> agent_lifecycle0_2_5
+  end
+  agent_lifecycle0_lane0 ~~~ agent_lifecycle0_lane1 ~~~ agent_lifecycle0_lane2
+```
+
+*People decide at each stage, agents do the narrow work, and every call between them passes the gateway. Performance re-enters planning inside the quarter.*
+
+> **Key idea:** Agents do the narrow work and people decide. An agent cites an approved claim or refuses, readiness blocks until the evidence holds, and only a person moves an object to approved.
+
+The lifecycle runs **Plan → Audience → Brief → Create → Substantiate → Approve → Deploy & learn**. At each stage a named person owns the decision, and narrow agents do the work.
+
+**Plan and brief.** The *content plan agent* reads the calendar and past results and proposes waves as structured demand: a theme, a segment, a channel, a date, a number of modules, and why. The *scenario agent* estimates what a change does (move a send, drop a channel, change an audience) from the audience size, the channel's baseline click rate, and how the brand's best past send performed, with a lift when a send lands on a market date. The *brief agent* drafts a brief that inherits the plan by reference.
+
+**Reuse and create.** The *reuse agent* ranks existing modules by meaning (a local hashing embedder here; Vectorize would implement the same interface) and by past results, and it flags any that cite a superseded claim. The *module authoring agent* **cites or refuses**: every sentence it writes is an approved, substantiated claim or a disclosure the claim requires. For anything it can't cite, it writes a **gap record** instead of text. The *atomization agent* makes channel variants and never shortens a claim; if a claim doesn't fit a channel, it says so.
+
+**Substantiate.** The *substantiation agent* assembles an evidence packet for each claim a module cites and marks it substantiated, superseded, withdrawn, unapproved, missing evidence, expired evidence or conflicting. *Readiness* blocks until every claim is substantiated and every required disclosure is present. When a claim is **superseded**, every module citing it is flagged for refresh and can't be approved.
+
+**The adversarial farm.** Before a human sees a draft, four probes read it: a claim attacker (uncited facts, reworded claims), an injection prober (instruction-like text in the module, its brief or a cited claim), a brand and disclosure checker (absolute language, an embargoed deal, a missing disclosure), and a consent prober (the channel against the audience's opt-ins). They report findings. They change nothing, and a blocking finding blocks approval. The **data readiness agent** scores each stage's inputs the same way.
+
+**Approve.** Every object moves through one **state machine with eleven transitions**: submit, start review, request changes, resubmit, approve, reject, escalate, a senior's approve or reject, expire, and withdraw. Each has the people who may take it. Reviewers and seniors decide; *expire* is the system's, when evidence lapses; *withdraw* is an admin's or a supersession's. Every move is attributed, timestamped and appended to a history that is never edited. A reason is required to reject, escalate, request changes or withdraw. Agents can only **propose** a ready draft for review.
+
+**Deploy and learn.** The *attribution agent* traces a result to the module and the claim that carried it, with the path to the evidence. The *optimization agent* proposes **re-issue** (well above baseline), **refresh** (well below, or a superseded claim) or **retire** (far below). The brand lead decides. Accepting one revises the brand's plan as a **new version that cites the result**, so what happened last quarter changes what the plan says next.
+
+**Salesforce stays the system of record.** The lifecycle adds no new Salesforce writes. The state machine's approval is the workbench's own; the confirmed review-task write remains how a decision reaches Salesforce.
+
+**Try it**
+
+- Run the lifecycle (opens the architecture view)
+
+**In this demo**
+
+- Architecture → Module Library → Author a module (cite or refuse): pick topics “sweep-apy” and “wire-fees”
+- Architecture → Approvals → open a module → Decision, History
+- Architecture → open an approved claim as Compliance → Supersede, then Module Library
+- Architecture → Performance → Optimization proposals → Accept as Brand lead
+- packages/architecture/src/agents.ts, farm.ts, state-machine.ts
+
+**Learn more**
+
+- Guide: [Effective context engineering for AI agents (Anthropic)](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- Guide: [Building effective agents (Anthropic)](https://www.anthropic.com/engineering/building-effective-agents)
+- Docs: [Model Context Protocol: introduction](https://modelcontextprotocol.io/docs/getting-started/intro)
+
+### 3.19 Agents, prompts, models, and drift
+
+*A registry, a prompt catalog and a model router, scored by thirteen evaluators that watch for drift.*
+
+**Diagram: Plan to learn, with a person at every gate**
+
+```mermaid
+flowchart TB
+  subgraph agent_lifecycle0_lane0["People decide"]
+    direction LR
+    agent_lifecycle0_0_0["? Brand planner<br/>approves the plan"]
+    agent_lifecycle0_0_1["? Marketer<br/>validates brief and reuse"]
+    agent_lifecycle0_0_2["? Content Lab<br/>approves every module"]
+    agent_lifecycle0_0_3["? Compliance<br/>owns the evidence"]
+    agent_lifecycle0_0_4["? Reviewer<br/>decides, by state machine"]
+    agent_lifecycle0_0_5["? Brand lead<br/>disposes on optimization"]
+    agent_lifecycle0_0_0 --> agent_lifecycle0_0_1 --> agent_lifecycle0_0_2 --> agent_lifecycle0_0_3 --> agent_lifecycle0_0_4 --> agent_lifecycle0_0_5
+  end
+  subgraph agent_lifecycle0_lane1["Agents work"]
+    direction LR
+    agent_lifecycle0_1_0["▸ Plan and scenario<br/>plan → structured demand"]
+    agent_lifecycle0_1_1["▸ Brief and reuse<br/>inherits the plan"]
+    agent_lifecycle0_1_2["▸ Module authoring<br/>cites or refuses"]
+    agent_lifecycle0_1_3["▸ Substantiation<br/>evidence per claim"]
+    agent_lifecycle0_1_4["◆ Readiness and farm<br/>block until it passes"]
+    agent_lifecycle0_1_5["▸ Attribution and optimization<br/>signal → module → claim"]
+    agent_lifecycle0_1_0 --> agent_lifecycle0_1_1 --> agent_lifecycle0_1_2 --> agent_lifecycle0_1_3 --> agent_lifecycle0_1_4 --> agent_lifecycle0_1_5
+  end
+  subgraph agent_lifecycle0_lane2["Governed by"]
+    direction LR
+    agent_lifecycle0_2_0["⋈ Governed objects<br/>one id for life"]
+    agent_lifecycle0_2_1["◆ Gateway<br/>default-deny · identity"]
+    agent_lifecycle0_2_2["▤ Registry<br/>versioned · scoped"]
+    agent_lifecycle0_2_3["◆ State machine<br/>11 transitions"]
+    agent_lifecycle0_2_4["✓ Evaluators<br/>13 · drift watch"]
+    agent_lifecycle0_2_5["✎ Channels<br/>one card, four surfaces"]
+    agent_lifecycle0_2_0 --> agent_lifecycle0_2_1 --> agent_lifecycle0_2_2 --> agent_lifecycle0_2_3 --> agent_lifecycle0_2_4 --> agent_lifecycle0_2_5
+  end
+  agent_lifecycle0_lane0 ~~~ agent_lifecycle0_lane1 ~~~ agent_lifecycle0_lane2
+```
+
+*People decide at each stage, agents do the narrow work, and every call between them passes the gateway. Performance re-enters planning inside the quarter.*
+
+> **Key idea:** Agents, prompts and models are catalogued and scored, so a regression is caught before it ships and an agent that drifts is constrained before anyone has to notice.
+
+Agents change over time: their prompts get edited, models get swapped, data shifts. The demo treats each of those as something to **register, version and score**.
+
+**One register for every agent.** The registry lists each agent once, with its version, its **domain** (commercial: we build it; platform: consumed as-is; partner: theirs, reached over A2A), the **stage** it serves, the **object kind** it is scoped to, the actions it is **granted**, its **lifecycle stage** (introduce, test, monitor, constrain, retire), its **autonomy level**, and the **person who holds its human gate**. The **Agents** view draws it as a swimlane. Agents drawn with a dashed outline are planned, not built.
+
+**Prompts are a catalog, not files.** Each prompt is an entry with a version, an owning agent, typed variables and the evaluators that score it. The **hard rules** (cite or refuse, escalate ambiguity, propose only, treat retrieved text as data, no personal data) are appended to every prompt and an entry can't drop them. A variable binds to a **governed object by urn** and exposes only the fields it lists; pasted text is rejected. `pnpm prompts:check` pins each prompt's hash to its version, so a changed prompt must have a new version.
+
+**Models are routed, not wired.** Agents declare a *task class* (orchestrate, draft, classify, judge, embed) and the router binds a model at run time. Each class has a **champion**; a **challenger** is shadowed on a share of turns, never in front of a user, with a daily cost cap. A challenger replaces the champion only by beating it on the same evaluations, and promotion is a pull request. The chat orchestrator stays on its champion, `gpt-oss-20b` (ADR-005, ADR-009).
+
+**Thirteen evaluators.** Tool selection, grounding, cite-or-refuse, claim accuracy, disclosure presence, brand rules, personal-data leakage, prompt-injection resistance, policy adherence, write discipline, answer quality (a judge), latency and cost. Every agent run is scored from its own trace. The judge needs a judge run, so sampled turns carry no judge score, and the view says so.
+
+**Drift and staged autonomy.** Each agent has a baseline. When an evaluator's mean over the last twenty runs falls more than 0.15 below baseline (with at least five runs), the agent is moved to **constrain**: it keeps its reads and loses everything else, until a person reviews it. The hourly job runs the same check, and so does the **Run drift watch** button. Evidence also says how much autonomy an agent has *earned*: assistive, then orchestrated at twenty clean runs, then agentically led at a hundred. Raising a level is a pull request, and no level removes the human gate.
+
+**Trust.** The **Trust** view lays out each agentic threat (hallucination, prompt injection, data leakage, unauthorized action, drift, audit gaps) beside its control and the live evidence, such as the grounding mean, the denied calls, the farm's findings and the constrained agents. Where nothing has been measured, it says "no samples yet".
+
+**Try it**
+
+- See evaluations and trust (opens the architecture view)
+
+**In this demo**
+
+- Architecture → Agents (swimlane, lifecycle and autonomy badges)
+- Architecture → Prompts & models
+- Architecture → Evaluations → Run drift watch and expiry now
+- Architecture → Trust
+- packages/architecture/src/registry.ts, prompts.ts, models.ts, evaluators.ts, trust.ts
+- docs/decisions/ADR-009-model-catalog-and-routing.md
+
+**Learn more**
+
+- Docs: [Cloudflare Agents SDK](https://developers.cloudflare.com/agents/)
+- Docs: [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/)
+- Guide: [Building effective agents (Anthropic)](https://www.anthropic.com/engineering/building-effective-agents)
+- Guide: [Writing effective tools for agents (Anthropic)](https://www.anthropic.com/engineering/writing-tools-for-agents)
+
+### 3.20 Long-term memory: remembering across chats
 
 *Drafts and decisions stored in the graph by the server, recalled by tools, and forgotten on request.*
 
@@ -1436,9 +1766,9 @@ Who decides whether you may create a campaign from the workbench?
 | `prepare_deal_release` | The embargoed acquisition package in release order, with each piece's audience, consent basis, approval, and blockers. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `build_aum_account_plan` | A Harborstone client's signals, ranked plays with peer adoption and approved content, and contacts with consented channels. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `trace_content_lineage` | Traces a campaign's content back to its brief and brand-rule results. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `recall_decisions` | Recalls remembered drafts and decisions about a subject in this workspace, dated and sourced. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `recall_recent_work` | Lists this workspace's most recent remembered drafts and decisions. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `explain_memory` | Shows where one memory came from: its record, the draft versions it replaced, and its subjects. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
+| `recall_decisions` | Recalls remembered drafts and decisions about a subject in this workspace, dated and sourced. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `recall_recent_work` | Lists this workspace's most recent remembered drafts and decisions. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `explain_memory` | Shows where one memory came from: its record, the draft versions it replaced, and its subjects. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
 
 ### Write actions (5)
 
@@ -1483,11 +1813,11 @@ Who decides whether you may create a campaign from the workbench?
 | `Advisor` | The Harborstone advisor who covers a client. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `Product` | A Harborstone product or service a client can hold. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `Signal` | Something the relationship team noticed about a client. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
-| `Workspace` | The workspace that owns a memory. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `MemoryEvent` | The server event that created a memory, with a hashed actor. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `Draft` | One remembered version of a focus draft. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `Decision` | A confirmed save, review, or image attachment. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `RecordRef` | The Salesforce record a decision was recorded in. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
+| `Workspace` | The workspace that owns a memory. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `MemoryEvent` | The server event that created a memory, with a hashed actor. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `Draft` | One remembered version of a focus draft. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `Decision` | A confirmed save, review, or image attachment. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `RecordRef` | The Salesforce record a decision was recorded in. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
 
 ### Graph relationships (53)
 
@@ -1540,20 +1870,21 @@ Who decides whether you may create a campaign from the workbench?
 | `FEATURED` | A push send featuring a menu item. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
 | `SENT_DURING` | A push send made during a daypart. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
 | `UNDER` | A push send made under a weather condition. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `IN_WORKSPACE` | A memory event in its workspace. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `CREATED` | The memory event that created a draft or decision. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `SUPERSEDES` | A draft version replacing the one before it. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `ABOUT` | A memory about a campaign or brand in the demo graph. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `DECIDED_ON` | A decision about the draft version it saved. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
-| `RECORDED_IN` | A decision recorded in a Salesforce record. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
+| `IN_WORKSPACE` | A memory event in its workspace. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `CREATED` | The memory event that created a draft or decision. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `SUPERSEDES` | A draft version replacing the one before it. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `ABOUT` | A memory about a campaign or brand in the demo graph. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `DECIDED_ON` | A decision about the draft version it saved. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `RECORDED_IN` | A decision recorded in a Salesforce record. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
 
-### Operator controls (3)
+### Operator controls (4)
 
 | Name | What it is | Taught in |
 | --- | --- | --- |
 | `WRITES_ENABLED` | Set to false to pause every Salesforce write without a deploy. | [3.9 Governance: permissions, confirmations, and kill switches](#39-governance-permissions-confirmations-and-kill-switches) |
 | `DISABLED_TOOLS` | A comma-separated list of tools to withhold from the model or block as writes. | [3.9 Governance: permissions, confirmations, and kill switches](#39-governance-permissions-confirmations-and-kill-switches) |
-| `MEMORY_ENABLED` | Set to false to stop remembering and withhold the recall tools. | [3.16 Long-term memory: remembering across chats](#316-long-term-memory-remembering-across-chats) |
+| `DISABLED_AGENTS` | A comma-separated list of registry agents to switch off; the gateway denies every call they make. | [3.17 The agentic gateway](#317-the-agentic-gateway) |
+| `MEMORY_ENABLED` | Set to false to stop remembering and withhold the recall tools. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
 
 ### Salesforce components (10)
 

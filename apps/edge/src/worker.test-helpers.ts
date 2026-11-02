@@ -43,3 +43,20 @@ export async function openCatalogCampaign(subject = "local-evaluator") {
   });
   return stub;
 }
+
+/** Creates the architecture tables from the real migration, so tests exercise the shipped schema. */
+export async function createArchitectureTables(db: D1Database) {
+  const { default: sql } = (await import(
+    "../../../migrations/0006_architecture_roadmap.sql?raw"
+  )) as {
+    default: string;
+  };
+  const statements = sql
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n")
+    .split(/\n\s*\n/)
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+  for (const statement of statements) await db.prepare(statement).run();
+}

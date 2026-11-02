@@ -26,6 +26,10 @@ describe("learn page content", () => {
       "long-term-memory",
       "marketing-cloud",
       "use-cases",
+      "object-model",
+      "gateway",
+      "lifecycle",
+      "agent-operations",
     ])
       expect(
         sections.some((section) => section.id === id),

@@ -4,6 +4,7 @@
     "allowSyntheticDefaultImports": true,
     "composite": false,
     "paths": {
+      "@northstar/architecture": ["./packages/architecture/src/index.ts"],
       "@northstar/contracts": ["./packages/contracts/src/index.ts"],
       "@northstar/ui": ["./packages/ui/src/index.tsx"],
       "@northstar/evals/report": ["./packages/evals/src/report.ts"],

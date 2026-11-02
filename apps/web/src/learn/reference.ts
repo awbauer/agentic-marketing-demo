@@ -422,6 +422,13 @@ export const LEARN_REFERENCE: ReferenceEntry[] = [
   },
   {
     kind: "Operator control",
+    name: "DISABLED_AGENTS",
+    summary:
+      "A comma-separated list of registry agents to switch off; the gateway denies every call they make.",
+    section: "gateway",
+  },
+  {
+    kind: "Operator control",
     name: "MEMORY_ENABLED",
     summary: "Set to false to stop remembering and withhold the recall tools.",
     section: "long-term-memory",

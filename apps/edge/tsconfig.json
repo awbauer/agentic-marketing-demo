@@ -3,12 +3,14 @@
   "compilerOptions": {
     "noEmit": true,
     "paths": {
+      "@northstar/architecture": ["../../packages/architecture/src/index.ts"],
       "@northstar/contracts": ["../../packages/contracts/src/index.ts"],
       "@northstar/knowledge-graph": ["../../packages/knowledge-graph/src/index.ts"]
     }
   },
   "include": [
     "src/**/*.ts",
+    "../../packages/architecture/src/**/*.ts",
     "../../packages/contracts/src/**/*.ts",
     "../../packages/knowledge-graph/src/**/*.ts"
   ],

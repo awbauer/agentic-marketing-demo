@@ -928,6 +928,8 @@ export const OperationControlsSchema = z.object({
   /** Long-term memory: remembering and recall. Off when MEMORY_ENABLED is "false". */
   memoryEnabled: z.boolean(),
   disabledTools: z.array(z.enum(ORCHESTRATOR_TOOLS as unknown as [string, ...string[]])),
+  /** Agents an operator has switched off in the registry; the gateway denies every call they make. */
+  disabledAgents: z.array(z.string()).optional(),
   /** Where knowledge-graph answers come from: live Neo4j or the fictional local copy. */
   knowledgeGraph: z.enum(["neo4j", "fixture"]).optional(),
 });
@@ -942,6 +944,7 @@ export function parseOperationControls(env: {
   WRITES_ENABLED?: string;
   MEMORY_ENABLED?: string;
   DISABLED_TOOLS?: string;
+  DISABLED_AGENTS?: string;
 }): OperationControls {
   const requested = (env.DISABLED_TOOLS ?? "")
     .split(",")
@@ -951,6 +954,10 @@ export function parseOperationControls(env: {
     writesEnabled: env.WRITES_ENABLED?.trim().toLowerCase() !== "false",
     memoryEnabled: env.MEMORY_ENABLED?.trim().toLowerCase() !== "false",
     disabledTools: ORCHESTRATOR_TOOLS.filter((tool) => requested.includes(tool)),
+    disabledAgents: (env.DISABLED_AGENTS ?? "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean),
   };
 }
 

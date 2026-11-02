@@ -8,6 +8,7 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
+    "../../packages/architecture/src/**/*.ts",
     "../../packages/contracts/src/**/*.ts",
     "../../packages/evals/src/report.ts",
     "../../packages/ui/src/**/*.tsx"
