@@ -52,6 +52,13 @@ import {
   recordDecision,
   rememberDraft,
 } from "../../../packages/knowledge-graph/src/index.ts";
+import {
+  DEFAULT_SCOPE,
+  outOfScopeTool,
+  parseScope,
+  scopeAllowsTool,
+  type WorkbenchScope,
+} from "@northstar/architecture";
 import { authorizeTool } from "./architecture/context";
 import { LOCATIONS } from "./campaign-context/open-meteo";
 import {
@@ -59,6 +66,7 @@ import {
   connectCampaignContextTools,
 } from "./campaign-context/server";
 import { locationInventory } from "./campaign-context/store-inventory";
+import { connectLifeSciencesTools, LIFE_SCIENCES_TOOL_PREFIX } from "./life-sciences/server";
 import {
   connectExternalServiceTools,
   EXTERNAL_SERVICES_TOOL_PREFIX,
@@ -727,11 +735,19 @@ export class MarketingOrchestrator extends AIChatAgent<
   maxPersistedMessages = 100;
   waitForMcpConnections = false;
   private principalSubject = "unknown";
+  /** The brand and role chosen in the header, sent with each chat message. */
+  private scope: WorkbenchScope = DEFAULT_SCOPE;
 
   /** Every model-called tool passes the agentic gateway as `tool:<name>`; a gateway fault fails closed. */
   private async authorizeTool(toolName: string) {
     try {
-      return await authorizeTool(this.env, this.principalSubject, toolName, crypto.randomUUID());
+      return await authorizeTool(
+        this.env,
+        this.principalSubject,
+        toolName,
+        crypto.randomUUID(),
+        this.scope,
+      );
     } catch (error) {
       console.error(
         "[gateway] tool authorization failed",
@@ -768,11 +784,12 @@ export class MarketingOrchestrator extends AIChatAgent<
     // The campaign-context and knowledge-graph MCPs run in-process; both close when the turn ends.
     const context = await connectCampaignContextTools();
     const external = await connectExternalServiceTools();
+    const lifeSciences = await connectLifeSciencesTools();
     const graph = await connectKnowledgeGraphTools(
       memory ?? knowledgeGraphBackend(this.env),
       memory ? { workspaceId: this.state.workspaceId, now: () => new Date() } : undefined,
     );
-    const tools = guardToolResults(
+    const allTools = guardToolResults(
       {
         ...Object.fromEntries(
           Object.entries(discoveredTools).filter(([key]) =>
@@ -805,10 +822,22 @@ export class MarketingOrchestrator extends AIChatAgent<
               ),
           ),
         ),
+        ...Object.fromEntries(
+          Object.entries(lifeSciences.tools).filter(
+            ([key]) =>
+              !(disabledTools as readonly string[]).includes(
+                key.slice(LIFE_SCIENCES_TOOL_PREFIX.length),
+              ),
+          ),
+        ),
       },
       (name, input, output) => this.ingestToolResult(name, input, output),
       (name) => this.authorizeTool(name),
     );
+    // The brand chosen in the header withholds other brands' tools, so the model never sees them.
+    const tools = Object.fromEntries(
+      Object.entries(allTools).filter(([name]) => scopeAllowsTool(this.scope, name)),
+    ) as ToolSet;
     // Refinements of a saved brief always name it, whatever the model wrote.
     const savedBrief = this.state.workingSet.focus?.saved;
     const briefTools = pinBriefToRefinement(
@@ -837,16 +866,39 @@ export class MarketingOrchestrator extends AIChatAgent<
           : undefined,
       ),
     );
-    const toolPlan = selectToolPlan(prompt, Object.keys(tools), planContext);
+    const fullPlan = selectToolPlan(prompt, Object.keys(allTools), planContext);
+    const wrongBrandTool = outOfScopeTool(this.scope, fullPlan);
+    const toolPlan = wrongBrandTool
+      ? undefined
+      : selectToolPlan(prompt, Object.keys(tools), planContext);
     const inventoryPlan = toolPlan?.some((name) => name.endsWith("map_weather_demand"));
     // A drafting or revision turn's answer is saved as the workspace focus when it completes.
     const drafting = draftIntent(prompt, planContext);
     // Readable plan for the trace and history, such as "a → b → c".
     const requiredTool = toolPlan?.join(" → ");
+    if (wrongBrandTool) {
+      await context.close();
+      await external.close();
+      await lifeSciences.close();
+      await graph.close();
+      return scriptedResponse(
+        [
+          `That request is about a different brand than the one selected (${this.scope.brand}). Switch the brand in the header to continue; I did not call any tools or answer it from memory.`,
+        ],
+        {
+          model: POLICY_ROUTER,
+          route: "unsupported",
+          abortSignal,
+          onComplete: (result) =>
+            this.recordTurn(prompt, { model: POLICY_ROUTER, route: "unsupported" }, result),
+        },
+      );
+    }
     const missingTool = missingPlannedTool(prompt, Object.keys(tools), planContext);
     if (missingTool) {
       await context.close();
       await external.close();
+      await lifeSciences.close();
       await graph.close();
       return scriptedResponse(
         [
@@ -881,7 +933,7 @@ export class MarketingOrchestrator extends AIChatAgent<
               model: workersAI(PROOF_DEFAULTS.orchestratorModel),
               middleware: forcedToolCallMiddleware,
             }),
-            system: orchestratorSystemPrompt(workspace, toolPlan),
+            system: orchestratorSystemPrompt(workspace, toolPlan, this.scope),
             messages: await convertToModelMessages(turnMessages),
             tools: pinnedTools,
             // A revision with no agent to ask rewrites the draft in focus without tools; a brief's
@@ -901,6 +953,7 @@ export class MarketingOrchestrator extends AIChatAgent<
                         inventoryRiskPrompt(this.state.inventoryRisk),
                       ].join(" "),
                       toolPlan,
+                      this.scope,
                     ),
                   }
                 : choice;
@@ -946,6 +999,7 @@ export class MarketingOrchestrator extends AIChatAgent<
         } finally {
           await context.close();
           await external.close();
+          await lifeSciences.close();
           await graph.close();
         }
       },
@@ -986,7 +1040,9 @@ export class MarketingOrchestrator extends AIChatAgent<
     result: TurnPipeResult,
   ) {
     try {
-      const record = TurnRecordSchema.parse(buildTurnRecord({ utterance, ...context, result }));
+      const record = TurnRecordSchema.parse(
+        buildTurnRecord({ utterance, ...context, scope: this.scope, result }),
+      );
       this.ensureTurnHistory();
       this.sql`INSERT INTO northstar_turn_history (id, started_at, record)
         VALUES (${record.id}, ${Date.parse(record.startedAt)}, ${JSON.stringify(record)})`;
@@ -3483,6 +3539,7 @@ export class MarketingOrchestrator extends AIChatAgent<
   ): Promise<Response> {
     if (options?.abortSignal?.aborted) return new Response(null, { status: 499 });
     const abortSignal = options?.abortSignal;
+    this.scope = parseScope((options?.body as { scope?: unknown } | undefined)?.scope);
     // Writes and forbidden actions never reach the model, so it cannot claim they happened.
     const utterance = latestUserText(evidenceTurnMessages(this.messages));
     // "Remember this draft" stores the focus in long-term memory; the server writes it, not the model.

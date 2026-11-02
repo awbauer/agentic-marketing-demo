@@ -1,4 +1,7 @@
 import {
+  DEFAULT_SCOPE,
+  toolBrand,
+  type WorkbenchScope,
   type AgentOverrides,
   type Brand,
   buildPolicies,
@@ -136,12 +139,22 @@ export async function authorizeTool(
   subject: string,
   toolName: string,
   correlationId: string,
+  scope: WorkbenchScope = DEFAULT_SCOPE,
 ): Promise<Decision> {
-  const ctx = makeCtx(env, { subject, persona: "marketer", brands: "all" }, correlationId);
+  const ctx = makeCtx(
+    env,
+    { subject, persona: scope.persona, brands: scope.brand === "all" ? "all" : [scope.brand] },
+    correlationId,
+  );
+  const brand = toolBrand(toolName);
   try {
     const { decision } = await invoke(
       ctx,
-      { principal: { type: "agent", id: "orchestrator" }, action: `tool:${toolName}` },
+      {
+        principal: { type: "agent", id: "orchestrator" },
+        action: `tool:${toolName}`,
+        ...(brand ? { resource: { brand } } : {}),
+      },
       () => null,
     );
     return decision;

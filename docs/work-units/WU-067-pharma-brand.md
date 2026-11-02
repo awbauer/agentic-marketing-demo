@@ -10,6 +10,13 @@ owners: [agent]
 
 Andrew Bauer asked for a pharma brand for the demo, with clinical claims, indications, drugs, content, target accounts and hospitals, and the use cases and knowledge graph a pharmaceutical marketer needs. Harborstone Wealth already shows regulated content in finance; this adds the pharmaceutical version, where a claim is only usable if a trial supports it, the label covers it, and a medical-legal-regulatory (MLR) approval is current.
 
+# Added after the first review
+
+Two requests extended this work unit:
+
+1. **Pharmaceutical systems of record as MCP tools.** A fourth in-process MCP server, `northstar-life-sciences` (`apps/edge/src/life-sciences/`), exposes ten read-only tools: Aprimo (`aprimo_search_approved_assets`, `aprimo_get_mlr_review`), Reltio (`reltio_resolve_organization`), Veeva Vault PromoMats (`vault_list_approved_claims`, `vault_get_prescribing_information`), Screendragon (`screendragon_list_jobs`, `screendragon_get_job`), IQVIA (`iqvia_get_prescribing_trends`), Salesforce Life Sciences Cloud (`lsc_get_call_plan`) and Drupal (`drupal_list_hcp_site_content`). **All are mocked**: invented data keyed to the knowledge graph's drugs, claims, MLR approvals and hospitals, so a page that is live on the HCP site with an expired MLR approval shows up in Drupal and Aprimo and can be compared with the graph. Each result says `mock: true`. Audiences are counts, never people.
+2. **One brand and role for the whole app.** The header's **Brand** and **Run as** selectors (`apps/web/src/ScopeBar.tsx`, `scope.tsx`) now drive every page and every chat message: the Graph's brand filter, the use-case library, the Architecture workspaces (which open the role's workspace), the message-box prompt and the turn history. Each message carries the scope; the server (`packages/architecture/src/scope.ts`) withholds the other brands' tools from the model, denies them at the gateway (`forbid-out-of-scope-brand`), tells the model the brand and role, and answers a request that needs another brand's tool with a note to switch. The role changes emphasis and the Architecture decisions on offer only: it never changes what Salesforce allows.
+
 # Objective
 
 A third brand, **Lumera Therapeutics**, in the knowledge graph, three new graph tools, three use cases, and the same brand running through the Architecture view's lifecycle.
@@ -23,7 +30,7 @@ A third brand, **Lumera Therapeutics**, in the knowledge graph, three new graph 
 ## Contracts affected
 
 - Schemas: `BRANDS` gains `Lumera Therapeutics`.
-- Tools/actions: `build_hcp_target_list`, `check_clinical_claims`, `plan_hospital_engagement` (read-only graph tools, 15 now). No write actions.
+- Tools/actions: `build_hcp_target_list`, `check_clinical_claims`, `plan_hospital_engagement` (read-only graph tools, 15 now) and the ten life-sciences tools. No write actions. Turn records gain an optional `scope`. `LIFE_SCIENCES_TOOLS` joins the tools an operator can withhold with `DISABLED_TOOLS`.
 - Graph: seven node types (Drug, Indication, ClinicalTrial, ClinicalClaim, Hospital, Specialty, PrescriberGroup) and twelve relationship types (INDICATED_FOR, INVESTIGATED_FOR, STUDIED_IN, SUPPORTS, CLAIMS_ABOUT, CARRIES, TREATS, SPECIALIZES_IN, PRACTICES_AT, ON_FORMULARY, SEES_PATIENTS_WITH, PRESCRIBES). It reuses ContentAsset, Approval, Disclosure, BrandRule, ConsentScope, Campaign, Brief and Channel. The graph grows by 91 nodes and 356 relationships.
 - External state: none. The Neo4j seed picks the new nodes up on the next `pnpm kg:seed`.
 
@@ -61,7 +68,7 @@ One, run on Andrew's request: `pnpm kg:seed --confirm` against the Neo4j instanc
 
 - Reports: `artifacts/reports/` from `pnpm verify`.
 - Read-back results: unit tests on the fixture backend, routing evaluation 100% on the 31 cases, the live seed read-back, and `pnpm kg:parity` against Neo4j.
-- Known limitations: the new screens were not checked in a browser. The agents and tools are deterministic over fictional data, so no model behavior is measured. Drug names, trial names and results are invented and are not medical information. Rep visits and the HCP portal exist as channels and consent scopes in the graph only; the Architecture view's channels stay email and push. The routing patterns are keyword-based like the existing ones.
+- Known limitations: the new screens, including the header selectors, were not checked in a browser. The ten life-sciences tools are mocks, not integrations: no credentials, no live API, and their data is invented. The scope is a convenience and a guardrail for the demo, not an access control: the Salesforce permissions the signed-in user holds are unchanged, and the model's brand restriction is a withheld tool list plus a prompt line. The graph's Northstar parent-brand filter now means all brands. The agents and tools are deterministic over fictional data, so no model behavior is measured. Drug names, trial names and results are invented and are not medical information. Rep visits and the HCP portal exist as channels and consent scopes in the graph only; the Architecture view's channels stay email and push. The routing patterns are keyword-based like the existing ones.
 
 ## Completion
 

@@ -138,6 +138,21 @@ export const routingCases = [
     prompt: "How should we engage Mesa Verde Regional Hospital on formulary access?",
     expected: "plan_hospital_engagement",
   },
+  {
+    id: "routing-32",
+    prompt: "Which Cardivance assets are MLR-approved in Aprimo right now?",
+    expected: "aprimo_search_approved_assets",
+  },
+  {
+    id: "routing-33",
+    prompt: "Is everything on the HCP website for Glucora compliant?",
+    expected: "drupal_list_hcp_site_content",
+  },
+  {
+    id: "routing-34",
+    prompt: "Show the Reltio golden record for Lakeshore Health System",
+    expected: "reltio_resolve_organization",
+  },
 ] as const;
 
 /** The guided demo scenarios, taken from the use-case library prompts plus the two policy cases. */
@@ -247,6 +262,13 @@ export const demoScenarios = [
     id: "demo-pharma-hospital",
     prompt: "Plan our engagement with St. Brigid Medical Center ahead of their P&T review",
     expected: "plan_hospital_engagement",
+  },
+  {
+    id: "demo-pharma-content-compliance",
+    prompt:
+      "Are our Glucora materials compliant and consistent across Aprimo, the claims library and the HCP website?",
+    expected:
+      "aprimo_search_approved_assets → vault_list_approved_claims → drupal_list_hcp_site_content",
   },
   {
     id: "demo-memory-recall",

@@ -429,6 +429,23 @@ export const EXTERNAL_SERVICE_TOOLS = Object.freeze([
   "get_fed_announcements",
 ] as const);
 
+/**
+ * Read-only tools served by the life-sciences MCP: mocked views of Aprimo, Reltio, Veeva Vault,
+ * Screendragon, IQVIA, Salesforce Life Sciences Cloud and Drupal for Lumera Therapeutics.
+ */
+export const LIFE_SCIENCES_TOOLS = Object.freeze([
+  "aprimo_search_approved_assets",
+  "aprimo_get_mlr_review",
+  "reltio_resolve_organization",
+  "vault_list_approved_claims",
+  "vault_get_prescribing_information",
+  "screendragon_list_jobs",
+  "screendragon_get_job",
+  "iqvia_get_prescribing_trends",
+  "lsc_get_call_plan",
+  "drupal_list_hcp_site_content",
+] as const);
+
 /** Read-only tools served by the knowledge-graph MCP (Neo4j, or its fictional local copy). */
 export const KNOWLEDGE_GRAPH_TOOLS = Object.freeze([
   "get_graph_overview",
@@ -460,6 +477,7 @@ export const ORCHESTRATOR_TOOLS = Object.freeze([
   ...PHASE_2_CURATED_TOOLS,
   ...CAMPAIGN_CONTEXT_TOOLS,
   ...EXTERNAL_SERVICE_TOOLS,
+  ...LIFE_SCIENCES_TOOLS,
   ...KNOWLEDGE_GRAPH_TOOLS,
   ...MEMORY_TOOLS,
 ] as const);
@@ -991,6 +1009,8 @@ export const TurnRecordSchema = z.object({
   reasoning: z.string(),
   outcome: z.enum(["completed", "aborted", "timed-out", "failed"]),
   fallback: z.boolean(),
+  /** The brand and role the user had chosen in the header for this turn. */
+  scope: z.object({ brand: z.string(), persona: z.string() }).optional(),
   failure: z.string().optional(),
   answer: z.string(),
   steps: z.number().int().nonnegative(),

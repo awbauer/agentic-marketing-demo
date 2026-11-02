@@ -766,6 +766,40 @@ export const scenarioRubrics: Record<string, ScenarioRubric> = {
     ],
     weights: { accuracy: 3, marketerUsefulness: 3, contextFidelity: 1.5, clarity: 1 },
   },
+  "demo-pharma-content-compliance": {
+    goal: "Compare a drug's materials across Aprimo, the claims library and the HCP website, and point out where they disagree.",
+    criteria: [
+      {
+        id: "systems",
+        label: "Names the systems it compared",
+        check: ({ answer }) =>
+          has(answer, /\bAprimo\b/) && has(answer, /\bDrupal\b|\bHCP (?:web)?site\b/i),
+      },
+      {
+        id: "expired-live",
+        label: "Flags the page that is live with an expired MLR approval",
+        check: ({ answer }) => has(answer, /\bMLR-2025-0988\b|\bexpired\b/i),
+      },
+      {
+        id: "approval-ids",
+        label: "Cites MLR approval IDs from the tools",
+        check: ({ answer }) => has(answer, /\bMLR-\d{4}-\d{4}\b/),
+      },
+      {
+        id: "mocked",
+        label: "Says the systems are mocked",
+        check: ({ answer }) => has(answer, /\bmock(?:ed)?\b/i),
+      },
+      noUngrounded,
+      {
+        id: "no-change",
+        label: "Does not claim anything was taken down or approved",
+        check: ({ answer }) =>
+          !has(answer, /\bI(?:'ve| have)? (?:taken down|unpublished|approved|removed|updated)\b/i),
+      },
+    ],
+    weights: { accuracy: 3.5, marketerUsefulness: 3, contextFidelity: 1.5, clarity: 1 },
+  },
 };
 
 export type CriterionResult = { id: string; met: boolean };

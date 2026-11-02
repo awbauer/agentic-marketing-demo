@@ -1,3 +1,4 @@
+import { scopePrompt, type WorkbenchScope } from "../../../packages/architecture/src/scope.ts";
 import type { FocusKind } from "../../../packages/contracts/src/index.ts";
 
 /**
@@ -16,7 +17,11 @@ export const MAX_OUTPUT_TOKENS = 4096;
  * The system prompt. `workspace` describes the chat's working set (records opened or created
  * and context gathered) and, separately, the catalog of records the chat has not opened.
  */
-export function orchestratorSystemPrompt(workspace: string, toolPlan?: readonly string[]) {
+export function orchestratorSystemPrompt(
+  workspace: string,
+  toolPlan?: readonly string[],
+  scope?: WorkbenchScope,
+) {
   // Scenario guidance is added only when its plan is active, so it cannot steer other requests.
   const restaurantPlan = toolPlan?.some((name) => name.endsWith("get_restaurant_profile"));
   const briefPlan = toolPlan?.some((name) => name.endsWith("draft_campaign_brief"));
@@ -31,12 +36,16 @@ export function orchestratorSystemPrompt(workspace: string, toolPlan?: readonly 
   const targetPlan = toolPlan?.some((name) => name.endsWith("build_hcp_target_list"));
   const claimPlan = toolPlan?.some((name) => name.endsWith("check_clinical_claims"));
   const hospitalPlan = toolPlan?.some((name) => name.endsWith("plan_hospital_engagement"));
+  const systemsPlan = toolPlan?.some((name) =>
+    /(?:aprimo|reltio|vault|screendragon|iqvia|lsc|drupal)_/.test(name),
+  );
   const graphPlan = toolPlan?.some((name) => name.startsWith("graph_"));
   const memoryPlan = toolPlan?.some((name) =>
     /_(?:recall_decisions|recall_recent_work)$/.test(name),
   );
   return [
     "You are the Northstar marketing proof orchestrator.",
+    ...(scope ? [scopePrompt(scope)] : []),
     "Salesforce tool results are the only authority for Salesforce facts. Protocol success does not mean that a business result exists.",
     "If a tool reports unavailable, empty, no business units, no records, or an error, explain that limitation and do not fill gaps from workspace presentation data.",
     "Never say you reviewed Salesforce unless a Salesforce tool returned usable evidence.",
@@ -93,6 +102,11 @@ export function orchestratorSystemPrompt(workspace: string, toolPlan?: readonly 
     ...(targetPlan || claimPlan || hospitalPlan
       ? [
           "Lumera Therapeutics is a fictional pharmaceutical brand under Northstar. Its promotion is regulated: only claims a completed trial supports, for an indication on the approved label, carried by content with a current medical-legal-regulatory (MLR) approval and its required safety information, can be used. Never write new clinical claims, rewrite approved copy, suggest off-label use, or compare with other drugs unless the tool shows head-to-head evidence. Quote approval IDs and trial names exactly as the tools return them. Audiences are prescriber groups at hospitals; never name individual clinicians or patients.",
+        ]
+      : []),
+    ...(systemsPlan
+      ? [
+          "These tools return mocked views of pharmaceutical systems of record (Aprimo, Reltio, Veeva Vault, Screendragon, IQVIA, Salesforce Life Sciences Cloud, Drupal) built from invented data. Name the system each fact came from and say it is mocked. When more than one system answers, compare them and point out any disagreement, such as a page live on the HCP site with an expired MLR approval, or a claim approved in one place and not in another. Quote approval, claim, job and entity IDs exactly. Groups are counts of prescribers, never people. Nothing here changes anything: never say an asset was approved, published, taken down or merged.",
         ]
       : []),
     ...(targetPlan
@@ -222,6 +236,53 @@ const LUMERA_HOSPITALS =
   /\b(?:st\.? brigid|lakeshore health|mesa verde|cascade university|pinecrest|gulf coast heart|heartland medical|harbor view)\b/i;
 
 const TOOL_PLANS: ReadonlyArray<readonly [readonly string[], (prompt: string) => boolean]> = [
+  // Life sciences: one drug's materials checked across Aprimo, the claims library and the HCP site.
+  [
+    ["aprimo_search_approved_assets", "vault_list_approved_claims", "drupal_list_hcp_site_content"],
+    (p) =>
+      LUMERA_DRUGS.test(p) &&
+      /\b(?:consistent|in sync|across|every system|all systems|end to end)\b/i.test(p) &&
+      /\b(?:materials?|content|assets?|claims?|site|website|pages?)\b/i.test(p),
+  ],
+  // Life sciences: the mocked systems of record, each asked for what it holds.
+  [
+    ["aprimo_get_mlr_review"],
+    (p) =>
+      /\bMLR-\d{4}-\d{4}\b/i.test(p) && /\b(?:review|stage|why|status|pending|reviewer)\b/i.test(p),
+  ],
+  [
+    ["aprimo_search_approved_assets"],
+    (p) => /\b(?:aprimo|asset library|digital asset|mlr[- ]approved assets?)\b/i.test(p),
+  ],
+  [
+    ["reltio_resolve_organization"],
+    (p) => /\b(?:reltio|golden record|master data|mdm|duplicate (?:hospital|record)s?)\b/i.test(p),
+  ],
+  [
+    ["vault_get_prescribing_information"],
+    (p) => /\b(?:prescribing information|label version|pi version|current label)\b/i.test(p),
+  ],
+  [["vault_list_approved_claims"], (p) => /\b(?:veeva|vault|promomats|claims library)\b/i.test(p)],
+  [["screendragon_get_job"], (p) => /\bSD-\d{4}\b/i.test(p)],
+  [
+    ["screendragon_list_jobs"],
+    (p) => /\b(?:screendragon|work management|marketing jobs?|job status|jobs at risk)\b/i.test(p),
+  ],
+  [
+    ["iqvia_get_prescribing_trends"],
+    (p) =>
+      /\b(?:iqvia|prescribing trends?|trx|nbrx|new[- ]to[- ]brand|prescription data)\b/i.test(p),
+  ],
+  [
+    ["lsc_get_call_plan"],
+    (p) =>
+      /\b(?:life sciences cloud|call plan|rep calls?|field team|detail calls?)\b/i.test(p) &&
+      (LUMERA_HOSPITALS.test(p) || /\bhospital\b/i.test(p)),
+  ],
+  [
+    ["drupal_list_hcp_site_content"],
+    (p) => /\b(?:drupal|hcp (?:web)?site|website content|published pages?|hcp pages?)\b/i.test(p),
+  ],
   // Life sciences: a hospital's formulary status, its P&T review, and the dossier to send.
   [
     ["plan_hospital_engagement"],
@@ -245,7 +306,7 @@ const TOOL_PLANS: ReadonlyArray<readonly [readonly string[], (prompt: string) =>
   [
     ["build_hcp_target_list"],
     (p) =>
-      /\b(?:target list|hcp targets?|target (?:hospitals|accounts|prescribers)|prescriber groups?|call plan|where to (?:detail|engage|focus))\b/i.test(
+      /\b(?:target list|hcp targets?|target (?:hospitals|accounts|prescribers)|prescriber groups?|where to (?:detail|engage|focus))\b/i.test(
         p,
       ) ||
       (LUMERA_DRUGS.test(p) &&

@@ -20,7 +20,16 @@ export default defineConfig({
     cloudflareTest({
       wrangler: { configPath: "./wrangler.jsonc" },
       remoteBindings: false,
-      miniflare: { bindings: { ENVIRONMENT: "local", AUTH_MODE: "development" } },
+      // Tests are hermetic: local secrets in .dev.vars (such as a real Neo4j login) must not reach them.
+      miniflare: {
+        bindings: {
+          ENVIRONMENT: "local",
+          AUTH_MODE: "development",
+          NEO4J_QUERY_URL: "",
+          NEO4J_USERNAME: "",
+          NEO4J_PASSWORD: "",
+        },
+      },
     }),
   ],
   test: { include: ["apps/edge/**/*.worker.test.ts"] },

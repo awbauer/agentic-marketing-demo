@@ -230,6 +230,56 @@ export const LEARN_REFERENCE: ReferenceEntry[] = [
     "A Harborstone client's signals, ranked plays with peer adoption and approved content, and contacts with consented channels.",
   ),
   tool(
+    "aprimo_search_approved_assets",
+    "mcp",
+    "Aprimo (mocked): a drug's assets with MLR approval, expiry, claims, and whether each is usable now.",
+  ),
+  tool(
+    "aprimo_get_mlr_review",
+    "mcp",
+    "Aprimo (mocked): an MLR approval's medical, legal and regulatory stages, comments and cycle time.",
+  ),
+  tool(
+    "reltio_resolve_organization",
+    "mcp",
+    "Reltio (mocked): a hospital's golden record, hierarchy, merged sources, confidence and possible duplicates.",
+  ),
+  tool(
+    "vault_list_approved_claims",
+    "mcp",
+    "Veeva Vault (mocked): a drug's claims library entries with status, references and the documents that carry them.",
+  ),
+  tool(
+    "vault_get_prescribing_information",
+    "mcp",
+    "Veeva Vault (mocked): a drug's current label version, boxed warning and safety documents.",
+  ),
+  tool(
+    "screendragon_list_jobs",
+    "mcp",
+    "Screendragon (mocked): marketing jobs by stage, due date, budget and the MLR approval each waits on.",
+  ),
+  tool(
+    "screendragon_get_job",
+    "mcp",
+    "Screendragon (mocked): one job's workflow, linked asset and blockers.",
+  ),
+  tool(
+    "iqvia_get_prescribing_trends",
+    "mcp",
+    "IQVIA (mocked, invented): six months of prescriptions and share by hospital for a drug.",
+  ),
+  tool(
+    "lsc_get_call_plan",
+    "mcp",
+    "Salesforce Life Sciences Cloud (mocked): a hospital's call plan by prescriber group, with approved detail aids.",
+  ),
+  tool(
+    "drupal_list_hcp_site_content",
+    "mcp",
+    "Drupal (mocked): HCP website pages for a drug, with the approvals and claims they rely on and any compliance issue.",
+  ),
+  tool(
     "build_hcp_target_list",
     "use-cases",
     "Lumera's hospitals and prescriber groups ranked for a drug by patients, formulary access, share, decile and opted-in channels, with the first move at each.",

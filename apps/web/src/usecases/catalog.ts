@@ -4,6 +4,8 @@
  * scenarios that aren't built; the page shows them greyed out with no prompts to run.
  */
 
+import type { Brand } from "@northstar/architecture";
+
 export type Team = "Marketing" | "Sales" | "Service";
 export type Industry = "Financial services" | "Life sciences";
 
@@ -45,6 +47,13 @@ export type UseCase = {
   /** For a new external service: where it comes from. */
   newService?: { name: string; url: string; note: string };
 };
+
+/** The brand a use case runs on: industry scenarios follow their brand, the rest are Coastline's. */
+export function useCaseBrand(useCase: UseCase): Brand {
+  if (useCase.industry === "Financial services") return "Harborstone Wealth";
+  if (useCase.industry === "Life sciences") return "Lumera Therapeutics";
+  return "Coastline Kitchen";
+}
 
 const SF_CAMPAIGN_AGENT: UseCaseSystem = {
   name: "Northstar Campaign Creation",
@@ -819,6 +828,82 @@ export const USE_CASES: UseCase[] = [
       "Graph evidence: ON_FORMULARY and PRACTICES_AT paths",
       "The first next step is the drug with the most patients at stake and no access",
       "Prescriber groups are shown with opted-in channels, never as people",
+    ],
+  },
+  {
+    id: "pharma-systems-check",
+    title: "Check materials across the pharma systems of record",
+    team: "Marketing",
+    industry: "Life sciences",
+    status: "available",
+    summary:
+      "Ask Aprimo, the Veeva Vault claims library, Screendragon, Reltio, IQVIA, Life Sciences Cloud and the Drupal HCP site, then see where they disagree.",
+    scenario:
+      "Before a quarter's detailing starts, compliance wants to know that what is live matches what is approved: that no page on the HCP site carries an expired MLR approval, that every claim in use is in the claims library, and that nothing in production is waiting on a review that hasn't finished.",
+    prompts: [
+      {
+        text: "Are our Glucora materials compliant and consistent across Aprimo, the claims library and the HCP website?",
+        demonstrates:
+          "Three systems answered at once, with the page that is live on an expired approval called out",
+      },
+      {
+        text: "Which Cardivance assets are MLR-approved in Aprimo right now?",
+        demonstrates: "Aprimo's asset search: usable now, pending, and why",
+      },
+      {
+        text: "Why is MLR-2026-0577 still pending?",
+        demonstrates: "Aprimo's review stages and the reviewer's comment",
+      },
+      {
+        text: "Show the Reltio golden record for Lakeshore Health System",
+        demonstrates: "Master data: hierarchy, merged sources and possible duplicates",
+      },
+      {
+        text: "Which marketing jobs are at risk in Screendragon?",
+        demonstrates: "Work management tied to the MLR approvals each job waits on",
+      },
+    ],
+    systems: [
+      ORCHESTRATOR,
+      { name: "Aprimo", kind: "MCP server", role: "Digital assets and MLR workflow (mocked)" },
+      {
+        name: "Veeva Vault PromoMats",
+        kind: "MCP server",
+        role: "Claims library and prescribing information (mocked)",
+      },
+      { name: "Drupal", kind: "MCP server", role: "The HCP website (mocked)" },
+      {
+        name: "Screendragon, Reltio, IQVIA, Life Sciences Cloud",
+        kind: "MCP server",
+        role: "Work management, master data, prescription data and call plans (mocked)",
+      },
+    ],
+    flow: [
+      { from: "You", to: "Orchestrator", carries: "A drug, a hospital, an MLR ID or a job" },
+      {
+        from: "Orchestrator",
+        to: "Life-sciences MCP",
+        carries:
+          "aprimo_search_approved_assets, vault_list_approved_claims, drupal_list_hcp_site_content",
+      },
+      {
+        from: "Life-sciences MCP",
+        to: "Orchestrator",
+        carries: "Each system's answer, keyed to the same drugs, claims and MLR IDs",
+      },
+      {
+        from: "Orchestrator",
+        to: "You",
+        carries: "What agrees, what doesn't, and what to fix first",
+      },
+    ],
+    graphRole:
+      "Not used for these answers. The systems share the knowledge graph's identifiers (drugs, claims, MLR approvals, hospitals), so the graph's verdict from check_clinical_claims can be compared with what each system says.",
+    writes: "Nothing: every tool is read-only and the systems are mocked.",
+    watch: [
+      "The Glucora weight page is live on the HCP site with an expired MLR approval",
+      "Aprimo, Vault and the graph agree on which Cardivance claims are approved",
+      "Each answer is labeled mocked and names the system it came from",
     ],
   },
   {

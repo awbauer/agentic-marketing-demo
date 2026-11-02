@@ -70,12 +70,14 @@ export function buildTurnRecord({
   model,
   route,
   requiredTool,
+  scope,
   result,
 }: {
   utterance: string;
   model: string;
   route: TurnRoute | "local-fixture";
   requiredTool?: string;
+  scope?: { brand: string; persona: string };
   result: {
     outcome: TurnRecord["outcome"];
     trace: TurnTrace;
@@ -97,6 +99,7 @@ export function buildTurnRecord({
     model,
     route,
     ...(requiredTool ? { requiredTool } : {}),
+    ...(scope ? { scope: { brand: scope.brand, persona: scope.persona } } : {}),
     interpretation: describeInterpretation(route, requiredTool),
     reasoning: String(redactForHistory(result.reasoning)),
     outcome: result.outcome,

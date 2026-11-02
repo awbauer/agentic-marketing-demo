@@ -131,6 +131,8 @@ flowchart TB
 
 **Long-term memory** belongs in the graph because it's retrieved *by relationship* ("what did we decide about the Coastline push?"), not by recency, and it needs provenance. It's never sent automatically: the model reads it through recall tools, only when a question asks about earlier work. See *Long-term memory* under the demo concepts.
 
+Each turn in the history also records the brand and role it ran under.
+
 **Try it**
 
 - Open turn history and memory (opens the history view)
@@ -343,6 +345,8 @@ flowchart TB
 
 **A third brand: Lumera Therapeutics.** Seven more node types (Drug, Indication, ClinicalTrial, ClinicalClaim, Hospital, Specialty, PrescriberGroup) and twelve relationship types model pharmaceutical promotion in the same graph. It reuses ContentAsset, Approval, Disclosure, BrandRule and ConsentScope, so the approval and consent checks you saw for Harborstone work the same way. The Graph view has a Lumera group and two guided tours. The Cypher for these tools has not been run against a live Neo4j database here; the fixture backend returns the rows the tests check.
 
+The Graph's brand filter and the header's brand are the same setting: choosing Lumera in either shows only Lumera's nodes and what sits close to it.
+
 **Try it**
 
 - Ask a graph question: “Who should be in the buyer group for Acme Outfitters, and why?”
@@ -435,6 +439,8 @@ Around the loop, the orchestrator also handles the events the model must not: it
 
 **Every tool call passes the gateway.** Before a tool the model chose actually runs, the Worker asks the agentic gateway whether the orchestrator may call `tool:<name>`. The decision, its policy and the caller are recorded, and a denial comes back to the model as a tool error instead of a result. See *The agentic gateway*.
 
+**The header's brand and role.** Each chat message carries the brand and role chosen in the header. The server withholds other brands' tools, answers a request about another brand with a note to switch rather than answering from memory, and tells the model the role so it leads with what that person decides. The role changes emphasis only; it never changes what Salesforce allows or what needs confirmation.
+
 **In this demo**
 
 - apps/edge/src/orchestrator.ts
@@ -497,6 +503,8 @@ Four properties make it trustworthy:
 4. **Writes act on what you see.** Saving asks the Campaign Creation agent to save exactly the focus version on screen. The confirmation records that version in its request hash, and the Brief, Campaign, and flow appear in Records as Salesforce read them back.
 
 **Life-sciences cards.** The three Lumera tools add working-set cards: a target list, a claims check and a hospital plan, each with the summary line the card shows.
+
+The life-sciences systems add a card per answer, labeled as mocked, so what came from Aprimo, Reltio or Drupal stays visible beside the graph's evidence.
 
 **Try it**
 
@@ -603,6 +611,17 @@ The demo uses four MCP servers:
 | **Knowledge graph** | Nine curated Neo4j queries, plus three memory recall tools in chat | In-process; also at `/mcp/knowledge-graph` |
 
 The local servers are called **in-process** through an in-memory MCP transport. The orchestrator uses the real protocol without a network hop, and external MCP clients can still reach the same servers over HTTP, behind Cloudflare Access.
+
+**Life-sciences systems (mocked).** A pharmaceutical company's marketing runs on more than Salesforce, so a fourth in-process MCP server, `northstar-life-sciences`, answers for the systems around it. Each tool is read-only, and each answers from the same fictional drugs, claims, MLR approvals and hospitals as the knowledge graph, so one system can be checked against another. None is a live connection:
+- **Aprimo** (digital assets and MLR workflow): `aprimo_search_approved_assets` lists a drug's assets with their MLR approval, expiry and whether each is usable now; `aprimo_get_mlr_review` shows the medical, legal and regulatory stages and why one is pending.
+- **Reltio** (master data): `reltio_resolve_organization` returns a hospital's golden record, hierarchy, merged sources and possible duplicates.
+- **Veeva Vault PromoMats** (claims library and label): `vault_list_approved_claims` and `vault_get_prescribing_information`.
+- **Screendragon** (work management): `screendragon_list_jobs` and `screendragon_get_job`, with the MLR approval each job is waiting on.
+- **IQVIA** (prescription data, invented): `iqvia_get_prescribing_trends`.
+- **Salesforce Life Sciences Cloud**: `lsc_get_call_plan` for a hospital's field plan, as counts of prescribers.
+- **Drupal** (the HCP website): `drupal_list_hcp_site_content` flags a page that is live with an expired approval.
+
+Ask one question across them (for example whether a drug's materials are consistent across Aprimo, the claims library and the website) and the orchestrator calls three and points out where they disagree.
 
 **In this demo**
 
@@ -822,6 +841,8 @@ After a plan finishes, the model gets **no tools** and must write the answer.
 
 **Life-sciences routes.** A request about a target list or prescriber groups goes to `build_hcp_target_list`; clinical claims, off-label use, a boxed warning or a Lumera drug beside `claims` go to `check_clinical_claims`; a named hospital with formulary, P&T, access or a plan goes to `plan_hospital_engagement`. The model is told that only supported, on-label, MLR-approved claims can be used and that groups are never people.
 
+**Systems of record.** Naming Aprimo, Reltio, Vault, Screendragon, IQVIA, Life Sciences Cloud, Drupal or an MLR or job ID routes to the matching life-sciences tool; asking whether a Lumera drug's materials are consistent *across* systems plans three at once. If the chosen brand excludes the tool a request needs, the router answers that it is outside the selected brand instead of calling anything.
+
 **Try it**
 
 - See each turn's interpretation (opens the history view)
@@ -995,6 +1016,8 @@ flowchart LR
 
 **Architecture workspaces.** The **Architecture** view is built differently from the chat: each tab is a *workspace manifest* (the roles, objects, tiles, agents and services it composes) drawn by one renderer, so a new workspace is data rather than a new screen. The same approval card also renders as an Adaptive Card, as data for a Lightning Web Component, and as an MCP Apps resource. See *Governed objects and workspaces*.
 
+**One scope in the header.** The **Brand** and **Run as** selectors apply everywhere: the chat (the message box suggests a prompt for the brand), the Graph (its brand filter), the use-case library, the Architecture workspaces and the turn history. The choice is remembered in the browser.
+
 **In this demo**
 
 - Workspace panel (readiness card with native fallback)
@@ -1033,6 +1056,8 @@ flowchart LR
 - **Turn history** (History → Turns): each utterance with the orchestrator's interpretation, the tool calls with inputs and results, and the outcome. Each row shows the turn's seconds beside its tokens and tool calls. Filterable, and kept 24 hours per user.
 - **Memory** (History → Memory): what the workspace remembers across chats, with provenance, and **Reopen** and **Forget** buttons. The audit export lists each reopen. See *Long-term memory*.
 - **Audit export:** a JSON download of the user's confirmed writes, memory remembers and forgets, and turn summaries.
+
+History shows the brand and role each turn ran under.
 
 **Try it**
 
@@ -1104,6 +1129,8 @@ Latency and tokens are recorded too, and the Evaluations view shows each turn's 
 `pnpm eval` runs the routing set through the production policy and intent routers without a model, on every verify. Read-style Salesforce tools are fixtures in the live run, so the scores measure orchestration, not Salesforce agent quality. A held-out set of paraphrases guards the router against overfitting. The first published run found a real routing bug: any prompt mentioning "campaign" forced the summary tool.
 
 **Life-sciences scenarios.** The demo scenarios include three for Lumera Therapeutics (a target list, a claims check, a hospital plan). Their rubrics check that the answer cites the trial and MLR approval IDs the tools returned, blocks unsupported and off-label claims instead of rewording them, and names groups rather than clinicians.
+
+A fourth Lumera scenario compares one drug's materials across Aprimo, the claims library and the HCP website, and its rubric checks that it names the systems, flags the page that is live with an expired approval, and says the systems are mocked.
 
 **Try it**
 
@@ -1276,6 +1303,8 @@ The graph and prompts carry the manager's name only, never contact details. Noth
 - **Hospitals.** `plan_hospital_engagement` reads a hospital's **ON_FORMULARY** status and days to its P&T review for each drug, the patients at stake, whether the value dossier is usable or still in MLR, and the prescriber groups with their consent and engagement, then orders the next steps.
 - **In the Architecture view.** Lumera's claims, evidence, modules and plan run through the same lifecycle as Harborstone's: the authoring agent refuses a claim whose approval is draft or rejected, the farm flags superiority language, and a module can't be approved while its study report has lapsed.
 
+The library follows the header's brand: choosing Lumera Therapeutics shows only its use cases.
+
 **Try it**
 
 - Plan buyer-group outreach: “Plan outreach to Acme Outfitters' buyer group for the next month”
@@ -1354,7 +1383,7 @@ Most marketing tools copy things forward: a plan becomes a brief, a brief become
 
 **The object inspector** shows any object by urn: its attributes, the plan it inherits, its evidence, its lineage in both directions, its version chain, its append-only history, and the next decision open to you. Open it from a Command Center card, a table row, a search result, or a link in an agent's answer.
 
-**Workspaces are manifests.** A workspace says who it is for, which objects it lists, which tiles it composes, and which agents and services it calls. One renderer turns any manifest into a screen, with the same loading, empty, error and permission-denied states. The **Command Center** lists every object by lifecycle stage with the person whose decision it is waiting on; **Brief Builder**, **Module Library**, **Approvals** and **Performance** are other manifests over the same objects. Choose **Act as** to see a brand planner, a marketer, a reviewer or a brand lead's view of the same data. The persona is sent with each request, and the server enforces what it may do.
+**Workspaces are manifests.** A workspace says who it is for, which objects it lists, which tiles it composes, and which agents and services it calls. One renderer turns any manifest into a screen, with the same loading, empty, error and permission-denied states. The **Command Center** lists every object by lifecycle stage with the person whose decision it is waiting on; **Brief Builder**, **Module Library**, **Approvals** and **Performance** are other manifests over the same objects. Choose **Run as** in the header to see a brand planner, a marketer, a reviewer or a brand lead's view of the same data. The role opens that person's workspace and is sent with each request, and the server enforces what it may do.
 
 **Channels.** An approval card is composed once, with brand rules (accent, disclosure label, rule version) applied, and then rendered four ways: React, an **Adaptive Card** for Teams and Outlook, **data for a Lightning Web Component**, and an **MCP Apps** resource for MCP clients such as Claude. Change one brand rule and all four renderings change. The preview renders these payloads on screen; nothing is sent to Teams, Outlook or Copilot.
 
@@ -1369,7 +1398,7 @@ The seed has three brands: Harborstone Wealth, Coastline Kitchen and Lumera Ther
 **In this demo**
 
 - Architecture → Command Center, then open any card
-- Architecture → Act as: Brand planner, Marketer, Reviewer, Brand lead
+- Header → Run as: Brand planner, Marketer, Reviewer, Brand lead
 - Architecture → open a module → Channels (React, Adaptive Card, LWC data, MCP Apps)
 - packages/architecture/src/types.ts, world.ts, workspaces.ts, channels.ts
 
@@ -1443,6 +1472,8 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 **The workbench as a channel.** `/mcp/workbench` exposes read tools, search, and `propose_transition` to MCP clients through the same gateway. It has no tool that approves, publishes, sends or deletes.
 
 **What it does not do yet.** Confirmed Salesforce writes keep their own signed-confirmation audit and do not pass the gateway log. The call to the Salesforce MCP portal is authorized as the orchestrator calling that tool, not as a separate hop.
+
+**Brand scope reaches tools.** When a brand is chosen in the header, each tool that belongs to another brand is denied with the `forbid-out-of-scope-brand` rule, and the model is not given those tools in the first place. Tools that every brand uses, such as the graph overview, stay available.
 
 **Try it**
 
@@ -1745,7 +1776,7 @@ Who decides whether you may create a campaign from the workbench?
 
 ## Reference: every concept in the code
 
-### Tools (43)
+### Tools (53)
 
 | Name | What it is | Taught in |
 | --- | --- | --- |
@@ -1785,6 +1816,16 @@ Who decides whether you may create a campaign from the workbench?
 | `match_news_to_approved_content` | Harborstone's pre-approved content for a market event: what's ready to send, what's blocked and why, reach by consent, and past response speed. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `prepare_deal_release` | The embargoed acquisition package in release order, with each piece's audience, consent basis, approval, and blockers. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `build_aum_account_plan` | A Harborstone client's signals, ranked plays with peer adoption and approved content, and contacts with consented channels. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `aprimo_search_approved_assets` | Aprimo (mocked): a drug's assets with MLR approval, expiry, claims, and whether each is usable now. | [3.4 Tools and the Model Context Protocol (MCP)](#34-tools-and-the-model-context-protocol-mcp) |
+| `aprimo_get_mlr_review` | Aprimo (mocked): an MLR approval's medical, legal and regulatory stages, comments and cycle time. | [3.4 Tools and the Model Context Protocol (MCP)](#34-tools-and-the-model-context-protocol-mcp) |
+| `reltio_resolve_organization` | Reltio (mocked): a hospital's golden record, hierarchy, merged sources, confidence and possible duplicates. | [3.4 Tools and the Model Context Protocol (MCP)](#34-tools-and-the-model-context-protocol-mcp) |
+| `vault_list_approved_claims` | Veeva Vault (mocked): a drug's claims library entries with status, references and the documents that carry them. | [3.4 Tools and the Model Context Protocol (MCP)](#34-tools-and-the-model-context-protocol-mcp) |
+| `vault_get_prescribing_information` | Veeva Vault (mocked): a drug's current label version, boxed warning and safety documents. | [3.4 Tools and the Model Context Protocol (MCP)](#34-tools-and-the-model-context-protocol-mcp) |
+| `screendragon_list_jobs` | Screendragon (mocked): marketing jobs by stage, due date, budget and the MLR approval each waits on. | [3.4 Tools and the Model Context Protocol (MCP)](#34-tools-and-the-model-context-protocol-mcp) |
+| `screendragon_get_job` | Screendragon (mocked): one job's workflow, linked asset and blockers. | [3.4 Tools and the Model Context Protocol (MCP)](#34-tools-and-the-model-context-protocol-mcp) |
+| `iqvia_get_prescribing_trends` | IQVIA (mocked, invented): six months of prescriptions and share by hospital for a drug. | [3.4 Tools and the Model Context Protocol (MCP)](#34-tools-and-the-model-context-protocol-mcp) |
+| `lsc_get_call_plan` | Salesforce Life Sciences Cloud (mocked): a hospital's call plan by prescriber group, with approved detail aids. | [3.4 Tools and the Model Context Protocol (MCP)](#34-tools-and-the-model-context-protocol-mcp) |
+| `drupal_list_hcp_site_content` | Drupal (mocked): HCP website pages for a drug, with the approvals and claims they rely on and any compliance issue. | [3.4 Tools and the Model Context Protocol (MCP)](#34-tools-and-the-model-context-protocol-mcp) |
 | `build_hcp_target_list` | Lumera's hospitals and prescriber groups ranked for a drug by patients, formulary access, share, decile and opted-in channels, with the first move at each. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `check_clinical_claims` | Each clinical claim for a drug: the trial behind it, whether its indication is on the label, and the MLR-approved content that carries it, with blockers. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `plan_hospital_engagement` | A hospital's formulary status and P&T timing for each Lumera drug, the value dossier to send (usable or blocked), its prescriber groups and consent, and ordered next steps. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |

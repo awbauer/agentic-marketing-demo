@@ -1,9 +1,20 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ScopeBar } from "../ScopeBar";
+import { ScopeProvider } from "../scope";
 import { ArchitectureView } from "./ArchitectureView";
+
+const renderView = () =>
+  render(
+    <ScopeProvider>
+      <ScopeBar />
+      <ArchitectureView onClose={() => undefined} />
+    </ScopeProvider>,
+  );
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -48,6 +59,17 @@ const workspace = {
   ],
 };
 
+const memory = new Map<string, string>();
+const storage = {
+  getItem: (key: string) => memory.get(key) ?? null,
+  setItem: (key: string, value: string) => void memory.set(key, value),
+  removeItem: (key: string) => void memory.delete(key),
+  clear: () => memory.clear(),
+};
+beforeEach(() =>
+  Object.defineProperty(window, "localStorage", { value: storage, configurable: true }),
+);
+
 describe("architecture view", () => {
   const requests: Array<{ url: string; headers: Record<string, string> }> = [];
   beforeEach(() => {
@@ -56,15 +78,7 @@ describe("architecture view", () => {
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         requests.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
-        if (url.endsWith("/session"))
-          return Response.json({
-            persona: "marketer",
-            personas: [
-              { id: "marketer", label: "Marketer" },
-              { id: "reviewer", label: "MLR-style reviewer" },
-            ],
-            role: "evaluator",
-          });
+        if (url === "/api/session") return Response.json({ principal: { role: "evaluator" } });
         if (url.includes("/workspaces/approvals"))
           return Response.json(
             { error: { code: "DENIED", message: "No policy grants this." } },
@@ -77,7 +91,7 @@ describe("architecture view", () => {
   });
 
   it("draws a workspace manifest and flags what needs attention", async () => {
-    render(<ArchitectureView onClose={() => undefined} />);
+    renderView();
     expect(await screen.findByText("The lifecycle")).toBeTruthy();
     const card = screen.getByRole("button", { name: /Put idle cash to work/ });
     expect(within(card).getByText("needs refresh")).toBeTruthy();
@@ -85,17 +99,26 @@ describe("architecture view", () => {
   });
 
   it("sends the chosen persona with every request", async () => {
-    render(<ArchitectureView onClose={() => undefined} />);
+    renderView();
     await screen.findByText("The lifecycle");
     expect(requests.at(-1)?.headers["x-persona"]).toBe("marketer");
-    fireEvent.change(await screen.findByLabelText("Act as"), { target: { value: "reviewer" } });
+    // The role is chosen once, in the header, and the view follows it.
+    fireEvent.change(await screen.findByLabelText("Run as"), { target: { value: "reviewer" } });
     await waitFor(() =>
       expect(requests.some((request) => request.headers["x-persona"] === "reviewer")).toBe(true),
     );
+    fireEvent.change(screen.getByLabelText("Brand"), { target: { value: "Lumera Therapeutics" } });
+    await waitFor(() =>
+      expect(requests.some((request) => request.headers["x-brand"] === "Lumera Therapeutics")).toBe(
+        true,
+      ),
+    );
+    expect(window.localStorage.getItem("northstar.scope")).toContain("Lumera Therapeutics");
+    expect(screen.getByRole("status").textContent).toContain("MLR-style reviewer");
   });
 
   it("explains a gateway denial instead of failing silently", async () => {
-    render(<ArchitectureView onClose={() => undefined} />);
+    renderView();
     await screen.findByText("The lifecycle");
     fireEvent.click(screen.getByRole("tab", { name: "Approvals" }));
     const alert = await screen.findByRole("alert");
