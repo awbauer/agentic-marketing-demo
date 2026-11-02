@@ -402,7 +402,9 @@ GraphRAG's advantages are **multi-hop reasoning** and **explainability**. Every 
 - **Parity:** every tool also has an in-memory implementation over the same dataset. \`pnpm kg:parity\` proves both return identical results, so local development and evals match production. It also reports tool latency; the median stays under 500 ms.
 - **Grounding:** evaluations check that a graph answer names only accounts, people, campaigns, and menu items that appear in what the tools returned.
 - **In a flow:** the restaurant push campaign calls \`find_similar_past_pushes\` to learn what worked before in the same weather and daypart, then passes that to the Salesforce content tool.
-- **Graph explorer:** the Graph page's brand filter narrows the canvas to one brand's own nodes: a node counts as a brand's own when it's at least as close to that brand as to any other, walking loaded relationships without crossing through another brand. That's how Coastline Kitchen keeps its campaigns, locations, and shared channels and consent, without pulling in Northstar's B2B accounts through the parent brand.`,
+- **Graph explorer:** the Graph page's brand filter narrows the canvas to one brand's own nodes: a node counts as a brand's own when it's at least as close to that brand as to any other, walking loaded relationships without crossing through another brand. That's how Coastline Kitchen keeps its campaigns, locations, and shared channels and consent, without pulling in Northstar's B2B accounts through the parent brand.
+
+**A third brand: Lumera Therapeutics.** Seven more node types (Drug, Indication, ClinicalTrial, ClinicalClaim, Hospital, Specialty, PrescriberGroup) and twelve relationship types model pharmaceutical promotion in the same graph. It reuses ContentAsset, Approval, Disclosure, BrandRule and ConsentScope, so the approval and consent checks you saw for Harborstone work the same way. The Graph view has a Lumera group and two guided tours. The Cypher for these tools has not been run against a live Neo4j database here; the fixture backend returns the rows the tests check.`,
         inDemo: [
           "Use cases: Buyer-group recommendation, and Buyer-group outreach around local holidays",
           "Graph evidence panel under answers; “Knowledge graph · Neo4j” in Sources",
@@ -452,7 +454,9 @@ Four properties make it trustworthy:
 1. **Deterministic ingestion.** Cards and records come from tool results through code, never from model-written text, so nothing in the workspace is invented.
 2. **Open versus available.** Records the connected systems make available are listed separately as a catalog, so the model never acts on a record the chat hasn't opened.
 3. **Approvals come to you.** When something needs your approval, an **action card** appears in the chat: saving the brief in Marketing Cloud, then creating its campaign, or requesting a review after a readiness check. Accepting it prepares the confirmation card, with Salesforce's permission check.
-4. **Writes act on what you see.** Saving asks the Campaign Creation agent to save exactly the focus version on screen. The confirmation records that version in its request hash, and the Brief, Campaign, and flow appear in Records as Salesforce read them back.`,
+4. **Writes act on what you see.** Saving asks the Campaign Creation agent to save exactly the focus version on screen. The confirmation records that version in its request hash, and the Brief, Campaign, and flow appear in Records as Salesforce read them back.
+
+**Life-sciences cards.** The three Lumera tools add working-set cards: a target list, a claims check and a hospital plan, each with the summary line the card shows.`,
         inDemo: [
           "Workspace panel: Focus, Records, and Context",
           "apps/edge/src/working-set.ts, apps/edge/src/focus.ts",
@@ -590,7 +594,9 @@ Its **Campaign Refinement** subagent runs **Refine Campaign Preview** to change 
    - A change to other drafts → no tools; the model rewrites the draft, which is saved as the next version
    - The rules need specific signals and **defer to the model** when unsure, because a wrongly forced tool can't be undone within the turn.
 
-After a plan finishes, the model gets **no tools** and must write the answer.`,
+After a plan finishes, the model gets **no tools** and must write the answer.
+
+**Life-sciences routes.** A request about a target list or prescriber groups goes to \`build_hcp_target_list\`; clinical claims, off-label use, a boxed warning or a Lumera drug beside \`claims\` go to \`check_clinical_claims\`; a named hospital with formulary, P&T, access or a plan goes to \`plan_hospital_engagement\`. The model is told that only supported, on-label, MLR-approved claims can be used and that groups are never people.`,
         inDemo: ["apps/edge/src/turn-policy.ts", "Turn history: “Interpretation” for each turn"],
         resources: [R.buildingAgents, R.writingTools],
       },
@@ -725,7 +731,9 @@ Latency and tokens are recorded too, and the Evaluations view shows each turn's 
 
 **Cost.** Every turn, judge call, and simulated-agent call is priced from Cloudflare's published Workers AI per-million-token rates (neurons are derived at $0.011 per 1,000). The run prints a projection first and refuses to start above \`--max-usd\`; the report shows cost per turn, cost per passing turn, and a cost-versus-quality chart. The expensive frontier models are opt-in with \`--tier frontier\`. Cloudflare limits paid frontier models to 20 requests a minute per model, so the runner throttles every call (turns, judges, simulator) per model, serves contestant turns before judge calls, and refreshes its sign-in token during long runs.
 
-\`pnpm eval\` runs the routing set through the production policy and intent routers without a model, on every verify. Read-style Salesforce tools are fixtures in the live run, so the scores measure orchestration, not Salesforce agent quality. A held-out set of paraphrases guards the router against overfitting. The first published run found a real routing bug: any prompt mentioning "campaign" forced the summary tool.`,
+\`pnpm eval\` runs the routing set through the production policy and intent routers without a model, on every verify. Read-style Salesforce tools are fixtures in the live run, so the scores measure orchestration, not Salesforce agent quality. A held-out set of paraphrases guards the router against overfitting. The first published run found a real routing bug: any prompt mentioning "campaign" forced the summary tool.
+
+**Life-sciences scenarios.** The demo scenarios include three for Lumera Therapeutics (a target list, a claims check, a hospital plan). Their rubrics check that the answer cites the trial and MLR approval IDs the tools returned, blocks unsupported and off-label claims instead of rewording them, and names groups rather than clinicians.`,
         inDemo: ["Evaluations view", "scripts/run-live-evals.mjs, packages/evals"],
         resources: [R.evals, R.buildingAgents],
       },
@@ -794,7 +802,13 @@ The graph and prompts carry the manager's name only, never contact details. Noth
   2. \`match_news_to_approved_content\` walks MarketEvent ← **RESPONDS_TO** ← ContentAsset → **APPROVED_UNDER** → Approval and → **REQUIRES** → Disclosure. It returns what's ready to send, with approval IDs, expiry, and disclosures; what's blocked and exactly why (an expired approval, one still pending, or a **FAILED** compliance rule); reach per channel under marketing consent; and past responses, which show that sending within hours of the news opened far better than the next day.
   3. The answer never writes new regulated copy. Asking for a Marketing Cloud campaign hands the approved asset, its approval ID, and disclosures to the Campaign Creation agent's brief.
 - **Acquisition announcement, released on time.** \`prepare_deal_release\` orders the embargoed package through **RELEASED_WITH** → Deal and checks each piece's audience through **ADDRESSED_TO** → Segment → **HAS_CONSENT**. Advisors get their FAQ first, then the press release, then client letters. The acquired firm's clients get service notices under their client agreement, never marketing, until they opt in, so an SMS that also failed its disclosure check is blocked for both reasons.
-- **Account plan to grow assets under management.** \`build_aum_account_plan\` walks Client → **HAS_SIGNAL** → Signal → **SUGGESTS** → Product for products the client doesn't hold, sizes each play from the estimated assets held elsewhere, counts how many clients of the same type hold it, and finds its approved content through Product ← **EXPLAINS** ← ContentAsset. Each contact comes with the channel that has approved content they consented to, so the 30/60/90-day sequence never sends content on a channel it isn't approved for. "Activate the plan" drafts a Marketing Cloud brief from it.`,
+- **Account plan to grow assets under management.** \`build_aum_account_plan\` walks Client → **HAS_SIGNAL** → Signal → **SUGGESTS** → Product for products the client doesn't hold, sizes each play from the estimated assets held elsewhere, counts how many clients of the same type hold it, and finds its approved content through Product ← **EXPLAINS** ← ContentAsset. Each contact comes with the channel that has approved content they consented to, so the 30/60/90-day sequence never sends content on a channel it isn't approved for. "Activate the plan" drafts a Marketing Cloud brief from it.
+
+**Life sciences: Lumera Therapeutics.** A third brand under Northstar shows pharmaceutical promotion, where a claim is only as good as the trial, the label and the MLR approval behind it. Everything is fictional, including the drugs (Cardivance for heart failure, Glucora for type 2 diabetes, Neurelva for chronic migraine), the trials and their results.
+- **Targets.** \`build_hcp_target_list\` ranks hospitals and prescriber groups for a drug by labeled-indication patients × (1 − Lumera's share) × a formulary access weight × decile. A drug that is not on formulary, or is under P&T review, leads with the approved value dossier before any detailing. Groups carry opted-in counts per channel (email, portal, rep visit), never people.
+- **Claims.** \`check_clinical_claims\` walks Drug ← **CLAIMS_ABOUT** ← ClinicalClaim ← **SUPPORTS** ← ClinicalTrial, then compares **INDICATED_FOR** (on the label) with **INVESTIGATED_FOR** (not). Content that **CARRIES** a claim is usable only with a current MLR approval, the safety information, and the boxed warning for Cardivance. The “superior to every ARB” claim has no trial; the HFpEF claim is off label and its trial has no results; an expired approval blocks a supported Glucora claim.
+- **Hospitals.** \`plan_hospital_engagement\` reads a hospital's **ON_FORMULARY** status and days to its P&T review for each drug, the patients at stake, whether the value dossier is usable or still in MLR, and the prescriber groups with their consent and engagement, then orders the next steps.
+- **In the Architecture view.** Lumera's claims, evidence, modules and plan run through the same lifecycle as Harborstone's: the authoring agent refuses a claim whose approval is draft or rejected, the farm flags superiority language, and a module can't be approved while its study report has lapsed.`,
         inDemo: [
           "Use cases in the left rail",
           "Sources: Holidays · Nager.Date, Weather alerts · NWS, Rate news · Federal Reserve",
@@ -823,7 +837,9 @@ The graph and prompts carry the manager's name only, never contact details. Noth
 
 **Channels.** An approval card is composed once, with brand rules (accent, disclosure label, rule version) applied, and then rendered four ways: React, an **Adaptive Card** for Teams and Outlook, **data for a Lightning Web Component**, and an **MCP Apps** resource for MCP clients such as Claude. Change one brand rule and all four renderings change. The preview renders these payloads on screen; nothing is sent to Teams, Outlook or Copilot.
 
-**Where the data lives.** Seed objects for Harborstone Wealth and Coastline Kitchen ship in code. What you create (a plan, a module, a gap, a new claim version) and every approval state go to D1, scoped to you, and expire with the 24-hour audit. They are not in the Neo4j graph; making them graph nodes is a later step.`,
+**Where the data lives.** Seed objects for Harborstone Wealth and Coastline Kitchen ship in code. What you create (a plan, a module, a gap, a new claim version) and every approval state go to D1, scoped to you, and expire with the 24-hour audit. They are not in the Neo4j graph; making them graph nodes is a later step.
+
+The seed has three brands: Harborstone Wealth, Coastline Kitchen and Lumera Therapeutics. The approval card's brand rules for Lumera label its disclosures as safety information.`,
         inDemo: [
           "Architecture → Command Center, then open any card",
           "Architecture → Act as: Brand planner, Marketer, Reviewer, Brand lead",
@@ -885,7 +901,9 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **Nothing is overwritten.** Regenerating an object that already exists is a no-op if the content matches, and a conflict if it doesn't, so approved text can't change without a new review; a superseded claim gets a new version instead. A decision is recorded only if the state really changed, so two reviewers acting at once can't both succeed, and an accepted optimization proposal is spent: it isn't offered again for the same evidence.
 
-**Salesforce stays the system of record.** The lifecycle adds no new Salesforce writes. The state machine's approval is the workbench's own; the confirmed review-task write remains how a decision reaches Salesforce.`,
+**Salesforce stays the system of record.** The lifecycle adds no new Salesforce writes. The state machine's approval is the workbench's own; the confirmed review-task write remains how a decision reaches Salesforce.
+
+**A regulated brand beyond finance.** Lumera Therapeutics' content runs through the same stages. Its claims need a trial-backed study report, the safety information (and a boxed warning for Cardivance) is a required disclosure the authoring agent adds, and the farm treats superiority or absolute-safety wording as a blocking finding.`,
         inDemo: [
           "Architecture → Module Library → Author a module (cite or refuse): pick topics “sweep-apy” and “wire-fees”",
           "Architecture → Approvals → open a module → Decision, History",

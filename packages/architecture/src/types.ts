@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const BRANDS = ["Harborstone Wealth", "Coastline Kitchen"] as const;
+export const BRANDS = ["Harborstone Wealth", "Coastline Kitchen", "Lumera Therapeutics"] as const;
 export type Brand = (typeof BRANDS)[number];
 
 export const OBJECT_KINDS = [

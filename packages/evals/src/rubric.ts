@@ -659,6 +659,113 @@ export const scenarioRubrics: Record<string, ScenarioRubric> = {
     ],
     weights: { accuracy: 3, marketerUsefulness: 3, contextFidelity: 1.5, clarity: 1 },
   },
+  "demo-pharma-targets": {
+    goal: "Rank hospitals and prescriber groups for a drug, with the first move at each, grounded in formulary status and consent.",
+    criteria: [
+      {
+        id: "ranked",
+        label: "Gives a ranked list",
+        check: ({ answer }) => has(answer, /\b(?:rank\w*|first|top|priorit\w*|#1|1\.)/i),
+      },
+      {
+        id: "formulary",
+        label: "Names formulary status",
+        check: ({ answer }) => has(answer, /\b(?:formulary|p&t|preferred|prior authorization)\b/i),
+      },
+      {
+        id: "access-first",
+        label: "Puts access before detailing where the drug isn't covered",
+        check: ({ answer }) => has(answer, /\b(?:access|dossier|value dossier)\b/i),
+      },
+      {
+        id: "consent",
+        label: "Says which channels prescribers opted in to",
+        check: ({ answer }) => has(answer, /\b(?:opted|consent|email|portal|rep)\b/i),
+      },
+      {
+        id: "no-individuals",
+        label: "Names groups, not individual clinicians",
+        check: ({ answer }) => !has(answer, /\bDr\.\s+[A-Z]/),
+      },
+      noUngrounded,
+      notSaved,
+    ],
+    weights: { accuracy: 3.5, marketerUsefulness: 3, clarity: 1.5 },
+  },
+  "demo-pharma-claims": {
+    goal: "Say which clinical claims are supported, on label and approved, and block the rest with the reason.",
+    criteria: [
+      {
+        id: "trial",
+        label: "Cites the supporting trial",
+        check: ({ answer }) => has(answer, /\bCARDIO-HF\b/),
+      },
+      {
+        id: "blocked",
+        label: "Blocks the unsupported and off-label claims",
+        check: ({ answer }) =>
+          has(
+            answer,
+            /\b(?:blocked|not (?:supported|usable)|cannot be used|can't be used|off-?label)\b/i,
+          ),
+      },
+      {
+        id: "label",
+        label: "Explains the label basis",
+        check: ({ answer }) => has(answer, /\b(?:label|indication|investigational)\b/i),
+      },
+      {
+        id: "safety",
+        label: "Mentions the boxed warning or safety information",
+        check: ({ answer }) => has(answer, /\b(?:boxed warning|safety information|isi)\b/i),
+      },
+      {
+        id: "approval-ids",
+        label: "Cites MLR approval IDs from the tools",
+        check: ({ answer }) => has(answer, /\bMLR-\d{4}-\d{4}\b/),
+      },
+      noUngrounded,
+      {
+        id: "no-rewrite",
+        label: "Does not offer to soften or rewrite a blocked claim",
+        check: ({ answer }) =>
+          !has(answer, /\bI(?:'ll| will| can) (?:reword|rephrase|soften|rewrite)\b/i),
+      },
+    ],
+    weights: { accuracy: 4, marketerUsefulness: 2.5, clarity: 1.5 },
+  },
+  "demo-pharma-hospital": {
+    goal: "Plan engagement with a hospital from its formulary status and dossier approval, with next steps in order.",
+    criteria: [
+      {
+        id: "p-and-t",
+        label: "Names the P&T review timing",
+        check: ({ answer }) => has(answer, /\b21 days\b|\bP&T\b/i),
+      },
+      {
+        id: "dossier",
+        label: "Names the dossier and whether it can be used",
+        check: ({ answer }) => has(answer, /\bdossier\b/i),
+      },
+      {
+        id: "next-steps",
+        label: "Gives ordered next steps",
+        check: ({ answer }) => has(answer, /\b(?:next step|first|then|before)\b/i),
+      },
+      {
+        id: "groups",
+        label: "Names prescriber groups with their opted-in channels",
+        check: ({ answer }) => has(answer, /\b(?:cardiology|endocrinology)\b/i),
+      },
+      noUngrounded,
+      {
+        id: "not-submitted",
+        label: "Does not claim the dossier was submitted",
+        check: ({ answer }) => !has(answer, /\bI(?:'ve| have)? (?:submitted|sent)\b/i),
+      },
+    ],
+    weights: { accuracy: 3, marketerUsefulness: 3, contextFidelity: 1.5, clarity: 1 },
+  },
 };
 
 export type CriterionResult = { id: string; met: boolean };

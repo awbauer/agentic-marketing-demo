@@ -14,6 +14,9 @@ import {
 
 const HS: Brand = "Harborstone Wealth";
 const CK: Brand = "Coastline Kitchen";
+const LT: Brand = "Lumera Therapeutics";
+/** Brands whose content is regulated, so classification and ownership default to compliance. */
+const regulated = (brand: Brand) => brand === HS || brand === LT;
 const CREATED = "2026-10-01T09:00:00.000Z";
 
 type Seed = Partial<GovernedObject> &
@@ -26,9 +29,9 @@ function object(seed: Seed): GovernedObject {
     version: 1,
     supersedes: null,
     market: "US",
-    owner: seed.brand === HS ? "compliance" : "marketer",
+    owner: regulated(seed.brand) ? "compliance" : "marketer",
     approvalState: "approved",
-    classification: seed.brand === HS ? "regulated" : "internal",
+    classification: regulated(seed.brand) ? "regulated" : "internal",
     createdBy: "user:seed",
     createdAt: CREATED,
     updatedAt: CREATED,
@@ -36,12 +39,12 @@ function object(seed: Seed): GovernedObject {
   };
 }
 
-const disclosure = (id: string, text: string, short: string) =>
+const disclosure = (id: string, text: string, short: string, brand: Brand = HS) =>
   object({
     id,
     kind: "disclosure",
     title: short,
-    brand: HS,
+    brand,
     attributes: { text, short } satisfies DisclosureAttributes,
   });
 
@@ -129,7 +132,23 @@ const FOMC = "The Federal Open Market Committee next announces its rate decision
 const CHOWDER = "The clam chowder bread bowl is $9.50 at every California location.";
 const SOUP = "Soup of the day is served from 11am to close.";
 
-/** Fictional sample objects for Harborstone Wealth and Coastline Kitchen. */
+const ISI_CARDIVANCE =
+  "Cardivance can cause low blood pressure, high potassium, cough and dizziness. Do not use with ACE inhibitors or with a history of angioedema.";
+const BOXED_CARDIVANCE =
+  "WARNING: FETAL TOXICITY. When pregnancy is detected, discontinue Cardivance as soon as possible.";
+const ISI_GLUCORA =
+  "Glucora can cause genital yeast infections, urinary tract infections and dehydration. Rare cases of ketoacidosis have been reported.";
+const PI = "Please see full Prescribing Information, including the Boxed Warning where applicable.";
+const CARDIVANCE_MORTALITY =
+  "Reduced the risk of cardiovascular death or heart failure hospitalization by 20% versus enalapril in HFrEF.";
+const CARDIVANCE_SAFETY =
+  "The most common adverse reactions were hypotension, hyperkalemia, cough and dizziness.";
+const CARDIVANCE_SUPERIOR = "Superior to every ARB for patients with heart failure.";
+const CARDIVANCE_HFPEF = "Improves outcomes in heart failure with preserved ejection fraction.";
+const GLUCORA_A1C = "Lowered HbA1c by 0.9 percentage points versus placebo at 26 weeks.";
+const NEURELVA_DAYS = "Reduced monthly migraine days by 3.1 versus 1.4 on placebo over 12 weeks.";
+
+/** Fictional sample objects for Harborstone Wealth, Coastline Kitchen and Lumera Therapeutics. */
 export const SEED_OBJECTS: readonly GovernedObject[] = [
   // Harborstone: regulated content with claims, evidence and disclosures.
   disclosure("hs-disc-not-fdic", NOT_FDIC, "Not FDIC insured. May lose value."),
@@ -389,6 +408,196 @@ export const SEED_OBJECTS: readonly GovernedObject[] = [
   ),
   result("ck-result-chowder-push", CK, "ck-mod-chowder-push", "push", 5200, 2340, 312),
   result("ck-result-soup-email", CK, "ck-mod-soup-email", "email", 4000, 1280, 90),
+
+  // Lumera Therapeutics: pharmaceutical content. Claims need trial evidence, a label, and MLR.
+  disclosure(
+    "lt-disc-isi-cardivance",
+    ISI_CARDIVANCE,
+    "Cardivance important safety information.",
+    LT,
+  ),
+  disclosure("lt-disc-boxed-cardivance", BOXED_CARDIVANCE, "Boxed warning: fetal toxicity.", LT),
+  disclosure("lt-disc-isi-glucora", ISI_GLUCORA, "Glucora important safety information.", LT),
+  disclosure("lt-disc-pi", PI, "See full Prescribing Information.", LT),
+  claim("lt-cardivance-mortality", LT, "cardivance-mortality", CARDIVANCE_MORTALITY),
+  claim("lt-cardivance-safety", LT, "cardivance-safety", CARDIVANCE_SAFETY),
+  claim("lt-cardivance-superior", LT, "cardivance-superior", CARDIVANCE_SUPERIOR, {
+    approvalState: "rejected",
+  }),
+  claim("lt-cardivance-hfpef", LT, "cardivance-hfpef", CARDIVANCE_HFPEF, {
+    approvalState: "draft",
+  }),
+  claim("lt-glucora-a1c", LT, "glucora-a1c", GLUCORA_A1C),
+  claim("lt-neurelva-days", LT, "neurelva-days", NEURELVA_DAYS),
+  evidence(
+    "lt-ev-cardio-hf",
+    LT,
+    "lt-cardivance-mortality",
+    "CARDIO-HF clinical study report",
+    "2025-11-01",
+    "2028-12-31",
+  ),
+  evidence(
+    "lt-ev-cardio-hf-safety",
+    LT,
+    "lt-cardivance-safety",
+    "Cardivance prescribing information, section 6",
+    "2026-03-01",
+    "2028-03-01",
+  ),
+  evidence(
+    "lt-ev-gluco-control",
+    LT,
+    "lt-glucora-a1c",
+    "GLUCO-CONTROL clinical study report",
+    "2025-06-15",
+    "2026-10-15",
+  ),
+  evidence(
+    "lt-ev-migra-prevent",
+    LT,
+    "lt-neurelva-days",
+    "MIGRA-PREVENT clinical study report",
+    "2026-02-10",
+    "2028-02-10",
+  ),
+  object({
+    id: "lt-q4-hcp",
+    kind: "content-plan",
+    title: "Lumera Q4 HCP engagement plan",
+    brand: LT,
+    owner: "brand-planner",
+    attributes: {
+      objective: "Reach opted-in prescribers with supported, on-label claims where access allows.",
+      basis: [
+        urnOf("result", "lt-result-cardivance-email"),
+        urnOf("result", "lt-result-glucora-email"),
+      ],
+      waves: [
+        {
+          id: "w1",
+          theme: "Cardivance outcomes at the heart failure meeting",
+          segment: "cardiology-prescribers",
+          audienceSize: 410,
+          channel: "email",
+          sendOn: "2026-11-10",
+          moduleCount: 1,
+          rationale: "The outcomes email ran at 1.5 times the HCP email baseline.",
+        },
+        {
+          id: "w2",
+          theme: "Glucora HbA1c data",
+          segment: "endocrinology-prescribers",
+          audienceSize: 280,
+          channel: "email",
+          sendOn: "2026-11-17",
+          moduleCount: 1,
+          rationale:
+            "The last Glucora email under-performed, and the study report behind its claim has lapsed.",
+        },
+        {
+          id: "w3",
+          theme: "Neurelva launch data in the HCP app",
+          segment: "neurology-prescribers",
+          audienceSize: 190,
+          channel: "push",
+          sendOn: "2026-11-24",
+          moduleCount: 1,
+          rationale: "Neurology prescribers opted in to the app more than to email.",
+        },
+      ],
+    } satisfies PlanAttributes,
+  }),
+  object({
+    id: "lt-brief-w1",
+    kind: "brief",
+    title: "Brief: Cardivance outcomes, wave 1",
+    brand: LT,
+    owner: "marketer",
+    approvalState: "submitted",
+    attributes: {
+      planUrn: urnOf("content-plan", "lt-q4-hcp"),
+      waveId: "w1",
+      objective: "Present the CARDIO-HF result to cardiology prescribers, with safety alongside.",
+    } satisfies BriefAttributes,
+  }),
+  mod(
+    "lt-mod-cardivance-outcomes-email",
+    LT,
+    {
+      headline: "CARDIO-HF: outcomes in HFrEF",
+      channel: "email",
+      topics: ["cardivance-mortality", "cardivance-safety"],
+      requiredDisclosures: [
+        urnOf("disclosure", "lt-disc-isi-cardivance"),
+        urnOf("disclosure", "lt-disc-boxed-cardivance"),
+        urnOf("disclosure", "lt-disc-pi"),
+      ],
+      briefUrn: urnOf("brief", "lt-brief-w1"),
+      blocks: [
+        claimBlock("lt-cardivance-mortality", CARDIVANCE_MORTALITY),
+        claimBlock("lt-cardivance-safety", CARDIVANCE_SAFETY),
+        discBlock("lt-disc-isi-cardivance", ISI_CARDIVANCE),
+        discBlock("lt-disc-boxed-cardivance", BOXED_CARDIVANCE),
+        discBlock("lt-disc-pi", PI),
+      ],
+    },
+    { owner: "content-lab" },
+  ),
+  mod(
+    "lt-mod-cardivance-superior-email",
+    LT,
+    {
+      headline: "Cardivance versus every ARB",
+      channel: "email",
+      topics: ["cardivance-superior"],
+      requiredDisclosures: [urnOf("disclosure", "lt-disc-isi-cardivance")],
+      blocks: [claimBlock("lt-cardivance-superior", CARDIVANCE_SUPERIOR)],
+    },
+    { approvalState: "draft", owner: "content-lab" },
+  ),
+  mod(
+    "lt-mod-glucora-a1c-email",
+    LT,
+    {
+      headline: "Glucora and HbA1c control",
+      channel: "email",
+      topics: ["glucora-a1c"],
+      requiredDisclosures: [
+        urnOf("disclosure", "lt-disc-isi-glucora"),
+        urnOf("disclosure", "lt-disc-pi"),
+      ],
+      blocks: [
+        claimBlock("lt-glucora-a1c", GLUCORA_A1C),
+        discBlock("lt-disc-isi-glucora", ISI_GLUCORA),
+        discBlock("lt-disc-pi", PI),
+      ],
+    },
+    { owner: "content-lab" },
+  ),
+  mod(
+    "lt-mod-neurelva-days-push",
+    LT,
+    {
+      headline: "Neurelva: fewer migraine days",
+      channel: "push",
+      topics: ["neurelva-days"],
+      requiredDisclosures: [urnOf("disclosure", "lt-disc-pi")],
+      blocks: [claimBlock("lt-neurelva-days", NEURELVA_DAYS), discBlock("lt-disc-pi", PI)],
+    },
+    { owner: "content-lab" },
+  ),
+  result(
+    "lt-result-cardivance-email",
+    LT,
+    "lt-mod-cardivance-outcomes-email",
+    "email",
+    3200,
+    1500,
+    288,
+  ),
+  result("lt-result-glucora-email", LT, "lt-mod-glucora-a1c-email", "email", 1800, 640, 63),
+  result("lt-result-neurelva-push", LT, "lt-mod-neurelva-days-push", "push", 900, 340, 36),
 ];
 
 /** Fictional send and market calendar the plan agent reads. */
@@ -400,6 +609,10 @@ export const CALENDAR: Record<Brand, ReadonlyArray<{ date: string; label: string
   "Coastline Kitchen": [
     { date: "2026-11-09", label: "Cold front forecast for the Bay Area" },
     { date: "2026-11-26", label: "Thanksgiving" },
+  ],
+  "Lumera Therapeutics": [
+    { date: "2026-11-10", label: "Annual heart failure congress" },
+    { date: "2026-11-18", label: "Cascade University P&T review" },
   ],
 };
 

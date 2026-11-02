@@ -54,6 +54,7 @@ import {
   type SignalKey,
   signalId,
 } from "./harborstone.ts";
+import { addPharma } from "./pharma.ts";
 
 export const DATASET_VERSION = "northstar-kg-v2";
 
@@ -590,6 +591,7 @@ export function buildDataset(seed = 20260926): Dataset {
     rel("UNDER", send, `weather-${condition}`);
   }
   addHarborstone(node, rel, random(seed + 2));
+  addPharma(node, rel, NORTHSTAR_BRAND.id);
   return { nodes, relationships };
 }
 

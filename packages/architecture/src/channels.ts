@@ -23,6 +23,11 @@ export const BRAND_RULES: Record<Brand, BrandRules> = {
     version: "hs-2026.3",
   },
   "Coastline Kitchen": { accent: "#c2410c", disclosureLabel: "Notes", version: "ck-2026.1" },
+  "Lumera Therapeutics": {
+    accent: "#6b2d8a",
+    disclosureLabel: "Safety information",
+    version: "lt-2026.1",
+  },
 };
 
 export type ApprovalCard = {

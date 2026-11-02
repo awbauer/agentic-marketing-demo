@@ -123,6 +123,21 @@ export const routingCases = [
     prompt: "What are the best plays to grow the Marin Family Office relationship?",
     expected: "build_aum_account_plan",
   },
+  {
+    id: "routing-29",
+    prompt: "Which hospitals and prescriber groups should we target first for Cardivance?",
+    expected: "build_hcp_target_list",
+  },
+  {
+    id: "routing-30",
+    prompt: "Can we still use the Cardivance superiority claim, or is it off-label?",
+    expected: "check_clinical_claims",
+  },
+  {
+    id: "routing-31",
+    prompt: "How should we engage Mesa Verde Regional Hospital on formulary access?",
+    expected: "plan_hospital_engagement",
+  },
 ] as const;
 
 /** The guided demo scenarios, taken from the use-case library prompts plus the two policy cases. */
@@ -217,6 +232,21 @@ export const demoScenarios = [
     id: "demo-fsi-aum-plan",
     prompt: "Build an account plan to grow AUM with Cedar Valley Community Foundation",
     expected: "build_aum_account_plan",
+  },
+  {
+    id: "demo-pharma-targets",
+    prompt: "Which hospitals and prescriber groups should we target first for Cardivance?",
+    expected: "build_hcp_target_list",
+  },
+  {
+    id: "demo-pharma-claims",
+    prompt: "Check the clinical claims for Cardivance: which are supported, on label and approved?",
+    expected: "check_clinical_claims",
+  },
+  {
+    id: "demo-pharma-hospital",
+    prompt: "Plan our engagement with St. Brigid Medical Center ahead of their P&T review",
+    expected: "plan_hospital_engagement",
   },
   {
     id: "demo-memory-recall",

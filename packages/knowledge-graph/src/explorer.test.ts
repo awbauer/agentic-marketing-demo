@@ -8,8 +8,8 @@ const fixture: GraphBackend = { kind: "fixture", dataset: buildDataset() };
 describe("graph explorer", () => {
   it("returns every node except push and email sends, with counts for the whole graph", async () => {
     const overview = await graphOverview(fixture);
-    expect(overview.nodes).toHaveLength(339);
-    expect(overview.relationships).toHaveLength(1445);
+    expect(overview.nodes).toHaveLength(430);
+    expect(overview.relationships).toHaveLength(1801);
     expect(overview.labelCounts.PushSend).toBe(1500);
     expect(overview.labelCounts.EmailSend).toBe(600);
     expect(

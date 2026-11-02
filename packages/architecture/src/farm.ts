@@ -24,6 +24,9 @@ const FACT = /\d|%|\$|\bapy\b|\bfdic\b|\bwaived?\b|\bfree\b|\bno fees?\b|\bguara
 const ABSOLUTE = /\b(guaranteed?|risk[- ]free|can'?t lose|best returns?)\b/i;
 const INJECTION =
   /\b(ignore|disregard|forget)\b.{0,30}\b(previous|prior|above|all|earlier)\b|\bsystem prompt\b|\byou are now\b|\bact as\b|\breveal\b.{0,30}\b(prompt|secret|key)\b|\bBEGIN (SYSTEM|INSTRUCTIONS?)\b/i;
+/** Promotional language a pharmaceutical reviewer would reject without head-to-head or label support. */
+const PHARMA_OVERREACH =
+  /\b(?:superior|best[- ]in[- ]class|breakthrough|cures?|completely safe|no side effects|better than)\b/i;
 const EMBARGO = /\b(acquisition|acquires?|acquiring|merger)\b/i;
 
 /** Fictional consent coverage by segment and channel: the share of the audience that opted in. */
@@ -32,6 +35,9 @@ export const CONSENT_COVERAGE: Record<string, Record<keyof typeof CHANNEL_BASELI
   "cash-heavy-clients": { email: 0.9, push: 0.72, sms: 0.4 },
   "app-near-san-francisco": { email: 0.5, push: 0.88, sms: 0.2 },
   "email-loyalty": { email: 0.93, push: 0.35, sms: 0.18 },
+  "cardiology-prescribers": { email: 0.78, push: 0.35, sms: 0 },
+  "endocrinology-prescribers": { email: 0.74, push: 0.4, sms: 0 },
+  "neurology-prescribers": { email: 0.7, push: 0.55, sms: 0 },
 };
 
 export function runFarm(world: World, moduleUrn: string): Finding[] {
@@ -100,6 +106,12 @@ export function runFarm(world: World, moduleUrn: string): Finding[] {
     if (EMBARGO.test(all))
       add("brand-checker", "block", "Mentions an embargoed deal before its release step.");
   }
+  if (module.brand === "Lumera Therapeutics" && PHARMA_OVERREACH.test(all))
+    add(
+      "brand-checker",
+      "block",
+      "Superiority or absolute safety language needs head-to-head evidence and label support.",
+    );
   if (/!/.test(all) && module.brand === "Harborstone Wealth")
     add("brand-checker", "warn", "Exclamation marks are off voice for Harborstone.");
   const present = new Set(attributes.blocks.map((block) => block.disclosureUrn));

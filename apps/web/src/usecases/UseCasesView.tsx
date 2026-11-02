@@ -20,7 +20,7 @@ const KIND_GLYPHS: Record<SystemKind, string> = {
 };
 
 type Filter = Team | Industry | "All";
-const FILTERS: Filter[] = ["All", ...TEAMS, "Financial services"];
+const FILTERS: Filter[] = ["All", ...TEAMS, "Financial services", "Life sciences"];
 const matches = (useCase: UseCase, filter: Filter) =>
   filter === "All" || useCase.team === filter || useCase.industry === filter;
 

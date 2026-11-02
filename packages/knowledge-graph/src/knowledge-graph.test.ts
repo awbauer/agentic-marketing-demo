@@ -472,3 +472,137 @@ describe("financial services graph tools", () => {
     );
   });
 });
+
+describe("pharma tools: Lumera Therapeutics", () => {
+  it("ranks hospitals and prescriber groups by opportunity, with access first where the drug isn't on formulary", async () => {
+    const result = (await tool("build_hcp_target_list")({
+      drug: "drug-cardivance",
+      limit: 16,
+    })) as {
+      found: boolean;
+      targets: Array<{
+        rank: number;
+        group: string;
+        hospital: string;
+        formulary: string;
+        lumeraShare: number;
+        opportunityScore: number;
+        reachable: Array<{ channel: string; optedIn: number }>;
+        play: string;
+      }>;
+      paths: Array<{ relationships: Array<{ type: string }> }>;
+    };
+    expect(result.found).toBe(true);
+    const scores = result.targets.map((target) => target.opportunityScore);
+    expect(scores).toEqual([...scores].sort((a, b) => b - a));
+    // Cardiology and primary care treat heart failure; endocrinology and neurology never appear.
+    expect(result.targets.every((target) => /Cardiology|Primary care/.test(target.group))).toBe(
+      true,
+    );
+    const mesa = result.targets.find(
+      (target) => target.hospital === "Mesa Verde Regional Hospital",
+    );
+    expect(mesa).toMatchObject({ formulary: "Not on formulary" });
+    expect(mesa?.play).toMatch(/formulary access first/);
+    const gulf = result.targets.find((target) => target.hospital === "Gulf Coast Heart Institute");
+    expect(gulf?.play).toMatch(/Defend share/);
+    expect(gulf?.reachable.map((entry) => entry.channel).sort()).toEqual([
+      "email",
+      "portal",
+      "rep",
+    ]);
+    expect(result.paths.some((path) => path.relationships[0]?.type === "ON_FORMULARY")).toBe(true);
+  });
+
+  it("blocks an unsupported claim, an off-label claim, and an expired approval", async () => {
+    const result = (await tool("check_clinical_claims")({ drug: "drug-cardivance" })) as {
+      boxedWarning: boolean;
+      claims: Array<{
+        claim: string;
+        verdict: string;
+        onLabel: boolean;
+        issues: string[];
+        supportedBy: Array<{ trial: string }>;
+        content: Array<{ asset: string; usable: boolean; blockers: string[] }>;
+      }>;
+      usableCount: number;
+      blockedCount: number;
+    };
+    expect(result.boxedWarning).toBe(true);
+    const byClaim = (text: string) => result.claims.find((claim) => claim.claim.startsWith(text));
+    const mortality = byClaim("Reduced the risk");
+    expect(mortality).toMatchObject({ verdict: "Usable", onLabel: true });
+    expect(mortality?.supportedBy[0]?.trial).toBe("CARDIO-HF");
+    expect(mortality?.content.filter((asset) => asset.usable)).toHaveLength(3);
+    const superior = byClaim("Superior to every ARB");
+    expect(superior?.verdict).toMatch(/^Blocked/);
+    expect(superior?.issues.join(" ")).toMatch(/No trial supports/);
+    const hfpef = byClaim("Improves outcomes in heart failure with preserved");
+    expect(hfpef?.verdict).toMatch(/^Blocked/);
+    expect(hfpef?.issues.join(" ")).toMatch(/not on the approved label/);
+    expect(hfpef?.issues.join(" ")).toMatch(/no results yet/);
+    expect(result.blockedCount).toBe(2);
+
+    const glucora = (await tool("check_clinical_claims")({
+      drug: "drug-glucora",
+    })) as typeof result;
+    const weight = glucora.claims.find((claim) => claim.claim.startsWith("Patients lost"));
+    expect(weight?.content[0]?.blockers.join(" ")).toMatch(/expired on 2026-09-30/);
+    const narrowed = (await tool("check_clinical_claims")({
+      drug: "drug-glucora",
+      channel: "portal",
+    })) as typeof result;
+    expect(
+      narrowed.claims
+        .flatMap((claim) => claim.content)
+        .every((asset) => asset.asset.includes("dossier")),
+    ).toBe(true);
+  });
+
+  it("plans a hospital's engagement from its formulary status and its dossier approval", async () => {
+    const result = (await tool("plan_hospital_engagement")({
+      hospital: "St. Brigid Medical Center",
+    })) as {
+      access: Array<{
+        drug: string;
+        status: string;
+        ptReviewInDays: number | null;
+        needsAccess: boolean;
+        patientsAtStake: number;
+        dossier: { usable: boolean } | null;
+      }>;
+      prescriberGroups: Array<{ group: string; reachable: Array<{ channel: string }> }>;
+      nextSteps: string[];
+    };
+    const cardivance = result.access.find((entry) => entry.drug === "Cardivance");
+    expect(cardivance).toMatchObject({
+      status: "Under P&T review",
+      ptReviewInDays: 21,
+      needsAccess: true,
+      patientsAtStake: 2400,
+    });
+    expect(cardivance?.dossier?.usable).toBe(true);
+    expect(result.nextSteps[0]).toMatch(
+      /Submit Cardivance formulary value dossier before the P&T review in 21 days/,
+    );
+    expect(result.prescriberGroups.map((group) => group.group)).toEqual([
+      "Cardiology prescribers at St. Brigid Medical Center",
+      "Endocrinology prescribers at St. Brigid Medical Center",
+    ]);
+
+    // A dossier still pending MLR is a blocker, not a recommendation to send it.
+    const mesa = (await tool("plan_hospital_engagement")({
+      hospital: "Mesa Verde Regional Hospital",
+    })) as typeof result;
+    expect(mesa.nextSteps.join(" ")).toMatch(
+      /Neurelva: under p&t review\. Get the value dossier through MLR first/,
+    );
+  });
+
+  it("keeps people out of the graph: audiences are prescriber groups with counts", () => {
+    const text = JSON.stringify(
+      buildDataset().nodes.filter((node) => node.label === "PrescriberGroup"),
+    );
+    expect(text).not.toMatch(/\bDr\.|MD\b/);
+  });
+});

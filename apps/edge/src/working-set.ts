@@ -441,6 +441,9 @@ const GRAPH_TITLES: Record<string, string> = {
   match_news_to_approved_content: "Approved content",
   prepare_deal_release: "Announcement release",
   build_aum_account_plan: "Account plan",
+  build_hcp_target_list: "Target list",
+  check_clinical_claims: "Claims check",
+  plan_hospital_engagement: "Hospital plan",
   recall_decisions: "Remembered",
   recall_recent_work: "Recent work",
   explain_memory: "Memory provenance",
@@ -485,6 +488,16 @@ function graphSummary(tool: string, data: Record<string, unknown>, count: number
       return `${num(data.readyCount) ?? 0} of ${list(data.steps).length} announcement assets approved and ready to release in order; ${num(data.blockedCount) ?? 0} blocked.`;
     case "build_aum_account_plan":
       return `${list(data.plays).length} plays worth about $${num(data.totalOpportunityMillions) ?? 0}M on $${num(data.aumWithHarborstoneMillions) ?? 0}M with Harborstone (wallet share ${pct(data.walletShare)}).`;
+    case "build_hcp_target_list": {
+      const needAccess = list(data.targets).filter((target) =>
+        str((target as Record<string, unknown>).play)?.startsWith("Secure"),
+      ).length;
+      return `${list(data.targets).length} hospitals and prescriber groups ranked for ${str(data.drug) ?? "the drug"}; ${needAccess} need formulary access before detailing.`;
+    }
+    case "check_clinical_claims":
+      return `${num(data.usableCount) ?? 0} of ${list(data.claims).length} claims usable; ${num(data.blockedCount) ?? 0} blocked (unsupported or off label).`;
+    case "plan_hospital_engagement":
+      return `${list(data.access).filter((entry) => (entry as Record<string, unknown>).needsAccess === true).length} drugs need formulary access at ${str(data.hospital) ?? "the hospital"}; ${list(data.nextSteps).length} next steps.`;
     case "assess_location_impact": {
       const reach = list(data.reachableByChannel)
         .map((entry) => entry as Record<string, unknown>)

@@ -896,3 +896,75 @@ describe("trust matrix", () => {
     expect(listObjects(world(), { kind: "module" }).length).toBeGreaterThan(5);
   });
 });
+
+describe("Lumera Therapeutics (pharmaceutical)", () => {
+  const LT_BRIEF = "urn:northstar:brief:lt-brief-w1";
+
+  it("writes only from supported claims, and refuses the draft and rejected ones", () => {
+    const result = authorModule(world(), {
+      briefUrn: LT_BRIEF,
+      topics: ["cardivance-mortality", "cardivance-hfpef", "cardivance-superior"],
+    });
+    const blocks = (
+      must(result.module).attributes as {
+        blocks: Array<{ claimUrn?: string; disclosureUrn?: string }>;
+      }
+    ).blocks;
+    expect(blocks.filter((block) => block.claimUrn)).toHaveLength(1);
+    // A boxed-warning drug's claim brings the boxed warning, the ISI and the prescribing information.
+    expect(blocks.filter((block) => block.disclosureUrn)).toHaveLength(3);
+    expect(result.refused.map((item) => item.topic).sort()).toEqual([
+      "cardivance-hfpef",
+      "cardivance-superior",
+    ]);
+    expect(result.refused.find((item) => item.topic === "cardivance-superior")?.reason).toMatch(
+      /rejected|not approved/,
+    );
+  });
+
+  it("holds a superiority claim at readiness and in the farm", () => {
+    const urn = "urn:northstar:module:lt-mod-cardivance-superior-email";
+    const readiness = checkReadiness(world(), urn);
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockers.map((item) => item.code)).toContain("claim-unapproved");
+    const findings = runFarm(world(), urn);
+    expect(findings.some((item) => /Superiority or absolute safety/.test(item.message))).toBe(true);
+    expect(farmBlockers(findings).length).toBeGreaterThan(0);
+  });
+
+  it("blocks a supported claim whose study report has lapsed", () => {
+    const packet = evidencePacket(world(), "urn:northstar:module:lt-mod-glucora-a1c-email");
+    expect(packet.claims[0]?.status).toBe("expired-evidence");
+    expect(runFarm(world(), "urn:northstar:module:lt-mod-cardivance-outcomes-email")).toEqual([]);
+    expect(
+      checkReadiness(world(), "urn:northstar:module:lt-mod-cardivance-outcomes-email").ready,
+    ).toBe(true);
+  });
+
+  it("keeps the brand's data apart and scopes search to it", () => {
+    const hits = searchObjects(world(), "heart failure outcomes", {
+      brands: ["Lumera Therapeutics"],
+    });
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((item) => item.object.brand === "Lumera Therapeutics")).toBe(true);
+    expect(planContent(world(), "Lumera Therapeutics").plan.brand).toBe("Lumera Therapeutics");
+    const card = buildApprovalCard(
+      world(),
+      "urn:northstar:module:lt-mod-glucora-a1c-email",
+      "reviewer",
+    );
+    expect(card.rulesVersion).toBe("lt-2026.1");
+    expect(card.facts.some((fact) => fact.label === "Safety information")).toBe(true);
+  });
+
+  it("proposes a refresh for the Glucora module and a re-issue for the outcomes email", () => {
+    const byModule = Object.fromEntries(
+      proposeOptimizations(world(), "Lumera Therapeutics").map((item) => [
+        item.moduleUrn.split(":").at(-1),
+        item.action,
+      ]),
+    );
+    expect(byModule["lt-mod-cardivance-outcomes-email"]).toBe("re-issue");
+    expect(byModule["lt-mod-glucora-a1c-email"]).toBe("refresh");
+  });
+});
