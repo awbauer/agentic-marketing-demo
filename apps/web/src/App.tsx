@@ -23,6 +23,8 @@ import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { ActionCards } from "./ActionCards";
 import { ArchitectureView } from "./architecture/ArchitectureView";
+import { ScopeBar } from "./ScopeBar";
+import { BRAND_PLACEHOLDER, useScope } from "./scope";
 import { MarketingWriteDetails, PermissionDetails } from "./ConfirmationDetails";
 import { EvaluationView } from "./EvaluationView";
 import { GraphEvidencePanel } from "./GraphEvidence";
@@ -158,6 +160,7 @@ function InventoryCaseDetails({ confirmation }: { confirmation: Confirmation }) 
 export function App() {
   const [state, setState] = useState<OrchestratorState>(initialOrchestratorState);
   const [input, setInput] = useState("");
+  const { scope } = useScope();
   const [sessionState, setSessionState] = useState<"loading" | "ready" | "error">("loading");
   const [connectorBusy, setConnectorBusy] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -617,6 +620,7 @@ export function App() {
           <h1>Marketing workbench</h1>
         </div>
         <div className="top-actions">
+          <ScopeBar />
           <span className={`connection ${sessionState}`}>
             {sessionState === "ready"
               ? "Demo workspace"
@@ -1204,7 +1208,7 @@ export function App() {
               event.preventDefault();
               const text = input.trim();
               if (!text || busy || resetting) return;
-              void sendMessage({ text });
+              void sendMessage({ text }, { body: { scope } });
               setInput("");
             }}
           >
@@ -1216,7 +1220,7 @@ export function App() {
                 id="prompt"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="Try: Check the sample campaign readiness"
+                placeholder={BRAND_PLACEHOLDER[scope.brand]}
                 rows={3}
               />
               {busy ? (

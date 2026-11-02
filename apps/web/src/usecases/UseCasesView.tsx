@@ -6,7 +6,9 @@ import {
   type Team,
   USE_CASES,
   type UseCase,
+  useCaseBrand,
 } from "./catalog";
+import { useScope } from "../scope";
 import "./usecases.css";
 
 const KIND_GLYPHS: Record<SystemKind, string> = {
@@ -36,9 +38,16 @@ export function UseCasesView({
   onClose: () => void;
   onTryPrompt: (prompt: string) => void;
 }) {
+  // The brand chosen in the header limits the library to that brand's use cases.
+  const { scope } = useScope();
+  const inScope = useMemo(
+    () =>
+      USE_CASES.filter((useCase) => scope.brand === "all" || useCaseBrand(useCase) === scope.brand),
+    [scope.brand],
+  );
   const [team, setTeam] = useState<Filter>("All");
   const [selectedId, setSelectedId] = useState(USE_CASES[0]?.id ?? "");
-  const shown = useMemo(() => USE_CASES.filter((useCase) => matches(useCase, team)), [team]);
+  const shown = useMemo(() => inScope.filter((useCase) => matches(useCase, team)), [inScope, team]);
   const available = shown.filter((useCase) => useCase.status === "available");
   const comingSoon = shown.filter((useCase) => useCase.status === "coming-soon");
   const selected = available.find((useCase) => useCase.id === selectedId) ?? available[0] ?? null;
@@ -61,6 +70,11 @@ export function UseCasesView({
           Northstar data; writes always wait for your confirmation, and nothing is published or
           sent.
         </p>
+        {scope.brand !== "all" && (
+          <p className="usecases-intro" role="status">
+            Showing {scope.brand} use cases. Choose All brands in the header to see every scenario.
+          </p>
+        )}
         <fieldset className="usecases-teams">
           <legend className="sr-only">Team</legend>
           {FILTERS.map((option) => (
@@ -73,7 +87,7 @@ export function UseCasesView({
               {option}
               <span className="usecases-count">
                 {
-                  USE_CASES.filter(
+                  inScope.filter(
                     (useCase) => useCase.status === "available" && matches(useCase, option),
                   ).length
                 }

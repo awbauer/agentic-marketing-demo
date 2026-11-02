@@ -7,6 +7,7 @@ export * from "./models.ts";
 export * from "./prompts.ts";
 export * from "./registry.ts";
 export * from "./retention.ts";
+export * from "./scope.ts";
 export * from "./seed.ts";
 export * from "./state-machine.ts";
 export * from "./trust.ts";

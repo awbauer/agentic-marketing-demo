@@ -217,6 +217,15 @@ function TurnCard({ turn }: { turn: TurnRecord }) {
             <dt>Interpretation</dt>
             <dd>{turn.interpretation}</dd>
           </div>
+          {turn.scope && (
+            <div>
+              <dt>Brand and role</dt>
+              <dd>
+                {turn.scope.brand === "all" ? "All brands" : turn.scope.brand} ·{" "}
+                {turn.scope.persona.replace("-", " ")}
+              </dd>
+            </div>
+          )}
           <div>
             <dt>Model and routing</dt>
             <dd>
