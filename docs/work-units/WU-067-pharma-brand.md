@@ -41,7 +41,7 @@ A third brand, **Lumera Therapeutics**, in the knowledge graph, three new graph 
 - [x] A drug that is not on formulary leads with access content, not detailing.
 - [x] The architecture lifecycle refuses to cite a draft or rejected claim, flags superiority language, and blocks a module whose study report has lapsed.
 - [x] Learn, the use-case library, the graph explorer and the routing and eval cases cover the new tools.
-- [ ] The Cypher returns the same rows from live Neo4j (`pnpm kg:parity`). Not run: it needs the Neo4j secrets.
+- [x] The Cypher returns the same rows from live Neo4j: `pnpm kg:parity` matched all 22 tool calls for the three new tools, and the existing tools and memory still match (p50 153 ms, p95 469 ms).
 - [ ] `pnpm verify` passes. See Evidence.
 
 ## Verification
@@ -55,13 +55,13 @@ pnpm kg:parity   # needs NEO4J_QUERY_URL, NEO4J_USERNAME, NEO4J_PASSWORD
 
 ## External mutations
 
-none. After merge, run `pnpm kg:seed` to load Lumera into the proof Neo4j database, then `pnpm kg:parity`.
+One, run on Andrew's request: `pnpm kg:seed --confirm` against the Neo4j instance configured in the local `.dev.vars`. It merges nodes by id under the unchanged dataset version, so it only added Lumera and the read-back matched (2,530 nodes and 20,701 relationships). `pnpm kg:parity` then passed. Rollback: re-seed with `--reset` from `main`. Any other instance needs the same `pnpm kg:seed --confirm`.
 
 ## Evidence
 
 - Reports: `artifacts/reports/` from `pnpm verify`.
-- Read-back results: unit tests on the fixture backend, routing evaluation 100% on the 31 cases.
-- Known limitations: the three tools' Cypher is untested against live Neo4j. The agents and tools are deterministic over fictional data, so no model behavior is measured. Drug names, trial names and results are invented and are not medical information. Rep visits and the HCP portal exist as channels and consent scopes in the graph only; the Architecture view's channels stay email and push. The routing patterns are keyword-based like the existing ones.
+- Read-back results: unit tests on the fixture backend, routing evaluation 100% on the 31 cases, the live seed read-back, and `pnpm kg:parity` against Neo4j.
+- Known limitations: the new screens were not checked in a browser. The agents and tools are deterministic over fictional data, so no model behavior is measured. Drug names, trial names and results are invented and are not medical information. Rep visits and the HCP portal exist as channels and consent scopes in the graph only; the Architecture view's channels stay email and push. The routing patterns are keyword-based like the existing ones.
 
 ## Completion
 
