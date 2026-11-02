@@ -110,6 +110,8 @@ importers:
 
   apps/web: {}
 
+  packages/architecture: {}
+
   packages/contracts: {}
 
   packages/evals: {}

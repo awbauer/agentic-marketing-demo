@@ -1,5 +1,5 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
-import { HealthSchema, PROOF_DEFAULTS } from "@northstar/contracts";
+import { AUDIT_RETENTION_MS, HealthSchema, PROOF_DEFAULTS } from "@northstar/contracts";
 import { getAgentByName } from "agents";
 import {
   EXPLORER_MAX_ROWS,
@@ -8,6 +8,11 @@ import {
   graphOverview,
   sweepMemory,
 } from "../../../packages/knowledge-graph/src/index.ts";
+import { contextFor, handleArchitecture } from "./architecture/api";
+import { makeCtx } from "./architecture/context";
+import { createWorkbenchMcpServer } from "./architecture/mcp";
+import { driftSweep, expireOp } from "./architecture/ops";
+import { ArchitectureStore, pruneArchitecture } from "./architecture/store";
 import { type AuthBindings, AuthError, deriveAgentKey, resolvePrincipal } from "./auth";
 import { createCampaignContextMcpServer } from "./campaign-context/server";
 import { createKnowledgeGraphMcpServer, knowledgeGraphBackend } from "./knowledge-graph/server";
@@ -93,6 +98,24 @@ async function graphExplorerResponse(url: URL, env: Env, id: string): Promise<Re
 // Stateless streamable HTTP: each request gets a fresh server from the factory.
 const campaignContextMcpHandler = createMcpHandler(() => createCampaignContextMcpServer());
 
+/** Hourly: prune architecture audit data, expire claims whose evidence lapsed, and watch for drift. */
+async function maintainArchitecture(env: Env) {
+  try {
+    await pruneArchitecture(env.APP_DB, new Date(Date.now() - AUDIT_RETENTION_MS));
+    const subjects = await new ArchitectureStore(env.APP_DB, "").subjectsWithSamples();
+    for (const subject of subjects) {
+      const ctx = makeCtx(env, { subject, persona: "admin", brands: "all" }, "cron");
+      await expireOp(ctx);
+      await driftSweep(ctx);
+    }
+  } catch (error) {
+    console.warn(
+      "[architecture] scheduled maintenance failed",
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -123,6 +146,16 @@ export default {
         const principal = await resolvePrincipal(request, env);
         const agentKey = await deriveAgentKey(principal, PROOF_DEFAULTS.workspaceId);
         return json({ workspaceId: PROOF_DEFAULTS.workspaceId, principal, agentKey });
+      }
+      if (url.pathname.startsWith("/api/arch/")) {
+        const principal = await resolvePrincipal(request, env);
+        const response = await handleArchitecture(request, env, principal, id);
+        if (response) return response;
+      }
+      if (url.pathname === "/mcp/workbench") {
+        const principal = await resolvePrincipal(request, env);
+        const ctx = contextFor(request, env, principal, id);
+        return createMcpHandler(() => createWorkbenchMcpServer(ctx)).fetch(request);
       }
       if (url.pathname.startsWith("/api/graph/")) {
         await resolvePrincipal(request, env);
@@ -160,6 +193,7 @@ export default {
   // (it pauses after three idle days).
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     await pruneConfirmationAudit(env.APP_DB);
+    await maintainArchitecture(env);
     const backend = knowledgeGraphBackend(env as Parameters<typeof knowledgeGraphBackend>[0]);
     if (backend.kind !== "neo4j") return;
     try {

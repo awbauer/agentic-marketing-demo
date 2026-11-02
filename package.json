@@ -29,6 +29,7 @@
     "lint": "biome lint .",
     "preview": "vite preview",
     "prepare": "node scripts/install-git-hooks.mjs",
+    "prompts:check": "node scripts/check-prompts.mjs",
     "pr:check": "pnpm security:blocked-words && pnpm verify",
     "security:blocked-words": "node scripts/check-blocked-words.mjs",
     "sf:retired:check": "node scripts/check-retired-salesforce.mjs",

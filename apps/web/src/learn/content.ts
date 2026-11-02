@@ -26,6 +26,28 @@ export const LEARN_LEDE =
   "A hands-on course in how an agent uses context, how GraphRAG grounds answers in connected facts, and how every piece of this workbench fits together. Each lesson has a diagram, one key idea, a way to try it here, and links to go deeper.";
 
 const R = {
+  cedar: { label: "Cedar policy language", url: "https://www.cedarpolicy.com/", kind: "Docs" },
+  a2a: {
+    label: "Agent2Agent (A2A) protocol",
+    url: "https://a2a-protocol.org/latest/",
+    kind: "Spec",
+  },
+  tokenExchange: {
+    label: "RFC 8693: OAuth 2.0 token exchange",
+    url: "https://datatracker.ietf.org/doc/html/rfc8693",
+    kind: "Spec",
+  },
+  mcpApps: {
+    label: "MCP Apps specification and SDK",
+    url: "https://github.com/modelcontextprotocol/ext-apps",
+    kind: "Spec",
+  },
+  adaptiveCards: { label: "Adaptive Cards", url: "https://adaptivecards.io/", kind: "Docs" },
+  cfDurableObjects: {
+    label: "Cloudflare Durable Objects",
+    url: "https://developers.cloudflare.com/durable-objects/",
+    kind: "Docs",
+  },
   contextEngineering: {
     label: "Effective context engineering for AI agents (Anthropic)",
     url: "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
@@ -405,7 +427,9 @@ GraphRAG's advantages are **multi-hop reasoning** and **explainability**. Every 
 
 A turn runs a **tool loop** of up to 6 steps. On each step the model either calls a tool or writes the answer. Its tools come from four MCP servers, connected per turn: Salesforce, campaign context, the knowledge graph, and external services (public holidays and weather alerts). The orchestrator decides which tools are available on each step (see *Routing*) and records a **turn trace** of every event.
 
-Around the loop, the orchestrator also handles the events the model must not: it prepares confirmed writes and, once you confirm, asks Marketing Cloud's Campaign Creation agent to save the brief or create the campaign, then reads the records back. It checks Salesforce before and after the agent call, so a retry links what an earlier attempt saved instead of saving it twice. When the model refines a saved brief's preview, the orchestrator adds the Brief ID to the request if the model left it out. While a confirmed write runs, it publishes each step as agent state, which the browser receives immediately over the WebSocket, so the progress is live rather than a spinner until the end. For an inventory check, it keeps the forecast, the graph's demand map, and the stock counts as they arrive, computes which items are low, and rebuilds the system prompt for the answer step so the model presents exactly that list. It writes **long-term memory** when a write is read back or you ask it to remember a draft, and it reopens a memory into the workspace when you choose **Reopen**. The Worker's hourly job prunes the 24-hour audit and deletes memory past its 14 days.`,
+Around the loop, the orchestrator also handles the events the model must not: it prepares confirmed writes and, once you confirm, asks Marketing Cloud's Campaign Creation agent to save the brief or create the campaign, then reads the records back. It checks Salesforce before and after the agent call, so a retry links what an earlier attempt saved instead of saving it twice. When the model refines a saved brief's preview, the orchestrator adds the Brief ID to the request if the model left it out. While a confirmed write runs, it publishes each step as agent state, which the browser receives immediately over the WebSocket, so the progress is live rather than a spinner until the end. For an inventory check, it keeps the forecast, the graph's demand map, and the stock counts as they arrive, computes which items are low, and rebuilds the system prompt for the answer step so the model presents exactly that list. It writes **long-term memory** when a write is read back or you ask it to remember a draft, and it reopens a memory into the workspace when you choose **Reopen**. The Worker's hourly job prunes the 24-hour audit and deletes memory past its 14 days.
+
+**Every tool call passes the gateway.** Before a tool the model chose actually runs, the Worker asks the agentic gateway whether the orchestrator may call \`tool:<name>\`. The decision, its policy and the caller are recorded, and a denial comes back to the model as a tool error instead of a result. See *The agentic gateway*.`,
         inDemo: [
           "apps/edge/src/orchestrator.ts",
           "“Behind the scenes · technical trace” under each answer",
@@ -621,7 +645,9 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
 | **You** | Reviewing exact values and confirming | — |
 | **Salesforce** | Authorization (profile, permission sets, field-level security, sharing), signature checks for Apex writes, the records, and read-back | — |
 
-**Kill switches** (\`WRITES_ENABLED\`, \`DISABLED_TOOLS\`, \`MEMORY_ENABLED\`) are Worker secrets that operators can flip without a deploy. Graph tools read in read-only mode; only the server's fixed memory statements write, and only to the memory dataset. The external-services tools only read public data (holidays, weather alerts, and Federal Reserve press releases) and send nothing about customers. No customer PII enters prompts, logs, or the graph.`,
+**Kill switches** (\`WRITES_ENABLED\`, \`DISABLED_TOOLS\`, \`MEMORY_ENABLED\`) are Worker secrets that operators can flip without a deploy. Graph tools read in read-only mode; only the server's fixed memory statements write, and only to the memory dataset. The external-services tools only read public data (holidays, weather alerts, and Federal Reserve press releases) and send nothing about customers. No customer PII enters prompts, logs, or the graph.
+
+**Agents have a kill switch too.** \`DISABLED_AGENTS\` switches a registry agent off: the gateway denies everything it tries. Approval is governed separately from writes to Salesforce: an object in the workbench only moves to *approved* through the state machine, by a person. See *Agents, prompts, models, and drift*.`,
         inDemo: [
           "Draft something → the Save to Salesforce action card in the chat → confirmation card with the permission check",
           "Check readiness → the Request a review action card → confirmation card",
@@ -641,7 +667,9 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
 - **Live write progress.** Accepting an action card switches its button to **Preparing…** and shows the preparation's steps until the confirmation card appears. Clicking **Confirm** disables the buttons and shows the write's steps in the card as the Worker reports them, kept in view while they run. Afterwards a collapsible **Behind the scenes** record keeps each step and how long it took; it opens by itself when a write fails.
 - **Inventory case confirmation.** The card lists the store manager, the forecast, and a table of each low item: on hand, needed, and the dishes it goes into. After you confirm, a banner links to the Case.
 - **Use-case library.** A page of every scenario the demo runs, filterable by team, with its prompts, systems, and data flow. **Try it** puts a prompt in the chat box without sending it.
-- **Accessibility.** The UI targets WCAG 2.2 AA and is tested in Chrome and Edge.`,
+- **Accessibility.** The UI targets WCAG 2.2 AA and is tested in Chrome and Edge.
+
+**Architecture workspaces.** The **Architecture** view is built differently from the chat: each tab is a *workspace manifest* (the roles, objects, tiles, agents and services it composes) drawn by one renderer, so a new workspace is data rather than a new screen. The same approval card also renders as an Adaptive Card, as data for a Lightning Web Component, and as an MCP Apps resource. See *Governed objects and workspaces*.`,
         inDemo: [
           "Workspace panel (readiness card with native fallback)",
           "apps/web/src/Markdown.tsx, apps/web/src/GraphEvidence.tsx",
@@ -774,6 +802,126 @@ The graph and prompts carry the manager's name only, never contact details. Noth
           "apps/edge/src/external-services, apps/edge/src/inventory-risk.ts, apps/web/src/usecases",
         ],
         resources: [R.nagerDate, R.nwsApi, R.openMeteo, R.fedFeed, R.finra2210, R.mcpIntro],
+      },
+      {
+        id: "object-model",
+        title: "Governed objects and workspaces",
+        summary:
+          "One identifier per plan, brief, module, claim and result, with governance attached, and screens composed from it.",
+        body: `Most marketing tools copy things forward: a plan becomes a brief, a brief becomes a module, and each copy has to be reconciled with the last. This demo does the opposite. Every **plan, brief, module, claim, piece of evidence, result, disclosure and gap** is a *governed object*:
+
+- a **urn**, such as \`urn:northstar:module:hs-mod-fomc-push\`, which it keeps for life
+- its **version**, and the version it **supersedes**
+- its **brand, market, owner and classification**
+- its **approval state**, who created it (a person or an agent), and when
+
+**Nothing is copied forward.** A brief holds only the urn of its plan and the wave it covers. When you open the brief, its audience, channel and timing are read from the plan *at that moment*, so changing the plan changes what the brief shows. Relationships such as \`INHERITS\`, \`CITES\`, \`SUBSTANTIATED_BY\`, \`MEASURED_BY\`, \`VARIANT_OF\` and \`GAP_FOR\` are *derived from the objects' attributes*, so there is no second copy of a relationship to fall out of date.
+
+**The object inspector** shows any object by urn: its attributes, the plan it inherits, its evidence, its lineage in both directions, its version chain, its append-only history, and the next decision open to you. Open it from a Command Center card, a table row, a search result, or a link in an agent's answer.
+
+**Workspaces are manifests.** A workspace says who it is for, which objects it lists, which tiles it composes, and which agents and services it calls. One renderer turns any manifest into a screen, with the same loading, empty, error and permission-denied states. The **Command Center** lists every object by lifecycle stage with the person whose decision it is waiting on; **Brief Builder**, **Module Library**, **Approvals** and **Performance** are other manifests over the same objects. Choose **Act as** to see a brand planner, a marketer, a reviewer or a brand lead's view of the same data. The persona is sent with each request, and the server enforces what it may do.
+
+**Channels.** An approval card is composed once, with brand rules (accent, disclosure label, rule version) applied, and then rendered four ways: React, an **Adaptive Card** for Teams and Outlook, **data for a Lightning Web Component**, and an **MCP Apps** resource for MCP clients such as Claude. Change one brand rule and all four renderings change. The preview renders these payloads on screen; nothing is sent to Teams, Outlook or Copilot.
+
+**Where the data lives.** Seed objects for Harborstone Wealth and Coastline Kitchen ship in code. What you create (a plan, a module, a gap, a new claim version) and every approval state go to D1, scoped to you, and expire with the 24-hour audit. They are not in the Neo4j graph; making them graph nodes is a later step.`,
+        inDemo: [
+          "Architecture → Command Center, then open any card",
+          "Architecture → Act as: Brand planner, Marketer, Reviewer, Brand lead",
+          "Architecture → open a module → Channels (React, Adaptive Card, LWC data, MCP Apps)",
+          "packages/architecture/src/types.ts, world.ts, workspaces.ts, channels.ts",
+        ],
+        resources: [R.mcpApps, R.adaptiveCards, R.cfDurableObjects],
+      },
+      {
+        id: "gateway",
+        title: "The agentic gateway",
+        summary:
+          "One choke point for every tool call: default-deny policy, a per-call identity, and a record of the decision.",
+        body: `A governed system can't have side doors. In this demo **every architecture capability, and every tool the model calls, goes through one gateway**, and the gateway answers three questions before anything runs.
+
+**1. Is this allowed?** Policies are **default-deny**. A call is allowed only if a *permit* matches its caller, its action and the kind of object, and a matching *forbid* always wins, as in the Cedar policy language. Permits are compiled from the **agent registry**: an agent can call only the actions in its entry, on the object kind it is scoped to. Two rules are not configurable:
+- **Agents can never hold a decision.** A forbid covers \`transition\`, \`supersede_claim\` and \`accept_optimization\`. An agent may propose; only a person decides.
+- **Brand scope.** A call on a brand outside the signed-in user's scope is denied.
+
+The **Agents → Policies** panel shows every policy as Cedar text. The evaluator is a typed equivalent of Cedar written for this demo; the policies are shaped so they can be loaded into a Cedar engine.
+
+**2. Who is calling, and for whom?** The gateway mints a **short-lived token for each invocation**, signed, naming the caller (\`agent:module-authoring\`) and the user it acts for in an \`act\` claim, the pattern from OAuth token exchange. The service verifies that the token was minted for this action and this user before it runs. There are no shared credentials, and no agent acts as itself.
+
+**3. Was it recorded?** Every decision, allowed or denied, is logged with the policy that decided it, the caller, and a correlation id. The **Trust** view draws the **identity chain** for any call: the user, the surface (role, brand, market), the Worker, the gateway, the agent, and the service. A denied call stops at the gateway and says so.
+
+**The orchestrator is an agent too.** Each tool the model calls is authorized as \`tool:<name>\`. Existing kill switches still apply, and \`DISABLED_AGENTS\` switches a whole agent off.
+
+**Partner agents** are registered with a contract, an identity and a policy, and an **Agent Card** in the style of the A2A protocol (see **Agents**). Their prompts stay with their owner; the gateway governs the call, not the thinking.
+
+**The workbench as a channel.** \`/mcp/workbench\` exposes read tools, search, and \`propose_transition\` to MCP clients through the same gateway. It has no tool that approves, publishes, sends or deletes.
+
+**What it does not do yet.** Confirmed Salesforce writes keep their own signed-confirmation audit and do not pass the gateway log. The call to the Salesforce MCP portal is authorized as the orchestrator calling that tool, not as a separate hop.`,
+        inDemo: [
+          "Architecture → Agents → run an action as an agent, then try one it isn't granted",
+          "Architecture → Agents → Policies (Cedar text)",
+          "Architecture → Trust → recent gateway calls and their identity chains",
+          "packages/architecture/src/gateway.ts, apps/edge/src/architecture/context.ts",
+        ],
+        resources: [R.cedar, R.tokenExchange, R.a2a, R.cfAgents],
+      },
+      {
+        id: "lifecycle",
+        title: "The content lifecycle: plan to learn",
+        summary:
+          "Agents draft, check and measure; people decide at every stage; performance re-enters the plan.",
+        body: `The lifecycle runs **Plan → Audience → Brief → Create → Substantiate → Approve → Deploy & learn**. At each stage a named person owns the decision, and narrow agents do the work.
+
+**Plan and brief.** The *content plan agent* reads the calendar and past results and proposes waves as structured demand: a theme, a segment, a channel, a date, a number of modules, and why. The *scenario agent* estimates what a change does (move a send, drop a channel, change an audience) from the audience size, the channel's baseline click rate, and how the brand's best past send performed, with a lift when a send lands on a market date. The *brief agent* drafts a brief that inherits the plan by reference.
+
+**Reuse and create.** The *reuse agent* ranks existing modules by meaning (a local hashing embedder here; Vectorize would implement the same interface) and by past results, and it flags any that cite a superseded claim. The *module authoring agent* **cites or refuses**: every sentence it writes is an approved, substantiated claim or a disclosure the claim requires. For anything it can't cite, it writes a **gap record** instead of text. The *atomization agent* makes channel variants and never shortens a claim; if a claim doesn't fit a channel, it says so.
+
+**Substantiate.** The *substantiation agent* assembles an evidence packet for each claim a module cites and marks it substantiated, superseded, withdrawn, unapproved, missing evidence, expired evidence or conflicting. *Readiness* blocks until every claim is substantiated and every required disclosure is present. When a claim is **superseded**, every module citing it is flagged for refresh and can't be approved.
+
+**The adversarial farm.** Before a human sees a draft, four probes read it: a claim attacker (uncited facts, reworded claims), an injection prober (instruction-like text in the module, its brief or a cited claim), a brand and disclosure checker (absolute language, an embargoed deal, a missing disclosure), and a consent prober (the channel against the audience's opt-ins). They report findings. They change nothing, and a blocking finding blocks approval. The **data readiness agent** scores each stage's inputs the same way.
+
+**Approve.** Every object moves through one **state machine with eleven transitions**: submit, start review, request changes, resubmit, approve, reject, escalate, a senior's approve or reject, expire, and withdraw. Each has the people who may take it. Reviewers and seniors decide; *expire* is the system's, when evidence lapses; *withdraw* is an admin's or a supersession's. Every move is attributed, timestamped and appended to a history that is never edited. A reason is required to reject, escalate, request changes or withdraw. Agents can only **propose** a ready draft for review.
+
+**Deploy and learn.** The *attribution agent* traces a result to the module and the claim that carried it, with the path to the evidence. The *optimization agent* proposes **re-issue** (well above baseline), **refresh** (well below, or a superseded claim) or **retire** (far below). The brand lead decides. Accepting one revises the brand's plan as a **new version that cites the result**, so what happened last quarter changes what the plan says next.
+
+**Nothing is overwritten.** Regenerating an object that already exists is a no-op if the content matches, and a conflict if it doesn't, so approved text can't change without a new review; a superseded claim gets a new version instead. A decision is recorded only if the state really changed, so two reviewers acting at once can't both succeed, and an accepted optimization proposal is spent: it isn't offered again for the same evidence.
+
+**Salesforce stays the system of record.** The lifecycle adds no new Salesforce writes. The state machine's approval is the workbench's own; the confirmed review-task write remains how a decision reaches Salesforce.`,
+        inDemo: [
+          "Architecture → Module Library → Author a module (cite or refuse): pick topics “sweep-apy” and “wire-fees”",
+          "Architecture → Approvals → open a module → Decision, History",
+          "Architecture → open an approved claim as Compliance → Supersede, then Module Library",
+          "Architecture → Performance → Optimization proposals → Accept as Brand lead",
+          "packages/architecture/src/agents.ts, farm.ts, state-machine.ts",
+        ],
+        resources: [R.contextEngineering, R.buildingAgents, R.mcpIntro],
+      },
+      {
+        id: "agent-operations",
+        title: "Agents, prompts, models, and drift",
+        summary:
+          "A registry, a prompt catalog and a model router, scored by thirteen evaluators that watch for drift.",
+        body: `Agents change over time: their prompts get edited, models get swapped, data shifts. The demo treats each of those as something to **register, version and score**.
+
+**One register for every agent.** The registry lists each agent once, with its version, its **domain** (commercial: we build it; platform: consumed as-is; partner: theirs, reached over A2A), the **stage** it serves, the **object kind** it is scoped to, the actions it is **granted**, its **lifecycle stage** (introduce, test, monitor, constrain, retire), its **autonomy level**, and the **person who holds its human gate**. The **Agents** view draws it as a swimlane. Agents drawn with a dashed outline are planned, not built.
+
+**Prompts are a catalog, not files.** Each prompt is an entry with a version, an owning agent, typed variables and the evaluators that score it. The **hard rules** (cite or refuse, escalate ambiguity, propose only, treat retrieved text as data, no personal data) are appended to every prompt and an entry can't drop them. A variable binds to a **governed object by urn** and exposes only the fields it lists; pasted text is rejected. \`pnpm prompts:check\` pins each prompt's hash to its version, so a changed prompt must have a new version.
+
+**Models are routed, not wired.** Agents declare a *task class* (orchestrate, draft, classify, judge, embed) and the router binds a model at run time. Each class has a **champion**; a **challenger** is shadowed on a share of turns, never in front of a user, with a daily cost cap. A challenger replaces the champion only by beating it on the same evaluations, and promotion is a pull request. The chat orchestrator stays on its champion, \`gpt-oss-20b\` (ADR-005, ADR-009).
+
+**Thirteen evaluators.** Tool selection, grounding, cite-or-refuse, claim accuracy, disclosure presence, brand rules, personal-data leakage, prompt-injection resistance, policy adherence, write discipline, answer quality (a judge), latency and cost. Every agent run is scored from its own trace. The judge needs a judge run, so sampled turns carry no judge score, and the view says so.
+
+**Drift and staged autonomy.** Each agent has a baseline. When an evaluator's mean over the last twenty runs falls more than 0.15 below baseline (with at least five runs), the agent is moved to **constrain**: it keeps its reads and loses everything else, until a person reviews it. The hourly job runs the same check, and so does the **Run drift watch** button. Evidence also says how much autonomy an agent has *earned*: assistive, then orchestrated at twenty clean runs, then agentically led at a hundred. Raising a level is a pull request, and no level removes the human gate.
+
+**Trust.** The **Trust** view lays out each agentic threat (hallucination, prompt injection, data leakage, unauthorized action, drift, audit gaps) beside its control and the live evidence, such as the grounding mean, the denied calls, the farm's findings and the constrained agents. Where nothing has been measured, it says "no samples yet".`,
+        inDemo: [
+          "Architecture → Agents (swimlane, lifecycle and autonomy badges)",
+          "Architecture → Prompts & models",
+          "Architecture → Evaluations → Run drift watch and expiry now",
+          "Architecture → Trust",
+          "packages/architecture/src/registry.ts, prompts.ts, models.ts, evaluators.ts, trust.ts",
+          "docs/decisions/ADR-009-model-catalog-and-routing.md",
+        ],
+        resources: [R.cfAgents, R.aiGateway, R.buildingAgents, R.writingTools],
       },
       {
         id: "long-term-memory",

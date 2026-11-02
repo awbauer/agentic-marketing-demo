@@ -15,6 +15,9 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      "@northstar/architecture": fileURLToPath(
+        new URL("./packages/architecture/src/index.ts", import.meta.url),
+      ),
       "@northstar/contracts": fileURLToPath(
         new URL("./packages/contracts/src/index.ts", import.meta.url),
       ),

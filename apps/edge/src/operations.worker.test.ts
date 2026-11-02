@@ -10,8 +10,12 @@ describe("operator controls", () => {
       writesEnabled: true,
       memoryEnabled: true,
       disabledTools: [],
+      disabledAgents: [],
     });
     expect(parseOperationControls({ MEMORY_ENABLED: "False" }).memoryEnabled).toBe(false);
+    expect(
+      parseOperationControls({ DISABLED_AGENTS: " reuse, optimization ," }).disabledAgents,
+    ).toEqual(["reuse", "optimization"]);
     expect(
       parseOperationControls({
         WRITES_ENABLED: " FALSE ",
@@ -21,6 +25,7 @@ describe("operator controls", () => {
       writesEnabled: false,
       memoryEnabled: true,
       disabledTools: ["summarize_campaign", "attach_campaign_image"],
+      disabledAgents: [],
     });
   });
 
@@ -38,6 +43,7 @@ describe("operator controls", () => {
       writesEnabled: true,
       memoryEnabled: true,
       disabledTools: [],
+      disabledAgents: [],
       knowledgeGraph: "fixture",
     });
   });

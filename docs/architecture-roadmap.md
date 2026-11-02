@@ -1,6 +1,6 @@
 # Architecture roadmap: one model underneath, workspaces on top
 
-Status: plan, not demonstrated behavior. Tracking issue: [#91](https://github.com/awbauer/agentic-marketing-demo/issues/91). Each work unit below is a GitHub issue; this page is the map that ties them together.
+Status: implemented to the level recorded in [WU-052](work-units/WU-052-architecture-roadmap.md), which lists what is demonstrated and what is deferred. This page is the plan and the mapping. Tracking issue: [#91](https://github.com/awbauer/agentic-marketing-demo/issues/91). Each work unit below is a GitHub issue; this page is the map that ties them together.
 
 Source: the five architecture slides (layer rings, logical architecture, agent domains 1/2 and 2/2, security and compliance). This roadmap extends the current workbench toward them on Cloudflare instead of AWS.
 
@@ -40,6 +40,37 @@ What is missing is the *shape*: objects with lifelong identity and governance at
 | Aprimo as MLR system of record | Salesforce stays the system of record; the workbench holds references and state, never a second records store |
 | Veeva, IQVIA, medical affairs, MLR | Harborstone Wealth compliance: claims, disclosures, approvals, embargoes |
 | Adaptive Cards (Teams, Copilot), LWC | Rendered from the same composition: React, MCP Apps/HXL, Adaptive Card JSON, LWC data |
+
+### The same design on AWS
+
+The workbench is built on Cloudflare, but each layer keeps a provider-neutral contract (the registry manifest, the gateway's request and decision shapes, the state-machine table, the prompt and model catalogs, the channel emitters). Moving to the AWS stack on the slides replaces the runtime under those contracts, not the contracts themselves.
+
+| Layer | Workbench today (Cloudflare) | On AWS | What changes |
+| --- | --- | --- | --- |
+| Identity, SSO | Cloudflare Access, JWT verified with `jose` | Entra ID or IAM Identity Center, Amazon Cognito or API Gateway JWT authorizer | Issuer and audience in `auth.ts`; the principal shape is unchanged |
+| Edge, BFF | Worker | CloudFront, API Gateway and Lambda (or ECS Fargate) | Handler wrapper; route table is reused |
+| Per-object and session state | Durable Objects (SQLite) | DynamoDB with conditional writes, or Step Functions for the state machine | Transition table is pure and reused; only the persistence call changes |
+| Records and audit | D1 | Aurora Serverless or DynamoDB; audit to S3 Object Lock plus Athena | SQL is portable; add a retention job |
+| Assets and files | R2 | S3 | S3-compatible API; keep the seven-day lifecycle rule |
+| Caches | Durable Object state, KV | ElastiCache or DynamoDB with TTL (session, global, semantic) | Cache interface |
+| Vector and semantic search | Vectorize (embedder interface, hashing fallback) | OpenSearch Serverless or Aurora pgvector, Bedrock Titan embeddings | Implement the embedder and index interface |
+| Agentic Gateway | `gateway.invoke()` in the Worker, MCP server portal and AI Gateway behind it | AgentCore Gateway (MCP tool invocation, A2A) fronted by API Gateway | Gateway adapter; policies move to AgentCore Policy, which is Cedar |
+| Policy | Cedar-shaped policies, default-deny evaluator | Cedar in AgentCore Policy or Amazon Verified Permissions | Policies are already Cedar-shaped; load them into the service |
+| Workload identity | Per-invocation tokens minted with `jose` | AgentCore Identity workload tokens, STS and token exchange | Replace mint and verify; the `act` claim carries over |
+| Agent registry | Source manifest seeded into D1 | AgentCore Registry | Sync the manifest into the registry on deploy |
+| Agent runtime | Worker functions and the Agents SDK | AgentCore Runtime or Lambda | Agents are pure functions over the world; wrap them |
+| Models, routing | Workers AI through AI Gateway dynamic routes | Bedrock (and SageMaker endpoints) with intelligent prompt routing | Replace model ids in the catalog; the router and promotion gate are unchanged |
+| Prompt catalog | Source entries, hash lock, CI gate | Bedrock Prompt Management with versions, same CI gate | Publish catalog entries to Prompt Management |
+| Evaluations, drift | `packages/evals`, per-call evaluator samples, hourly cron | AgentCore Evaluations, MLflow on SageMaker, EventBridge schedule | Evaluators stay as code; scores go to MLflow |
+| Feature store, data lake | R2 | SageMaker Feature Store, S3 and Glue | Not used by the proof beyond object storage |
+| Observability | Workers traces and the gateway log | CloudWatch, X-Ray, OpenTelemetry | Export the same spans |
+| Network and encryption | Cloudflare network, TLS | VPC, private subnets, VPC endpoints, KMS | New infrastructure as code; no application change |
+| Secrets | Worker secrets | Secrets Manager | Binding change |
+| Channels | React, MCP Apps, Adaptive Card, LWC emitters | Same emitters behind API Gateway; Teams and Copilot via Bot Framework | No change to emitters |
+| Scheduled work | Cron trigger | EventBridge Scheduler | Same handler |
+| Infrastructure as code | Wrangler config | CDK or Terraform | New deployment pipeline |
+
+What carries over unchanged: the object model, lineage derivation, the 11-transition table, the registry manifest and its policy compiler, the lifecycle agents, the claims and readiness logic, the evaluator set, and the channel emitters. What must be rebuilt: persistence adapters, identity verification, the gateway adapter, model invocation, and deployment.
 
 ## 3. Guardrails that still hold
 

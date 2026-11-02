@@ -26,11 +26,12 @@ export type DiagramId =
   | "push-plan"
   | "long-term-memory"
   | "marketing-cloud"
-  | "use-cases";
+  | "use-cases"
+  | "agent-lifecycle";
 
 export type TryIt =
   | { kind: "prompt"; label: string; prompt: string }
-  | { kind: "view"; label: string; view: "graph" | "history" | "evaluations" };
+  | { kind: "view"; label: string; view: "graph" | "history" | "evaluations" | "architecture" };
 
 export type SectionLesson = { diagram: DiagramId; keyIdea: string; tryIt?: TryIt[] };
 
@@ -253,6 +254,30 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
         prompt: "Create a campaign in Marketing Cloud for Coastline Kitchen's late-night tacos",
       },
     ],
+  },
+  "object-model": {
+    diagram: "agent-lifecycle",
+    keyIdea:
+      "Every plan, brief, module, claim and result is one object with an identifier it keeps for life. Governance travels with it, and everything else (lineage, screens, channels) is derived from it, never copied.",
+    tryIt: [{ kind: "view", label: "Open the Architecture view", view: "architecture" }],
+  },
+  gateway: {
+    diagram: "agent-lifecycle",
+    keyIdea:
+      "Nothing acts except through one gateway: default-deny policy, a per-call identity, and a record of the decision. An agent that is denied leaves a trace; it never gets a second route.",
+    tryIt: [{ kind: "view", label: "See the swimlane and policies", view: "architecture" }],
+  },
+  lifecycle: {
+    diagram: "agent-lifecycle",
+    keyIdea:
+      "Agents do the narrow work and people decide. An agent cites an approved claim or refuses, readiness blocks until the evidence holds, and only a person moves an object to approved.",
+    tryIt: [{ kind: "view", label: "Run the lifecycle", view: "architecture" }],
+  },
+  "agent-operations": {
+    diagram: "agent-lifecycle",
+    keyIdea:
+      "Agents, prompts and models are catalogued and scored, so a regression is caught before it ships and an agent that drifts is constrained before anyone has to notice.",
+    tryIt: [{ kind: "view", label: "See evaluations and trust", view: "architecture" }],
   },
   "use-cases": {
     diagram: "use-cases",
