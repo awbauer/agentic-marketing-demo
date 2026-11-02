@@ -103,6 +103,21 @@ describe("governed objects", () => {
     expect(refreshReasons(w, "urn:northstar:module:hs-mod-sweep-rate-v2-email")).toHaveLength(0);
   });
 
+  it("lists every version of a chain whichever version is opened", () => {
+    const base = world().objects.get("urn:northstar:claim:hs-sweep-apy-v2");
+    const v3: GovernedObject = {
+      ...must(base),
+      urn: "urn:northstar:claim:hs-sweep-apy-v3",
+      version: 3,
+      supersedes: "urn:northstar:claim:hs-sweep-apy-v2",
+    };
+    const w = buildWorld({ now, runtime: [v3] });
+    const versions = (urn: string) => versionChain(w, urn).map((item) => item.version);
+    expect(versions("urn:northstar:claim:hs-sweep-apy-v1")).toEqual([1, 2, 3]);
+    expect(versions("urn:northstar:claim:hs-sweep-apy-v2")).toEqual([1, 2, 3]);
+    expect(versions("urn:northstar:claim:hs-sweep-apy-v3")).toEqual([1, 2, 3]);
+  });
+
   it("applies recorded approval states over the seed", () => {
     const w = buildWorld({
       now,
@@ -493,6 +508,17 @@ describe("attribution and optimization close the loop", () => {
     expect(byModule["ck-mod-chowder-push"]).toBe("re-issue");
     expect(byModule["ck-mod-soup-email"]).toBe("refresh");
     expect(byModule["hs-mod-sweep-rate-email"]).toBe("refresh");
+  });
+
+  it("does not offer a proposal again once a plan revision has recorded it", () => {
+    const w = world();
+    const proposal = must(
+      proposeOptimizations(w).find((item) => item.moduleUrn.endsWith("ck-mod-chowder-push")),
+    );
+    const { plan } = acceptOptimization(w, proposal, "user:brand-lead");
+    const after = buildWorld({ now, runtime: [plan] });
+    expect(proposeOptimizations(after).some((item) => item.id === proposal.id)).toBe(false);
+    expect(proposeOptimizations(after).length).toBe(proposeOptimizations(w).length - 1);
   });
 
   it("accepting a proposal revises the plan as a new version that cites the result", () => {

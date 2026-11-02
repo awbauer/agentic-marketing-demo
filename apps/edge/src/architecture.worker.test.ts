@@ -250,6 +250,102 @@ describe("architecture API", () => {
     expect(plan.body.versions.map((item: Json) => item.version)).toEqual([1, 2]);
   });
 
+  it("refuses to regenerate an existing object with different content", async () => {
+    const input = { briefUrn: HS_BRIEF, topics: ["sweep-apy"], channel: "sms" };
+    const first = await run("module-authoring", "author_module", input);
+    expect(first.status).toBe(200);
+    // Same inputs, same content: a no-op, not a conflict.
+    expect((await run("module-authoring", "author_module", input)).status).toBe(200);
+    const moduleUrn = first.body.result.module.urn as string;
+    // Supersede the cited claim, then regenerate: the new text must not inherit this module's state.
+    await call(`/api/arch/objects/${urn("urn:northstar:claim:hs-sweep-apy-v2")}/supersede`, {
+      persona: "compliance",
+      json: {
+        text: "The Harborstone Sweep Account pays 4.00% APY (as of November 2).",
+        evidence: {
+          source: "Treasury rate sheet, November 2",
+          asOf: "2026-11-02",
+          expiresOn: "2027-02-28",
+        },
+      },
+    });
+    // Approve the new claim version through the state machine, then regenerate the same module.
+    const next = urn("urn:northstar:claim:hs-sweep-apy-v3");
+    await call(`/api/arch/objects/${next}/transition`, {
+      persona: "compliance",
+      json: { to: "submitted" },
+    });
+    await call(`/api/arch/objects/${next}/transition`, {
+      persona: "reviewer",
+      json: { to: "in_review" },
+    });
+    await call(`/api/arch/objects/${next}/transition`, {
+      persona: "reviewer",
+      json: { to: "approved" },
+    });
+    const regenerated = await run("module-authoring", "author_module", input);
+    expect(regenerated.status).toBe(409);
+    expect(regenerated.body.error).toMatchObject({ code: "CONFLICT", urn: moduleUrn });
+    const kept = await call(`/api/arch/objects/${urn(moduleUrn)}`);
+    expect(kept.body.object.attributes.blocks[0].text).toContain("4.35%");
+    expect(kept.body.object.approvalState).toBe("draft");
+  });
+
+  it("records a transition once when two requests race", async () => {
+    const target = "urn:northstar:module:hs-mod-fomc-push";
+    const store = new ArchitectureStore(env.APP_DB, "local-evaluator");
+    const at = new Date().toISOString();
+    const move = (to: "expired" | "withdrawn") =>
+      store.transition({
+        urn: target,
+        from: "approved",
+        to,
+        actor: "system",
+        actorType: "system",
+        at,
+      });
+    const results = await Promise.all([move("expired"), move("withdrawn")]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await store.history(target)).toHaveLength(1);
+    // A loser that read a state that is no longer current writes nothing.
+    expect(
+      await store.transition({
+        urn: target,
+        from: "approved",
+        to: "expired",
+        actor: "system",
+        actorType: "system",
+        at,
+      }),
+    ).toBe(false);
+    expect(await store.history(target)).toHaveLength(1);
+  });
+
+  it("applies an optimization proposal once", async () => {
+    const proposals = await call("/api/arch/optimizations", { persona: "brand-lead" });
+    const chowder = proposals.body.result.find((item: Json) =>
+      item.moduleUrn.endsWith("ck-mod-chowder-push"),
+    );
+    expect(
+      (
+        await call("/api/arch/optimizations/accept", {
+          persona: "brand-lead",
+          json: { proposalId: chowder.id },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await call("/api/arch/optimizations/accept", {
+          persona: "brand-lead",
+          json: { proposalId: chowder.id },
+        })
+      ).status,
+    ).toBe(404);
+    const again = await call("/api/arch/optimizations", { persona: "brand-lead" });
+    expect(again.body.result.some((item: Json) => item.id === chowder.id)).toBe(false);
+  });
+
   it("constrains an agent that drifts, then denies its write actions", async () => {
     const store = new ArchitectureStore(env.APP_DB, "local-evaluator");
     for (let index = 0; index < 6; index += 1)

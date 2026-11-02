@@ -70,7 +70,7 @@ export class ArchitectureStore {
       objects.map((object) =>
         this.db
           .prepare(
-            "INSERT INTO arch_objects (subject, urn, body, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (subject, urn) DO UPDATE SET body = excluded.body",
+            "INSERT INTO arch_objects (subject, urn, body, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (subject, urn) DO NOTHING",
           )
           .bind(this.subject, object.urn, JSON.stringify(object), object.createdAt),
       ),
@@ -111,10 +111,11 @@ export class ArchitectureStore {
           .bind(this.subject, entry.urn, entry.to, entry.at),
       );
     }
+    // The history row is written only if the statement above changed a row, in the same batch.
     statements.push(
       this.db
         .prepare(
-          "INSERT INTO arch_history (id, subject, urn, from_state, to_state, actor, actor_type, reason, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO arch_history (id, subject, urn, from_state, to_state, actor, actor_type, reason, at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() > 0",
         )
         .bind(
           crypto.randomUUID(),
@@ -128,8 +129,14 @@ export class ArchitectureStore {
           entry.at,
         ),
     );
-    await this.db.batch(statements);
-    return true;
+    try {
+      const results = await this.db.batch(statements);
+      return (results[0]?.meta.changes ?? 0) > 0;
+    } catch (error) {
+      // Two requests that both saw no row: the second insert hits the primary key.
+      if (error instanceof Error && /UNIQUE|constraint/i.test(error.message)) return false;
+      throw error;
+    }
   }
 
   async history(urn: string): Promise<HistoryRow[]> {

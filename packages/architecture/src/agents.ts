@@ -742,7 +742,19 @@ export type OptimizationProposal = {
   index: number | null;
 };
 
+/** A proposal is spent once a plan revision records it against the same evidence. */
+const spentKey = (proposalId: string, basis: readonly string[]) =>
+  `${proposalId}|${[...basis].sort().join(",")}`;
+
 export function proposeOptimizations(world: World, brand?: Brand): OptimizationProposal[] {
+  const spent = new Set(
+    listObjects(world, { kind: "content-plan" }).flatMap((plan) =>
+      (
+        (plan.attributes as { revisions?: Array<{ proposalId: string; basis: string[] }> })
+          .revisions ?? []
+      ).map((revision) => spentKey(revision.proposalId, revision.basis)),
+    ),
+  );
   const perf = performance(world, brand);
   return listObjects(world, { kind: "module", ...(brand ? { brand } : {}) })
     .filter((module) => module.approvalState === "approved")
@@ -790,7 +802,8 @@ export function proposeOptimizations(world: World, brand?: Brand): OptimizationP
           },
         ];
       return [];
-    });
+    })
+    .filter((proposal) => !spent.has(spentKey(proposal.id, proposal.basis)));
 }
 
 /** Accepting a proposal revises the brand's current plan: a new version that cites the result. */

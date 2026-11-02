@@ -122,7 +122,10 @@ export function versionChain(world: World, urn: string): GovernedObject[] {
     chain.unshift(previous);
     cursor = previous;
   }
-  for (let next = successorOf(world, urn); next; next = successorOf(world, next.urn))
+  // Follow one successor at a time, so every version appears whichever one was opened.
+  const immediate = (from: string) =>
+    [...world.objects.values()].find((object) => object.supersedes === from);
+  for (let next = immediate(urn); next && chain.length < 100; next = immediate(next.urn))
     if (!chain.some((item) => item.urn === next?.urn)) chain.push(next);
     else break;
   return chain;

@@ -58,6 +58,24 @@ function need(world: World, urn: unknown, kind?: GovernedObject["kind"]): Govern
   return object;
 }
 
+/**
+ * Saves new objects. An object that already exists is never overwritten: the same content is a
+ * no-op, and different content is a conflict, so approved text can't change without a new review.
+ */
+async function persist(ctx: Ctx, world: World, objects: readonly GovernedObject[]) {
+  for (const object of objects) {
+    const existing = getObject(world, object.urn);
+    if (existing && JSON.stringify(existing.attributes) !== JSON.stringify(object.attributes))
+      throw new ArchError(
+        409,
+        "CONFLICT",
+        `${object.urn} already exists with different content. Supersede it as a new version instead of regenerating it.`,
+        { urn: object.urn, state: existing.approvalState },
+      );
+  }
+  await ctx.store.saveObjects(objects.filter((object) => !getObject(world, object.urn)));
+}
+
 const asPersona = (ctx: Ctx) => ({ type: "persona", id: ctx.user.persona }) as const;
 
 // Reads -----------------------------------------------------------------------------------------
@@ -306,7 +324,7 @@ export async function runAgentOp(ctx: Ctx, agentId: string, action: string, inpu
       switch (action) {
         case "plan_content": {
           const result = planContent(world, brandOf(input), actor);
-          await ctx.store.saveObjects([result.plan]);
+          await persist(ctx, world, [result.plan]);
           return result;
         }
         case "run_scenario":
@@ -318,7 +336,7 @@ export async function runAgentOp(ctx: Ctx, agentId: string, action: string, inpu
             str(input, "waveId"),
             actor,
           );
-          await ctx.store.saveObjects([result.brief]);
+          await persist(ctx, world, [result.brief]);
           return {
             ...result,
             resolved: resolveBrief(buildWorldWith(world, [result.brief]), result.brief.urn),
@@ -344,7 +362,7 @@ export async function runAgentOp(ctx: Ctx, agentId: string, action: string, inpu
             },
             actor,
           );
-          await ctx.store.saveObjects([...(result.module ? [result.module] : []), ...result.gaps]);
+          await persist(ctx, world, [...(result.module ? [result.module] : []), ...result.gaps]);
           if (result.module) moduleForEval = result.module;
           return result;
         }
@@ -355,7 +373,11 @@ export async function runAgentOp(ctx: Ctx, agentId: string, action: string, inpu
             (Array.isArray(input.channels) ? input.channels : ["push", "sms"]) as Channel[],
             actor,
           );
-          await ctx.store.saveObjects(variants.map((item) => item.variant));
+          await persist(
+            ctx,
+            world,
+            variants.map((item) => item.variant),
+          );
           return variants;
         }
         case "assemble_evidence":

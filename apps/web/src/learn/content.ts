@@ -883,6 +883,8 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **Deploy and learn.** The *attribution agent* traces a result to the module and the claim that carried it, with the path to the evidence. The *optimization agent* proposes **re-issue** (well above baseline), **refresh** (well below, or a superseded claim) or **retire** (far below). The brand lead decides. Accepting one revises the brand's plan as a **new version that cites the result**, so what happened last quarter changes what the plan says next.
 
+**Nothing is overwritten.** Regenerating an object that already exists is a no-op if the content matches, and a conflict if it doesn't, so approved text can't change without a new review; a superseded claim gets a new version instead. A decision is recorded only if the state really changed, so two reviewers acting at once can't both succeed, and an accepted optimization proposal is spent: it isn't offered again for the same evidence.
+
 **Salesforce stays the system of record.** The lifecycle adds no new Salesforce writes. The state machine's approval is the workbench's own; the confirmed review-task write remains how a decision reaches Salesforce.`,
         inDemo: [
           "Architecture → Module Library → Author a module (cite or refuse): pick topics “sweep-apy” and “wire-fees”",
