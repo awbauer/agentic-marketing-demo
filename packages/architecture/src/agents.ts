@@ -34,7 +34,8 @@ const slug = (text: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 48);
-const brandSlug = (brand: Brand) => (brand === "Harborstone Wealth" ? "hs" : "ck");
+const brandSlug = (brand: Brand) =>
+  brand === "Harborstone Wealth" ? "hs" : brand === "Lumera Therapeutics" ? "lt" : "ck";
 const day = (world: World) => world.now.toISOString().slice(0, 10);
 
 function created(
@@ -50,9 +51,9 @@ function created(
     version: 1,
     supersedes: null,
     market: "US",
-    owner: base.brand === "Harborstone Wealth" ? "compliance" : "marketer",
+    owner: base.brand === "Coastline Kitchen" ? "marketer" : "compliance",
     approvalState: "draft",
-    classification: base.brand === "Harborstone Wealth" ? "regulated" : "internal",
+    classification: base.brand === "Coastline Kitchen" ? "internal" : "regulated",
     createdBy: actor,
     createdAt: iso(world),
     updatedAt: iso(world),
@@ -392,6 +393,10 @@ export const DISCLOSURE_RULES: Record<string, readonly string[]> = {
   "sweep-apy": ["hs-disc-rate-asof"],
   "fdic-coverage": ["hs-disc-not-fdic"],
   "fee-waiver": ["hs-disc-not-fdic"],
+  "cardivance-mortality": ["lt-disc-isi-cardivance", "lt-disc-boxed-cardivance", "lt-disc-pi"],
+  "cardivance-safety": ["lt-disc-isi-cardivance", "lt-disc-boxed-cardivance", "lt-disc-pi"],
+  "glucora-a1c": ["lt-disc-isi-glucora", "lt-disc-pi"],
+  "neurelva-days": ["lt-disc-pi"],
 };
 
 export type ClaimStatus =

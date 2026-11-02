@@ -230,6 +230,21 @@ export const LEARN_REFERENCE: ReferenceEntry[] = [
     "A Harborstone client's signals, ranked plays with peer adoption and approved content, and contacts with consented channels.",
   ),
   tool(
+    "build_hcp_target_list",
+    "use-cases",
+    "Lumera's hospitals and prescriber groups ranked for a drug by patients, formulary access, share, decile and opted-in channels, with the first move at each.",
+  ),
+  tool(
+    "check_clinical_claims",
+    "use-cases",
+    "Each clinical claim for a drug: the trial behind it, whether its indication is on the label, and the MLR-approved content that carries it, with blockers.",
+  ),
+  tool(
+    "plan_hospital_engagement",
+    "use-cases",
+    "A hospital's formulary status and P&T timing for each Lumera drug, the value dossier to send (usable or blocked), its prescriber groups and consent, and ordered next steps.",
+  ),
+  tool(
     "trace_content_lineage",
     "graphrag-here",
     "Traces a campaign's content back to its brief and brand-rule results.",
@@ -330,6 +345,33 @@ export const LEARN_REFERENCE: ReferenceEntry[] = [
   node("Advisor", "The Harborstone advisor who covers a client.", "use-cases"),
   node("Product", "A Harborstone product or service a client can hold.", "use-cases"),
   node("Signal", "Something the relationship team noticed about a client.", "use-cases"),
+  node(
+    "Drug",
+    "A Lumera Therapeutics drug, with its class and whether it carries a boxed warning.",
+    "use-cases",
+  ),
+  node("Indication", "A condition a drug is labeled for, or only investigated in.", "use-cases"),
+  node("ClinicalTrial", "A trial with its phase, size, status, endpoint and result.", "use-cases"),
+  node(
+    "ClinicalClaim",
+    "A claim about a drug's effect or safety that promotional content may carry.",
+    "use-cases",
+  ),
+  node(
+    "Hospital",
+    "A fictional hospital or health system, with its formulary and patient volumes.",
+    "use-cases",
+  ),
+  node(
+    "Specialty",
+    "A prescriber specialty, such as cardiology, and the conditions it treats.",
+    "use-cases",
+  ),
+  node(
+    "PrescriberGroup",
+    "A segment of prescribers at one hospital in one specialty; a count and a decile, never a person.",
+    "use-cases",
+  ),
   // Graph nodes: long-term memory.
   node("Workspace", "The workspace that owns a memory.", "long-term-memory"),
   node(
@@ -393,6 +435,34 @@ export const LEARN_REFERENCE: ReferenceEntry[] = [
   edge("SUGGESTS", "A signal pointing to a product, with the share it might capture.", "use-cases"),
   edge("OFFERS", "A brand offering a product.", "use-cases"),
   edge("ADVISES_FOR", "An advisor at a brand.", "use-cases"),
+  edge("INDICATED_FOR", "A drug and a condition it is labeled for.", "use-cases"),
+  edge(
+    "INVESTIGATED_FOR",
+    "A drug and a condition it is only being studied in, so not on the label.",
+    "use-cases",
+  ),
+  edge("STUDIED_IN", "A drug and a trial that studied it.", "use-cases"),
+  edge("SUPPORTS", "A trial and a clinical claim its results support.", "use-cases"),
+  edge("CLAIMS_ABOUT", "A clinical claim and the drug it is about.", "use-cases"),
+  edge("CARRIES", "A content asset and a clinical claim it makes.", "use-cases"),
+  edge("TREATS", "A specialty and a condition it treats.", "use-cases"),
+  edge("SPECIALIZES_IN", "A prescriber group and its specialty.", "use-cases"),
+  edge("PRACTICES_AT", "A prescriber group and the hospital it practices at.", "use-cases"),
+  edge(
+    "ON_FORMULARY",
+    "A hospital and a drug, with its formulary status and days to the next P&T review.",
+    "use-cases",
+  ),
+  edge(
+    "SEES_PATIENTS_WITH",
+    "A hospital and a condition, with its annual patient count.",
+    "use-cases",
+  ),
+  edge(
+    "PRESCRIBES",
+    "A prescriber group and a drug, with Lumera's share of the class.",
+    "use-cases",
+  ),
   edge("USED", "A push send that used a content asset."),
   edge("SENT_TO", "A push send delivered to a segment."),
   edge("SENT_UNDER", "A push send made under a consent scope."),

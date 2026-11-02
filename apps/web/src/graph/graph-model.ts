@@ -47,7 +47,7 @@ export const DOMAINS: Domain[] = [
     id: "marketing",
     title: "Brands, campaigns, and content",
     blurb:
-      "Northstar and its Coastline Kitchen and Harborstone Wealth brands: what they plan, write, and check.",
+      "Northstar and its Coastline Kitchen, Harborstone Wealth and Lumera Therapeutics brands: what they plan, write, and check.",
     labels: ["Brand", "Campaign", "Brief", "ContentAsset", "BrandRule"],
   },
   {
@@ -91,6 +91,21 @@ export const DOMAINS: Domain[] = [
       "Signal",
     ],
   },
+  {
+    id: "pharma",
+    title: "Lumera Therapeutics",
+    blurb:
+      "Drugs and their labeled indications, the trials behind each clinical claim, MLR-approved content, and the hospitals and prescriber groups to reach.",
+    labels: [
+      "Drug",
+      "Indication",
+      "ClinicalTrial",
+      "ClinicalClaim",
+      "Hospital",
+      "Specialty",
+      "PrescriberGroup",
+    ],
+  },
 ];
 
 export const LABEL_COLORS: Record<string, string> = {
@@ -123,6 +138,13 @@ export const LABEL_COLORS: Record<string, string> = {
   Advisor: "#46607a",
   Product: "#3b7a8c",
   Signal: "#d4a017",
+  Drug: "#b8456f",
+  Indication: "#7a4fa0",
+  ClinicalTrial: "#2f8f83",
+  ClinicalClaim: "#cc6a2d",
+  Hospital: "#2c6fa8",
+  Specialty: "#6f8f3a",
+  PrescriberGroup: "#9c7a1d",
 };
 
 export const LABEL_NAMES: Record<string, string> = {
@@ -137,6 +159,9 @@ export const LABEL_NAMES: Record<string, string> = {
   StoreManager: "Store manager",
   MarketEvent: "Market event",
   ClientSend: "Client send",
+  ClinicalTrial: "Clinical trial",
+  ClinicalClaim: "Clinical claim",
+  PrescriberGroup: "Prescriber group",
 };
 
 export const labelName = (label: string) => LABEL_NAMES[label] ?? label;
@@ -191,6 +216,18 @@ export const RELATIONSHIP_PHRASES: Record<string, string> = {
   SUGGESTS: "suggests",
   OFFERS: "offers",
   ADVISES_FOR: "advises for",
+  INDICATED_FOR: "is labeled for",
+  INVESTIGATED_FOR: "is only investigational for",
+  STUDIED_IN: "was studied in",
+  SUPPORTS: "supports",
+  CLAIMS_ABOUT: "is a claim about",
+  CARRIES: "carries the claim",
+  TREATS: "treats",
+  SPECIALIZES_IN: "specializes in",
+  PRACTICES_AT: "practices at",
+  ON_FORMULARY: "has formulary status for",
+  SEES_PATIENTS_WITH: "sees patients with",
+  PRESCRIBES: "prescribes",
 };
 
 export const relationshipPhrase = (type: string) =>

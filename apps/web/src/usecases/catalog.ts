@@ -5,7 +5,7 @@
  */
 
 export type Team = "Marketing" | "Sales" | "Service";
-export type Industry = "Financial services";
+export type Industry = "Financial services" | "Life sciences";
 
 export type SystemKind =
   | "Salesforce agent"
@@ -26,7 +26,7 @@ export type UseCase = {
   id: string;
   title: string;
   team: Team;
-  /** Set for scenarios built on an industry brand, such as Harborstone Wealth. */
+  /** Set for scenarios built on an industry brand, such as Harborstone Wealth or Lumera Therapeutics. */
   industry?: Industry;
   status: "available" | "coming-soon";
   /** One sentence for the card. */
@@ -680,6 +680,145 @@ export const USE_CASES: UseCase[] = [
       "A play whose only content is pending approval has no approved content to send",
       "A contact whose only consented channel has no approved content goes to the advisor",
       "Amounts are fictional estimates in $ millions",
+    ],
+  },
+  {
+    id: "pharma-hcp-targets",
+    title: "Target hospitals and prescriber groups for a drug",
+    team: "Sales",
+    industry: "Life sciences",
+    status: "available",
+    summary:
+      "Rank the hospitals and prescriber groups to reach first for a drug, by patients, formulary access, share and opted-in channels.",
+    scenario:
+      "Lumera Therapeutics is refreshing Cardivance for heart failure. Field and marketing leaders need to know where to spend the next quarter: which hospitals see the most patients with the labeled indication, where the drug is already preferred, where access has to come first, and which prescriber groups have agreed to be contacted on which channel.",
+    prompts: [
+      {
+        text: "Which hospitals and prescriber groups should we target first for Cardivance?",
+        demonstrates:
+          "A ranked target list with formulary status, share, decile, consent, and the play for each",
+      },
+      {
+        text: "Where should we focus for Glucora in type 2 diabetes?",
+        demonstrates: "The same graph for a different drug, indication and set of specialties",
+      },
+    ],
+    systems: [ORCHESTRATOR, GRAPH],
+    flow: [
+      { from: "You", to: "Orchestrator", carries: "The drug" },
+      { from: "Orchestrator", to: "Knowledge graph", carries: "build_hcp_target_list(drug)" },
+      {
+        from: "Knowledge graph",
+        to: "Orchestrator",
+        carries:
+          "Groups with patients, formulary status, P&T timing, share, decile, opted-in channels, and the play",
+      },
+      { from: "Orchestrator", to: "You", carries: "A ranked list and the scoring behind it" },
+    ],
+    graphRole:
+      "The key element: Drug → INDICATED_FOR → Indication ← TREATS ← Specialty ← SPECIALIZES_IN ← PrescriberGroup finds the right groups; → PRACTICES_AT → Hospital → SEES_PATIENTS_WITH and ON_FORMULARY give volume and access; PRESCRIBES gives share; HAS_CONSENT says which channels each group opted in to.",
+    writes: "Nothing: read-only.",
+    watch: [
+      "Graph evidence: PRACTICES_AT and ON_FORMULARY paths",
+      "A hospital where the drug is not on formulary leads with the value dossier, not detailing",
+      "Groups are prescriber segments with counts, never named clinicians",
+    ],
+  },
+  {
+    id: "pharma-claims-check",
+    title: "Check clinical claims before they are used",
+    team: "Marketing",
+    industry: "Life sciences",
+    status: "available",
+    summary:
+      "For each claim about a drug: is a trial behind it, is the indication on the label, and is the content that carries it approved with its safety information?",
+    scenario:
+      "A brand team is about to brief an HCP email for Cardivance. Medical, legal and regulatory review will reject a claim that no trial supports, one that goes beyond the label, or content missing the boxed warning. The team wants to know before the brief, not at review.",
+    prompts: [
+      {
+        text: "Check the clinical claims for Cardivance: which are supported, on label and approved?",
+        demonstrates:
+          "Each claim's trial, label basis and carrying content, with blockers and MLR approvals",
+      },
+      {
+        text: "Can we use the Cardivance superiority claim, or is it off-label?",
+        demonstrates: "An unsupported comparative claim is blocked, with the reason",
+      },
+      {
+        text: "Which Glucora claims can go in an HCP email?",
+        demonstrates:
+          "An expired approval blocks a claim that is otherwise supported, on label content",
+      },
+    ],
+    systems: [ORCHESTRATOR, GRAPH],
+    flow: [
+      { from: "You", to: "Orchestrator", carries: "The drug (and optionally a channel)" },
+      {
+        from: "Orchestrator",
+        to: "Knowledge graph",
+        carries: "check_clinical_claims(drug, channel)",
+      },
+      {
+        from: "Knowledge graph",
+        to: "Orchestrator",
+        carries:
+          "Claims with trials, label basis, carrying assets, approvals and safety information",
+      },
+      { from: "Orchestrator", to: "You", carries: "What is usable, what is blocked, and why" },
+    ],
+    graphRole:
+      "The key element: ClinicalTrial → SUPPORTS → ClinicalClaim says what is evidenced; Drug → INDICATED_FOR (labeled) versus INVESTIGATED_FOR (not) says what is on label; ContentAsset → CARRIES → ClinicalClaim and APPROVED_UNDER → Approval, REQUIRES → Disclosure say what can go out and with what.",
+    writes: "Nothing: it approves, rewrites and softens nothing.",
+    watch: [
+      "Graph evidence: SUPPORTS and CARRIES paths",
+      "The HFpEF claim fails twice: not on the label, and its trial has no results",
+      "An expired MLR approval blocks content even when the claim itself is supported",
+    ],
+  },
+  {
+    id: "pharma-hospital-access",
+    title: "Plan engagement with a hospital's formulary",
+    team: "Sales",
+    industry: "Life sciences",
+    status: "available",
+    summary:
+      "From a hospital's formulary status and P&T calendar to the dossier to send, the groups to reach, and the next steps in order.",
+    scenario:
+      "St. Brigid Medical Center's Pharmacy and Therapeutics committee reviews Cardivance in 21 days. The account team needs to know whether the approved value dossier can be sent, which prescriber groups to prepare and on which channels, and what to do first.",
+    prompts: [
+      {
+        text: "Plan our engagement with St. Brigid Medical Center ahead of their P&T review",
+        demonstrates:
+          "Formulary status, dossier approval, prescriber groups, and ordered next steps",
+      },
+      {
+        text: "How should we engage Mesa Verde Regional Hospital on formulary access?",
+        demonstrates: "A dossier still pending MLR is a blocker, not something to send",
+      },
+    ],
+    systems: [ORCHESTRATOR, GRAPH],
+    flow: [
+      { from: "You", to: "Orchestrator", carries: "The hospital" },
+      {
+        from: "Orchestrator",
+        to: "Knowledge graph",
+        carries: "plan_hospital_engagement(hospital)",
+      },
+      {
+        from: "Knowledge graph",
+        to: "Orchestrator",
+        carries:
+          "Formulary by drug, patients at stake, dossiers and their approvals, groups and consent",
+      },
+      { from: "Orchestrator", to: "You", carries: "Next steps in order, with what is blocked" },
+    ],
+    graphRole:
+      "The key element: Hospital → ON_FORMULARY → Drug carries status and days to the review; ContentAsset (dossier) → EXPLAINS → Drug and APPROVED_UNDER → Approval say whether it can be sent; PrescriberGroup → PRACTICES_AT → Hospital with HAS_CONSENT and ENGAGED_WITH say who to reach and how.",
+    writes: "Nothing: nothing is submitted or sent.",
+    watch: [
+      "Graph evidence: ON_FORMULARY and PRACTICES_AT paths",
+      "The first next step is the drug with the most patients at stake and no access",
+      "Prescriber groups are shown with opted-in channels, never as people",
     ],
   },
   {

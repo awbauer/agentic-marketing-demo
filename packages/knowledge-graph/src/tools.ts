@@ -20,6 +20,7 @@ import {
   marketEventId,
 } from "./harborstone.ts";
 import type { MemoryStore } from "./memory.ts";
+import { DRUG_IDS, FORMULARY_ACCESS, type FormularyStatus, HOSPITAL_NAMES } from "./pharma.ts";
 
 export type Row = Record<string, unknown>;
 export type PathNode = { id: string; label: string; name: string };
@@ -2100,6 +2101,631 @@ const buildAumAccountPlan = define({
   },
 });
 
+// Life-sciences use cases (Lumera Therapeutics): target hospitals and prescriber groups, check that
+// clinical claims are supported and on label, and plan engagement with a hospital's formulary.
+
+type GroupConsent = { channel: string; optedIn: number };
+
+export const HCP_TARGETS_CYPHER = `
+MATCH (d:Drug {dataset: $dataset, id: $drugId})-[:INDICATED_FOR]->(i:Indication)
+MATCH (g:PrescriberGroup {dataset: $dataset})-[:SPECIALIZES_IN]->(:Specialty)-[:TREATS]->(i)
+MATCH (g)-[:PRACTICES_AT]->(h:Hospital)
+OPTIONAL MATCH (h)-[sp:SEES_PATIENTS_WITH]->(i)
+OPTIONAL MATCH (h)-[f:ON_FORMULARY]->(d)
+OPTIONAL MATCH (g)-[pr:PRESCRIBES]->(d)
+CALL (g) {
+  OPTIONAL MATCH (g)-[hc:HAS_CONSENT]->(s:ConsentScope)
+  WITH s, hc ORDER BY s.channel
+  RETURN collect(CASE WHEN s IS NULL THEN NULL ELSE {channel: s.channel, optedIn: hc.optedIn} END) AS consents
+}
+CALL (g) {
+  OPTIONAL MATCH (g)-[e:ENGAGED_WITH]->(:ContentAsset)
+  RETURN coalesce(sum(e.count), 0) AS engagements
+}
+RETURN d.id AS drugId, d.name AS drug, g.id AS groupId, g.name AS grp, g.prescribers AS prescribers,
+  g.decile AS decile, h.id AS hospitalId, h.name AS hospital, h.hospitalType AS hospitalType,
+  i.id AS indicationId, i.name AS indication, sp.annualPatients AS patients, f.status AS formulary,
+  f.ptReviewInDays AS ptReviewInDays, pr.trxShare AS trxShare, consents, engagements
+ORDER BY groupId`;
+
+type TargetRow = {
+  drugId: string;
+  drug: string;
+  groupId: string;
+  grp: string;
+  prescribers: number;
+  decile: number;
+  hospitalId: string;
+  hospital: string;
+  hospitalType: string;
+  indicationId: string;
+  indication: string;
+  patients: number | null;
+  formulary: string | null;
+  ptReviewInDays: number | null;
+  trxShare: number | null;
+  consents: GroupConsent[];
+  engagements: number;
+};
+
+const buildHcpTargetList = define({
+  name: "build_hcp_target_list",
+  title: "Build a target list of hospitals and prescriber groups",
+  description:
+    "For a Lumera Therapeutics drug (drug-cardivance for heart failure, drug-glucora for type 2 diabetes, drug-neurelva for chronic migraine), rank the hospitals and prescriber groups worth engaging first: patients with the drug's labeled indication, formulary status (and days to the next Pharmacy and Therapeutics review), Lumera's current share, the group's decile, how many prescribers opted in to promotional contact on each channel, and what to do first. Groups are prescriber segments at a hospital, never individual people. Each with its evidence path. Read-only.",
+  input: z.object({
+    drug: z.enum(DRUG_IDS).describe("Lumera drug ID, such as drug-cardivance"),
+    limit: z.number().int().min(1).max(16).default(8).describe("How many targets to return"),
+  }),
+  run: async (backend, { drug, limit }) => {
+    const result = (await rows(backend, HCP_TARGETS_CYPHER, { drugId: drug }, (ix) => {
+      const drugNode = ix.byId.get(drug);
+      if (!drugNode) return [];
+      return ix
+        .outgoing(drug, "INDICATED_FOR")
+        .flatMap((labeled) => {
+          const indication = ix.node(labeled.to);
+          return [...ix.byId.values()]
+            .filter((node) => node.label === "PrescriberGroup")
+            .filter((group) =>
+              ix
+                .outgoing(group.id, "SPECIALIZES_IN")
+                .some((edge) =>
+                  ix.outgoing(edge.to, "TREATS").some((treats) => treats.to === indication.id),
+                ),
+            )
+            .map((group) => {
+              const hospital = ix.node(
+                (ix.outgoing(group.id, "PRACTICES_AT")[0] as { to: string }).to,
+              );
+              const patients = ix
+                .outgoing(hospital.id, "SEES_PATIENTS_WITH")
+                .find((edge) => edge.to === indication.id);
+              const formulary = ix
+                .outgoing(hospital.id, "ON_FORMULARY")
+                .find((edge) => edge.to === drug);
+              const prescribes = ix
+                .outgoing(group.id, "PRESCRIBES")
+                .find((edge) => edge.to === drug);
+              return {
+                drugId: drugNode.id,
+                drug: drugNode.name,
+                groupId: group.id,
+                grp: group.name,
+                prescribers: Number(group.prescribers),
+                decile: Number(group.decile),
+                hospitalId: hospital.id,
+                hospital: hospital.name,
+                hospitalType: String(hospital.hospitalType),
+                indicationId: indication.id,
+                indication: indication.name,
+                patients: patients ? Number(patients.properties?.annualPatients) : null,
+                formulary: formulary ? String(formulary.properties?.status) : null,
+                ptReviewInDays:
+                  formulary?.properties?.ptReviewInDays === undefined
+                    ? null
+                    : Number(formulary.properties.ptReviewInDays),
+                trxShare: prescribes ? Number(prescribes.properties?.trxShare) : null,
+                consents: consentsOf(ix, group.id).map((consent) => ({
+                  channel: consent.channel,
+                  optedIn: consent.optedIn,
+                })),
+                engagements: ix
+                  .outgoing(group.id, "ENGAGED_WITH")
+                  .reduce((sum, edge) => sum + Number(edge.properties?.count), 0),
+              };
+            });
+        })
+        .sort((a, b) => byText(a.groupId, b.groupId));
+    })) as TargetRow[];
+    if (result.length === 0) return { drug, found: false, targets: [], paths: [] };
+    const scored = result
+      .map((row) => {
+        const access =
+          FORMULARY_ACCESS[(row.formulary ?? "Not on formulary") as FormularyStatus] ?? 0.1;
+        const share = row.trxShare ?? 0;
+        const score = Math.round((row.patients ?? 0) * (1 - share) * access * (row.decile / 10));
+        const accessFirst = access <= 0.4;
+        return { row, access, share, score, accessFirst };
+      })
+      .sort((a, b) => b.score - a.score || byText(a.row.groupId, b.row.groupId))
+      .slice(0, limit);
+    const paths: EvidencePath[] = scored.slice(0, 6).flatMap(({ row }) => {
+      const group = { id: row.groupId, label: "PrescriberGroup", name: row.grp };
+      const hospital = { id: row.hospitalId, label: "Hospital", name: row.hospital };
+      const drugNode = { id: row.drugId, label: "Drug", name: row.drug };
+      return [
+        {
+          nodes: [group, hospital],
+          relationships: [{ type: "PRACTICES_AT", from: group.id, to: hospital.id }],
+        },
+        {
+          nodes: [hospital, drugNode],
+          relationships: [{ type: "ON_FORMULARY", from: hospital.id, to: drugNode.id }],
+        },
+      ];
+    });
+    const first = result[0] as TargetRow;
+    return {
+      drug: first.drug,
+      found: true,
+      targets: scored.map(({ row, access, share, score, accessFirst }, position) => ({
+        rank: position + 1,
+        group: row.grp,
+        hospital: row.hospital,
+        hospitalType: row.hospitalType,
+        indication: row.indication,
+        prescribers: row.prescribers,
+        decile: row.decile,
+        annualPatients: row.patients,
+        formulary: row.formulary ?? "Not on formulary",
+        ptReviewInDays: row.ptReviewInDays,
+        lumeraShare: share,
+        opportunityScore: score,
+        reachable: row.consents.filter((consent) => consent.optedIn > 0),
+        engagements: row.engagements,
+        play: accessFirst
+          ? "Secure formulary access first: send the approved value dossier ahead of the review, then detail"
+          : share < 0.1
+            ? "Detail the labeled efficacy data to the opted-in prescribers"
+            : "Defend share: reinforce safety, dosing and the labeled outcomes",
+        why: `${row.patients ?? 0} patients with ${row.indication.toLowerCase()}, ${row.formulary ?? "not on formulary"}, ${Math.round(share * 100)}% share, decile ${row.decile} (access weight ${access})`,
+      })),
+      scoring: "annual patients × (1 − Lumera share) × formulary access weight × decile ÷ 10",
+      paths: paths.slice(0, MAX_PATHS),
+    };
+  },
+});
+
+export const CLAIMS_CYPHER = `
+MATCH (d:Drug {dataset: $dataset, id: $drugId})<-[:CLAIMS_ABOUT]-(c:ClinicalClaim)-[:FOR]->(i:Indication)
+OPTIONAL MATCH (d)-[l:INDICATED_FOR]->(i)
+CALL (c) {
+  OPTIONAL MATCH (t:ClinicalTrial)-[:SUPPORTS]->(c)
+  WITH t ORDER BY t.id
+  RETURN collect(CASE WHEN t IS NULL THEN NULL ELSE {id: t.id, name: t.name, status: t.status, endpoint: t.endpoint, result: t.result, enrollment: t.enrollment} END) AS trials
+}
+RETURN d.id AS drugId, d.name AS drug, d.boxedWarning AS boxedWarning, c.id AS claimId, c.name AS claim,
+  c.claimType AS claimType, i.id AS indicationId, i.name AS indication, l IS NOT NULL AS onLabel, trials
+ORDER BY claimId`;
+
+export const CLAIM_ASSETS_CYPHER = `
+MATCH (a:ContentAsset)-[:CARRIES]->(c:ClinicalClaim)-[:CLAIMS_ABOUT]->(:Drug {dataset: $dataset, id: $drugId})
+${ASSET_FACTS_CYPHER}
+RETURN c.id AS claimId, ${ASSET_FACTS_RETURN}
+ORDER BY claimId, assetId`;
+
+type ClaimRow = {
+  drugId: string;
+  drug: string;
+  boxedWarning: boolean | null;
+  claimId: string;
+  claim: string;
+  claimType: string;
+  indicationId: string;
+  indication: string;
+  onLabel: boolean;
+  trials: Array<{
+    id: string;
+    name: string;
+    status: string;
+    endpoint: string;
+    result: string;
+    enrollment: number;
+  }>;
+};
+type ClaimAssetRow = AssetFacts & { claimId: string };
+
+const checkClinicalClaims = define({
+  name: "check_clinical_claims",
+  title: "Check clinical claims before they are used",
+  description:
+    "For a Lumera Therapeutics drug (drug-cardivance, drug-glucora or drug-neurelva), check each clinical claim: is it supported by a completed trial, is it for an indication on the approved label (not an investigational one), and which approved content carries it, with each asset's MLR approval and expiry, the safety information it must ship with (including a boxed warning), and anything that blocks it. Optionally limit to one channel (email, portal or rep). Each with its evidence path. Read-only: it approves nothing.",
+  input: z.object({
+    drug: z.enum(DRUG_IDS).describe("Lumera drug ID, such as drug-cardivance"),
+    channel: z
+      .enum(["email", "portal", "rep"])
+      .optional()
+      .describe("Only content approved for this channel"),
+  }),
+  run: async (backend, { drug, channel }) => {
+    const claims = (await rows(backend, CLAIMS_CYPHER, { drugId: drug }, (ix) => {
+      const drugNode = ix.byId.get(drug);
+      if (!drugNode) return [];
+      return ix
+        .incoming(drug, "CLAIMS_ABOUT")
+        .map((edge) => {
+          const claim = ix.node(edge.from);
+          const indication = ix.node((ix.outgoing(claim.id, "FOR")[0] as { to: string }).to);
+          return {
+            drugId: drugNode.id,
+            drug: drugNode.name,
+            boxedWarning: (drugNode.boxedWarning as boolean | undefined) ?? null,
+            claimId: claim.id,
+            claim: claim.name,
+            claimType: String(claim.claimType),
+            indicationId: indication.id,
+            indication: indication.name,
+            onLabel: ix
+              .outgoing(drug, "INDICATED_FOR")
+              .some((labeled) => labeled.to === indication.id),
+            trials: ix
+              .incoming(claim.id, "SUPPORTS")
+              .map(({ from }) => ix.node(from))
+              .sort((a, b) => byText(a.id, b.id))
+              .map((trial) => ({
+                id: trial.id,
+                name: trial.name,
+                status: String(trial.status),
+                endpoint: String(trial.endpoint),
+                result: String(trial.result),
+                enrollment: Number(trial.enrollment),
+              })),
+          };
+        })
+        .sort((a, b) => byText(a.claimId, b.claimId));
+    })) as ClaimRow[];
+    const first = claims[0];
+    if (!first) return { drug, found: false, claims: [], paths: [] };
+    const assets = (await rows(backend, CLAIM_ASSETS_CYPHER, { drugId: drug }, (ix) =>
+      ix
+        .incoming(drug, "CLAIMS_ABOUT")
+        .flatMap((edge) =>
+          ix.incoming(edge.from, "CARRIES").map((carries) => ({
+            claimId: edge.from,
+            ...assetFacts(ix, carries.from),
+          })),
+        )
+        .sort((a, b) => byText(a.claimId, b.claimId) || byText(a.assetId, b.assetId)),
+    )) as ClaimAssetRow[];
+    const boxed = Boolean(first.boxedWarning);
+    const verdicts = claims.map((claim) => {
+      const completed = claim.trials.filter((trial) => trial.status === "Completed");
+      const claimIssues: string[] = [];
+      if (!claim.onLabel)
+        claimIssues.push(
+          `${claim.indication} is not on the approved label; the drug is only investigational there`,
+        );
+      if (completed.length === 0 && claim.claimType !== "dosing")
+        claimIssues.push(
+          claim.trials.length === 0
+            ? "No trial supports this claim"
+            : `The supporting trial (${claim.trials.map((trial) => trial.name).join(", ")}) has no results yet`,
+        );
+      const carried = assets
+        .filter((asset) => asset.claimId === claim.claimId)
+        .filter((asset) => !channel || asset.channel === channel)
+        .map((asset) => {
+          const blockers = [...claimIssues, ...releaseBlockers(asset)];
+          const disclosureIds = asset.disclosures.map((disclosure) => disclosure.id);
+          if (!disclosureIds.includes("disclosure-prescribing-information"))
+            blockers.push("Missing the full Prescribing Information reference");
+          if (boxed && !disclosureIds.includes("disclosure-boxed-cardivance"))
+            blockers.push("Missing the boxed warning");
+          return {
+            asset: asset.asset,
+            kind: asset.kind,
+            channel: asset.channel,
+            approval: approvalSummary(asset),
+            disclosures: asset.disclosures.map((disclosure) => disclosure.name),
+            usable: blockers.length === 0,
+            blockers,
+            facts: asset,
+          };
+        });
+      return {
+        claim,
+        completed,
+        claimIssues,
+        carried,
+        verdict:
+          claimIssues.length > 0
+            ? "Blocked: not supportable as stated"
+            : carried.some((asset) => asset.usable)
+              ? "Usable"
+              : carried.length === 0
+                ? "Supported, but no approved content carries it"
+                : "Supported, but its content needs MLR attention",
+      };
+    });
+    const paths: EvidencePath[] = verdicts.flatMap(({ claim, carried }) => {
+      const claimNode = { id: claim.claimId, label: "ClinicalClaim", name: claim.claim };
+      return [
+        ...claim.trials.map((trial) => ({
+          nodes: [{ id: trial.id, label: "ClinicalTrial", name: trial.name }, claimNode],
+          relationships: [{ type: "SUPPORTS", from: trial.id, to: claimNode.id }],
+        })),
+        ...carried.slice(0, 1).flatMap((asset) => [
+          {
+            nodes: [
+              { id: asset.facts.assetId, label: "ContentAsset", name: asset.asset },
+              claimNode,
+            ],
+            relationships: [{ type: "CARRIES", from: asset.facts.assetId, to: claimNode.id }],
+          },
+          ...assetPaths(asset.facts).slice(0, 1),
+        ]),
+      ];
+    });
+    return {
+      drug: first.drug,
+      found: true,
+      boxedWarning: boxed,
+      channel: channel ?? null,
+      claims: verdicts.map(({ claim, completed, claimIssues, carried, verdict }) => ({
+        claim: claim.claim,
+        type: claim.claimType,
+        indication: claim.indication,
+        onLabel: claim.onLabel,
+        supportedBy: completed.map((trial) => ({
+          trial: trial.name,
+          enrollment: trial.enrollment,
+          endpoint: trial.endpoint,
+          result: trial.result,
+        })),
+        verdict,
+        issues: claimIssues,
+        content: carried.map(({ facts: _facts, ...asset }) => asset),
+      })),
+      usableCount: verdicts.filter((entry) => entry.verdict === "Usable").length,
+      blockedCount: verdicts.filter((entry) => entry.verdict.startsWith("Blocked")).length,
+      paths: paths.slice(0, MAX_PATHS),
+    };
+  },
+});
+
+export const HOSPITAL_CYPHER = `
+MATCH (h:Hospital {dataset: $dataset, name: $hospital})
+CALL (h) {
+  OPTIONAL MATCH (h)-[f:ON_FORMULARY]->(d:Drug)
+  WITH d, f ORDER BY d.id
+  RETURN collect(CASE WHEN d IS NULL THEN NULL ELSE {drugId: d.id, drug: d.name, status: f.status, ptReviewInDays: f.ptReviewInDays, indications: [(d)-[:INDICATED_FOR]->(x:Indication) | x.id]} END) AS formulary
+}
+CALL (h) {
+  OPTIONAL MATCH (h)-[sp:SEES_PATIENTS_WITH]->(i:Indication)
+  WITH i, sp ORDER BY i.id
+  RETURN collect(CASE WHEN i IS NULL THEN NULL ELSE {indicationId: i.id, indication: i.name, patients: sp.annualPatients} END) AS patients
+}
+RETURN h.id AS hospitalId, h.name AS hospital, h.hospitalType AS hospitalType, h.region AS region,
+  h.beds AS beds, formulary, patients`;
+
+export const HOSPITAL_GROUPS_CYPHER = `
+MATCH (g:PrescriberGroup {dataset: $dataset})-[:PRACTICES_AT]->(h:Hospital {name: $hospital})
+MATCH (g)-[:SPECIALIZES_IN]->(sp:Specialty)
+CALL (g) {
+  OPTIONAL MATCH (g)-[hc:HAS_CONSENT]->(s:ConsentScope)
+  WITH s, hc ORDER BY s.channel
+  RETURN collect(CASE WHEN s IS NULL THEN NULL ELSE {channel: s.channel, optedIn: hc.optedIn} END) AS consents
+}
+CALL (g) {
+  OPTIONAL MATCH (g)-[e:ENGAGED_WITH]->(a:ContentAsset)
+  WITH a, e ORDER BY a.id
+  RETURN collect(CASE WHEN a IS NULL THEN NULL ELSE {assetId: a.id, asset: a.name, count: e.count, lastDaysAgo: e.lastDaysAgo} END) AS engaged
+}
+CALL (g) {
+  OPTIONAL MATCH (g)-[pr:PRESCRIBES]->(d:Drug)
+  WITH d, pr ORDER BY d.id
+  RETURN collect(CASE WHEN d IS NULL THEN NULL ELSE {drugId: d.id, drug: d.name, share: pr.trxShare} END) AS shares
+}
+RETURN g.id AS groupId, g.name AS grp, g.prescribers AS prescribers, g.decile AS decile, sp.name AS specialty,
+  consents, engaged, shares
+ORDER BY groupId`;
+
+export const ACCESS_CONTENT_CYPHER = `
+MATCH (a:ContentAsset {dataset: $dataset, access: true})-[:EXPLAINS]->(d:Drug)
+${ASSET_FACTS_CYPHER}
+RETURN d.id AS drugId, ${ASSET_FACTS_RETURN}
+ORDER BY drugId, assetId`;
+
+type HospitalRow = {
+  hospitalId: string;
+  hospital: string;
+  hospitalType: string;
+  region: string;
+  beds: number;
+  formulary: Array<{
+    drugId: string;
+    drug: string;
+    status: string;
+    ptReviewInDays: number | null;
+    indications: string[];
+  }>;
+  patients: Array<{ indicationId: string; indication: string; patients: number }>;
+};
+type HospitalGroupRow = {
+  groupId: string;
+  grp: string;
+  prescribers: number;
+  decile: number;
+  specialty: string;
+  consents: GroupConsent[];
+  engaged: Array<{ assetId: string; asset: string; count: number; lastDaysAgo: number }>;
+  shares: Array<{ drugId: string; drug: string; share: number }>;
+};
+type AccessAssetRow = AssetFacts & { drugId: string };
+
+const planHospitalEngagement = define({
+  name: "plan_hospital_engagement",
+  title: "Plan engagement with a hospital",
+  description:
+    "For a hospital or health system, plan the engagement: each Lumera drug's formulary status and days to the next Pharmacy and Therapeutics review, the patients with each labeled indication, the approved formulary value dossier for any drug that is not yet preferred (usable now or blocked, with its MLR approval), the prescriber groups with the channels they opted in to and the content they engaged with, and the next steps in order. Groups are segments, never individual people. Each with its evidence path. Read-only.",
+  input: z.object({
+    hospital: z.enum(HOSPITAL_NAMES).describe("Fictional hospital or health system name"),
+  }),
+  run: async (backend, { hospital }) => {
+    const [header] = (await rows(backend, HOSPITAL_CYPHER, { hospital }, (ix) => {
+      const node = [...ix.byId.values()].find(
+        (item) => item.label === "Hospital" && item.name === hospital,
+      );
+      if (!node) return [];
+      return [
+        {
+          hospitalId: node.id,
+          hospital: node.name,
+          hospitalType: String(node.hospitalType),
+          region: String(node.region),
+          beds: Number(node.beds),
+          formulary: ix
+            .outgoing(node.id, "ON_FORMULARY")
+            .map((edge) => ({
+              drugId: edge.to,
+              drug: ix.node(edge.to).name,
+              status: String(edge.properties?.status),
+              ptReviewInDays:
+                edge.properties?.ptReviewInDays === undefined
+                  ? null
+                  : Number(edge.properties.ptReviewInDays),
+              indications: ix.outgoing(edge.to, "INDICATED_FOR").map((labeled) => labeled.to),
+            }))
+            .sort((a, b) => byText(a.drugId, b.drugId)),
+          patients: ix
+            .outgoing(node.id, "SEES_PATIENTS_WITH")
+            .map((edge) => ({
+              indicationId: edge.to,
+              indication: ix.node(edge.to).name,
+              patients: Number(edge.properties?.annualPatients),
+            }))
+            .sort((a, b) => byText(a.indicationId, b.indicationId)),
+        },
+      ];
+    })) as HospitalRow[];
+    if (!header) return { hospital, found: false, paths: [] };
+    const groups = (await rows(backend, HOSPITAL_GROUPS_CYPHER, { hospital }, (ix) =>
+      ix
+        .incoming(header.hospitalId, "PRACTICES_AT")
+        .map((edge) => {
+          const group = ix.node(edge.from);
+          const specialty = ix.node(
+            (ix.outgoing(group.id, "SPECIALIZES_IN")[0] as { to: string }).to,
+          );
+          return {
+            groupId: group.id,
+            grp: group.name,
+            prescribers: Number(group.prescribers),
+            decile: Number(group.decile),
+            specialty: specialty.name,
+            consents: consentsOf(ix, group.id).map((consent) => ({
+              channel: consent.channel,
+              optedIn: consent.optedIn,
+            })),
+            engaged: ix
+              .outgoing(group.id, "ENGAGED_WITH")
+              .map((engaged) => ({
+                assetId: engaged.to,
+                asset: ix.node(engaged.to).name,
+                count: Number(engaged.properties?.count),
+                lastDaysAgo: Number(engaged.properties?.lastDaysAgo),
+              }))
+              .sort((a, b) => byText(a.assetId, b.assetId)),
+            shares: ix
+              .outgoing(group.id, "PRESCRIBES")
+              .map((prescribes) => ({
+                drugId: prescribes.to,
+                drug: ix.node(prescribes.to).name,
+                share: Number(prescribes.properties?.trxShare),
+              }))
+              .sort((a, b) => byText(a.drugId, b.drugId)),
+          };
+        })
+        .sort((a, b) => byText(a.groupId, b.groupId)),
+    )) as HospitalGroupRow[];
+    const dossiers = (await rows(backend, ACCESS_CONTENT_CYPHER, {}, (ix) =>
+      [...ix.byId.values()]
+        .filter((node) => node.label === "ContentAsset" && node.access === true)
+        .flatMap((asset) =>
+          ix
+            .outgoing(asset.id, "EXPLAINS")
+            .map((edge) => ({ drugId: edge.to, ...assetFacts(ix, asset.id) })),
+        )
+        .sort((a, b) => byText(a.drugId, b.drugId) || byText(a.assetId, b.assetId)),
+    )) as AccessAssetRow[];
+    const patientsFor = (entry: HospitalRow["formulary"][number]) =>
+      header.patients
+        .filter((patients) => entry.indications.includes(patients.indicationId))
+        .reduce((sum, patients) => sum + patients.patients, 0);
+    const access = header.formulary.map((entry) => {
+      const dossier = dossiers.find((asset) => asset.drugId === entry.drugId);
+      const needsAccess = FORMULARY_ACCESS[entry.status as FormularyStatus] <= 0.5;
+      const blockers = dossier
+        ? releaseBlockers(dossier)
+        : ["No formulary value dossier exists for this drug"];
+      return {
+        drug: entry.drug,
+        status: entry.status,
+        ptReviewInDays: entry.ptReviewInDays,
+        patientsAtStake: needsAccess ? patientsFor(entry) : 0,
+        needsAccess,
+        dossier: dossier
+          ? {
+              asset: dossier.asset,
+              approval: approvalSummary(dossier),
+              usable: blockers.length === 0,
+              blockers,
+            }
+          : null,
+        dossierFacts: dossier ?? null,
+        blockers,
+      };
+    });
+    const nextSteps = access
+      .filter((entry) => entry.needsAccess)
+      .sort((a, b) => b.patientsAtStake - a.patientsAtStake)
+      .map((entry) =>
+        !entry.dossier || !entry.dossier.usable
+          ? `${entry.drug}: ${entry.status.toLowerCase()}. Get the value dossier through MLR first (${entry.blockers.join("; ")})${entry.ptReviewInDays === null ? "" : `, before the P&T review in ${entry.ptReviewInDays} days`}`
+          : `${entry.drug}: ${entry.status.toLowerCase()}. Submit ${entry.dossier.asset}${entry.ptReviewInDays === null ? " with a formulary addition request" : ` before the P&T review in ${entry.ptReviewInDays} days`}`,
+      );
+    const hospitalNode = { id: header.hospitalId, label: "Hospital", name: header.hospital };
+    const paths: EvidencePath[] = [
+      ...access.slice(0, 3).map((entry) => {
+        const drugNode = {
+          id: header.formulary.find((item) => item.drug === entry.drug)?.drugId ?? "",
+          label: "Drug",
+          name: entry.drug,
+        };
+        return {
+          nodes: [hospitalNode, drugNode],
+          relationships: [{ type: "ON_FORMULARY", from: hospitalNode.id, to: drugNode.id }],
+        };
+      }),
+      ...groups.slice(0, 3).map((group) => ({
+        nodes: [{ id: group.groupId, label: "PrescriberGroup", name: group.grp }, hospitalNode],
+        relationships: [{ type: "PRACTICES_AT", from: group.groupId, to: hospitalNode.id }],
+      })),
+      ...access.flatMap((entry) =>
+        entry.dossierFacts && entry.needsAccess ? assetPaths(entry.dossierFacts).slice(0, 1) : [],
+      ),
+    ];
+    return {
+      hospital: header.hospital,
+      hospitalType: header.hospitalType,
+      region: header.region,
+      beds: header.beds,
+      found: true,
+      patients: header.patients.map((entry) => ({
+        indication: entry.indication,
+        annualPatients: entry.patients,
+      })),
+      access: access.map(({ dossierFacts: _facts, ...entry }) => entry),
+      prescriberGroups: groups.map((group) => ({
+        group: group.grp,
+        specialty: group.specialty,
+        prescribers: group.prescribers,
+        decile: group.decile,
+        reachable: group.consents.filter((consent) => consent.optedIn > 0),
+        lumeraShare: group.shares.map((share) => ({ drug: share.drug, share: share.share })),
+        engagedWith: group.engaged.map((entry) => ({
+          asset: entry.asset,
+          count: entry.count,
+          lastDaysAgo: entry.lastDaysAgo,
+        })),
+      })),
+      nextSteps,
+      paths: paths.slice(0, MAX_PATHS),
+    };
+  },
+});
+
 export const KNOWLEDGE_GRAPH_TOOL_SPECS = [
   getGraphOverview,
   explainBuyerGroup,
@@ -2113,6 +2739,9 @@ export const KNOWLEDGE_GRAPH_TOOL_SPECS = [
   matchNewsToApprovedContent,
   prepareDealRelease,
   buildAumAccountPlan,
+  buildHcpTargetList,
+  checkClinicalClaims,
+  planHospitalEngagement,
 ] as const;
 
 export { pathNode };

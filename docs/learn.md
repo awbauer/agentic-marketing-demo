@@ -341,6 +341,8 @@ flowchart TB
 - **In a flow:** the restaurant push campaign calls `find_similar_past_pushes` to learn what worked before in the same weather and daypart, then passes that to the Salesforce content tool.
 - **Graph explorer:** the Graph page's brand filter narrows the canvas to one brand's own nodes: a node counts as a brand's own when it's at least as close to that brand as to any other, walking loaded relationships without crossing through another brand. That's how Coastline Kitchen keeps its campaigns, locations, and shared channels and consent, without pulling in Northstar's B2B accounts through the parent brand.
 
+**A third brand: Lumera Therapeutics.** Seven more node types (Drug, Indication, ClinicalTrial, ClinicalClaim, Hospital, Specialty, PrescriberGroup) and twelve relationship types model pharmaceutical promotion in the same graph. It reuses ContentAsset, Approval, Disclosure, BrandRule and ConsentScope, so the approval and consent checks you saw for Harborstone work the same way. The Graph view has a Lumera group and two guided tours. The Cypher for these tools has not been run against a live Neo4j database here; the fixture backend returns the rows the tests check.
+
 **Try it**
 
 - Ask a graph question: “Who should be in the buyer group for Acme Outfitters, and why?”
@@ -493,6 +495,8 @@ Four properties make it trustworthy:
 2. **Open versus available.** Records the connected systems make available are listed separately as a catalog, so the model never acts on a record the chat hasn't opened.
 3. **Approvals come to you.** When something needs your approval, an **action card** appears in the chat: saving the brief in Marketing Cloud, then creating its campaign, or requesting a review after a readiness check. Accepting it prepares the confirmation card, with Salesforce's permission check.
 4. **Writes act on what you see.** Saving asks the Campaign Creation agent to save exactly the focus version on screen. The confirmation records that version in its request hash, and the Brief, Campaign, and flow appear in Records as Salesforce read them back.
+
+**Life-sciences cards.** The three Lumera tools add working-set cards: a target list, a claims check and a hospital plan, each with the summary line the card shows.
 
 **Try it**
 
@@ -816,6 +820,8 @@ Not every decision should be left to the model. Each turn passes through two det
 
 After a plan finishes, the model gets **no tools** and must write the answer.
 
+**Life-sciences routes.** A request about a target list or prescriber groups goes to `build_hcp_target_list`; clinical claims, off-label use, a boxed warning or a Lumera drug beside `claims` go to `check_clinical_claims`; a named hospital with formulary, P&T, access or a plan goes to `plan_hospital_engagement`. The model is told that only supported, on-label, MLR-approved claims can be used and that groups are never people.
+
 **Try it**
 
 - See each turn's interpretation (opens the history view)
@@ -1097,6 +1103,8 @@ Latency and tokens are recorded too, and the Evaluations view shows each turn's 
 
 `pnpm eval` runs the routing set through the production policy and intent routers without a model, on every verify. Read-style Salesforce tools are fixtures in the live run, so the scores measure orchestration, not Salesforce agent quality. A held-out set of paraphrases guards the router against overfitting. The first published run found a real routing bug: any prompt mentioning "campaign" forced the summary tool.
 
+**Life-sciences scenarios.** The demo scenarios include three for Lumera Therapeutics (a target list, a claims check, a hospital plan). Their rubrics check that the answer cites the trial and MLR approval IDs the tools returned, blocks unsupported and off-label claims instead of rewording them, and names groups rather than clinicians.
+
 **Try it**
 
 - Open evaluations (opens the evaluations view)
@@ -1262,6 +1270,12 @@ The graph and prompts carry the manager's name only, never contact details. Noth
 - **Acquisition announcement, released on time.** `prepare_deal_release` orders the embargoed package through **RELEASED_WITH** → Deal and checks each piece's audience through **ADDRESSED_TO** → Segment → **HAS_CONSENT**. Advisors get their FAQ first, then the press release, then client letters. The acquired firm's clients get service notices under their client agreement, never marketing, until they opt in, so an SMS that also failed its disclosure check is blocked for both reasons.
 - **Account plan to grow assets under management.** `build_aum_account_plan` walks Client → **HAS_SIGNAL** → Signal → **SUGGESTS** → Product for products the client doesn't hold, sizes each play from the estimated assets held elsewhere, counts how many clients of the same type hold it, and finds its approved content through Product ← **EXPLAINS** ← ContentAsset. Each contact comes with the channel that has approved content they consented to, so the 30/60/90-day sequence never sends content on a channel it isn't approved for. "Activate the plan" drafts a Marketing Cloud brief from it.
 
+**Life sciences: Lumera Therapeutics.** A third brand under Northstar shows pharmaceutical promotion, where a claim is only as good as the trial, the label and the MLR approval behind it. Everything is fictional, including the drugs (Cardivance for heart failure, Glucora for type 2 diabetes, Neurelva for chronic migraine), the trials and their results.
+- **Targets.** `build_hcp_target_list` ranks hospitals and prescriber groups for a drug by labeled-indication patients × (1 − Lumera's share) × a formulary access weight × decile. A drug that is not on formulary, or is under P&T review, leads with the approved value dossier before any detailing. Groups carry opted-in counts per channel (email, portal, rep visit), never people.
+- **Claims.** `check_clinical_claims` walks Drug ← **CLAIMS_ABOUT** ← ClinicalClaim ← **SUPPORTS** ← ClinicalTrial, then compares **INDICATED_FOR** (on the label) with **INVESTIGATED_FOR** (not). Content that **CARRIES** a claim is usable only with a current MLR approval, the safety information, and the boxed warning for Cardivance. The “superior to every ARB” claim has no trial; the HFpEF claim is off label and its trial has no results; an expired approval blocks a supported Glucora claim.
+- **Hospitals.** `plan_hospital_engagement` reads a hospital's **ON_FORMULARY** status and days to its P&T review for each drug, the patients at stake, whether the value dossier is usable or still in MLR, and the prescriber groups with their consent and engagement, then orders the next steps.
+- **In the Architecture view.** Lumera's claims, evidence, modules and plan run through the same lifecycle as Harborstone's: the authoring agent refuses a claim whose approval is draft or rejected, the farm flags superiority language, and a module can't be approved while its study report has lapsed.
+
 **Try it**
 
 - Plan buyer-group outreach: “Plan outreach to Acme Outfitters' buyer group for the next month”
@@ -1345,6 +1359,8 @@ Most marketing tools copy things forward: a plan becomes a brief, a brief become
 **Channels.** An approval card is composed once, with brand rules (accent, disclosure label, rule version) applied, and then rendered four ways: React, an **Adaptive Card** for Teams and Outlook, **data for a Lightning Web Component**, and an **MCP Apps** resource for MCP clients such as Claude. Change one brand rule and all four renderings change. The preview renders these payloads on screen; nothing is sent to Teams, Outlook or Copilot.
 
 **Where the data lives.** Seed objects for Harborstone Wealth and Coastline Kitchen ship in code. What you create (a plan, a module, a gap, a new claim version) and every approval state go to D1, scoped to you, and expire with the 24-hour audit. They are not in the Neo4j graph; making them graph nodes is a later step.
+
+The seed has three brands: Harborstone Wealth, Coastline Kitchen and Lumera Therapeutics. The approval card's brand rules for Lumera label its disclosures as safety information.
 
 **Try it**
 
@@ -1508,6 +1524,8 @@ The lifecycle runs **Plan → Audience → Brief → Create → Substantiate →
 **Nothing is overwritten.** Regenerating an object that already exists is a no-op if the content matches, and a conflict if it doesn't, so approved text can't change without a new review; a superseded claim gets a new version instead. A decision is recorded only if the state really changed, so two reviewers acting at once can't both succeed, and an accepted optimization proposal is spent: it isn't offered again for the same evidence.
 
 **Salesforce stays the system of record.** The lifecycle adds no new Salesforce writes. The state machine's approval is the workbench's own; the confirmed review-task write remains how a decision reaches Salesforce.
+
+**A regulated brand beyond finance.** Lumera Therapeutics' content runs through the same stages. Its claims need a trial-backed study report, the safety information (and a boxed warning for Cardivance) is a required disclosure the authoring agent adds, and the farm treats superiority or absolute-safety wording as a blocking finding.
 
 **Try it**
 
@@ -1727,7 +1745,7 @@ Who decides whether you may create a campaign from the workbench?
 
 ## Reference: every concept in the code
 
-### Tools (40)
+### Tools (43)
 
 | Name | What it is | Taught in |
 | --- | --- | --- |
@@ -1767,6 +1785,9 @@ Who decides whether you may create a campaign from the workbench?
 | `match_news_to_approved_content` | Harborstone's pre-approved content for a market event: what's ready to send, what's blocked and why, reach by consent, and past response speed. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `prepare_deal_release` | The embargoed acquisition package in release order, with each piece's audience, consent basis, approval, and blockers. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `build_aum_account_plan` | A Harborstone client's signals, ranked plays with peer adoption and approved content, and contacts with consented channels. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `build_hcp_target_list` | Lumera's hospitals and prescriber groups ranked for a drug by patients, formulary access, share, decile and opted-in channels, with the first move at each. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `check_clinical_claims` | Each clinical claim for a drug: the trial behind it, whether its indication is on the label, and the MLR-approved content that carries it, with blockers. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `plan_hospital_engagement` | A hospital's formulary status and P&T timing for each Lumera drug, the value dossier to send (usable or blocked), its prescriber groups and consent, and ordered next steps. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `trace_content_lineage` | Traces a campaign's content back to its brief and brand-rule results. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
 | `recall_decisions` | Recalls remembered drafts and decisions about a subject in this workspace, dated and sourced. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
 | `recall_recent_work` | Lists this workspace's most recent remembered drafts and decisions. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
@@ -1782,7 +1803,7 @@ Who decides whether you may create a campaign from the workbench?
 | `attach-generated-image` | Attach an approved generated image to the open campaign. Needs a permission check and your confirmation. | [3.9 Governance: permissions, confirmations, and kill switches](#39-governance-permissions-confirmations-and-kill-switches) |
 | `create-inventory-case` | Open a Salesforce case for a store manager from an inventory check's low items. Needs a permission check and your confirmation. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 
-### Graph nodes (34)
+### Graph nodes (41)
 
 | Name | What it is | Taught in |
 | --- | --- | --- |
@@ -1815,13 +1836,20 @@ Who decides whether you may create a campaign from the workbench?
 | `Advisor` | The Harborstone advisor who covers a client. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `Product` | A Harborstone product or service a client can hold. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `Signal` | Something the relationship team noticed about a client. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `Drug` | A Lumera Therapeutics drug, with its class and whether it carries a boxed warning. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `Indication` | A condition a drug is labeled for, or only investigated in. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `ClinicalTrial` | A trial with its phase, size, status, endpoint and result. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `ClinicalClaim` | A claim about a drug's effect or safety that promotional content may carry. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `Hospital` | A fictional hospital or health system, with its formulary and patient volumes. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `Specialty` | A prescriber specialty, such as cardiology, and the conditions it treats. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `PrescriberGroup` | A segment of prescribers at one hospital in one specialty; a count and a decile, never a person. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `Workspace` | The workspace that owns a memory. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
 | `MemoryEvent` | The server event that created a memory, with a hashed actor. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
 | `Draft` | One remembered version of a focus draft. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
 | `Decision` | A confirmed save, review, or image attachment. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
 | `RecordRef` | The Salesforce record a decision was recorded in. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
 
-### Graph relationships (53)
+### Graph relationships (65)
 
 | Name | What it is | Taught in |
 | --- | --- | --- |
@@ -1866,6 +1894,18 @@ Who decides whether you may create a campaign from the workbench?
 | `SUGGESTS` | A signal pointing to a product, with the share it might capture. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `OFFERS` | A brand offering a product. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `ADVISES_FOR` | An advisor at a brand. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `INDICATED_FOR` | A drug and a condition it is labeled for. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `INVESTIGATED_FOR` | A drug and a condition it is only being studied in, so not on the label. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `STUDIED_IN` | A drug and a trial that studied it. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `SUPPORTS` | A trial and a clinical claim its results support. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `CLAIMS_ABOUT` | A clinical claim and the drug it is about. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `CARRIES` | A content asset and a clinical claim it makes. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `TREATS` | A specialty and a condition it treats. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `SPECIALIZES_IN` | A prescriber group and its specialty. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `PRACTICES_AT` | A prescriber group and the hospital it practices at. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `ON_FORMULARY` | A hospital and a drug, with its formulary status and days to the next P&T review. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `SEES_PATIENTS_WITH` | A hospital and a condition, with its annual patient count. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
+| `PRESCRIBES` | A prescriber group and a drug, with Lumera's share of the class. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `USED` | A push send that used a content asset. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
 | `SENT_TO` | A push send delivered to a segment. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
 | `SENT_UNDER` | A push send made under a consent scope. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |

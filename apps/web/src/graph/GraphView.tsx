@@ -88,6 +88,24 @@ export const TOURS: Tour[] = [
     expand: true,
   },
   {
+    id: "pharma-claims",
+    title: "Which clinical claims can Cardivance use?",
+    question: "Which Cardivance claims are supported, on label, and approved?",
+    explain:
+      "Lumera Therapeutics is a brand under Northstar. A clinical claim is about a drug and an indication. A completed trial must SUPPORT it, the drug must be INDICATED_FOR that indication (not only INVESTIGATED_FOR), and the content that CARRIES it needs a current MLR approval and its required safety information.",
+    target: () => "drug-cardivance",
+    expand: true,
+  },
+  {
+    id: "pharma-targets",
+    title: "Where to engage first",
+    question: "Which hospitals and prescriber groups should Lumera reach for Cardivance?",
+    explain:
+      "A prescriber group practices at a hospital, which sees patients with an indication and has a formulary status for each drug. The group's share, decile and opted-in channels decide where to start, and a drug that is not on formulary needs access content before any detailing.",
+    target: () => "hospital-st-brigid",
+    expand: true,
+  },
+  {
     id: "brand",
     title: "A failed brand check",
     question: "Which content failed a brand rule?",
@@ -258,9 +276,9 @@ export function GraphView({ onClose }: { onClose: () => void }) {
           <p className="kicker">Knowledge graph</p>
           <h2 id="graph-title">Graph explorer</h2>
           <p className="graph-lede">
-            The fictional Northstar, Coastline Kitchen, and Harborstone Wealth graph that the
-            orchestrator's graph tools read. Pick a tour, search, or click any node to see how it
-            connects.
+            The fictional Northstar, Coastline Kitchen, Harborstone Wealth, and Lumera Therapeutics
+            graph that the orchestrator's graph tools read. Pick a tour, search, or click any node
+            to see how it connects.
           </p>
         </div>
         <button type="button" className="text-button" onClick={onClose}>

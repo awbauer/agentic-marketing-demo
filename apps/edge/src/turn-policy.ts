@@ -28,6 +28,9 @@ export function orchestratorSystemPrompt(workspace: string, toolPlan?: readonly 
   const fedPlan = toolPlan?.some((name) => name.endsWith("get_fed_announcements"));
   const dealPlan = toolPlan?.some((name) => name.endsWith("prepare_deal_release"));
   const accountPlan = toolPlan?.some((name) => name.endsWith("build_aum_account_plan"));
+  const targetPlan = toolPlan?.some((name) => name.endsWith("build_hcp_target_list"));
+  const claimPlan = toolPlan?.some((name) => name.endsWith("check_clinical_claims"));
+  const hospitalPlan = toolPlan?.some((name) => name.endsWith("plan_hospital_engagement"));
   const graphPlan = toolPlan?.some((name) => name.startsWith("graph_"));
   const memoryPlan = toolPlan?.some((name) =>
     /_(?:recall_decisions|recall_recent_work)$/.test(name),
@@ -85,6 +88,26 @@ export function orchestratorSystemPrompt(workspace: string, toolPlan?: readonly 
     ...(accountPlan
       ? [
           "For this account plan, read the client's plan from the knowledge graph. Present: a one-line relationship snapshot (AUM with Harborstone, estimated assets held elsewhere, wallet share, advisor); the signals, newest first; the plays ranked by estimated AUM opportunity, each with why, peer adoption, and the approved content to use with its approval ID (and any blocked content and why); the contacts in priority order with the channel to use for each (their channelForPlayContent), naming anyone with no consented channel or no approved content for their channels, whom the advisor contacts directly instead; and a 30/60/90-day activation sequence in which every touch sends an approved asset on a channel it is approved for and the contact consented to. Amounts are fictional estimates in $ millions, never promises. Offer to activate the plan as a Marketing Cloud campaign. Never say anything was sent, logged, or changed.",
+        ]
+      : []),
+    ...(targetPlan || claimPlan || hospitalPlan
+      ? [
+          "Lumera Therapeutics is a fictional pharmaceutical brand under Northstar. Its promotion is regulated: only claims a completed trial supports, for an indication on the approved label, carried by content with a current medical-legal-regulatory (MLR) approval and its required safety information, can be used. Never write new clinical claims, rewrite approved copy, suggest off-label use, or compare with other drugs unless the tool shows head-to-head evidence. Quote approval IDs and trial names exactly as the tools return them. Audiences are prescriber groups at hospitals; never name individual clinicians or patients.",
+        ]
+      : []),
+    ...(targetPlan
+      ? [
+          "For this target list, read it from the knowledge graph and present the ranked hospitals and prescriber groups: the patients with the labeled indication, formulary status and days to the next P&T review, Lumera's share, the decile, the opted-in channels, and the play for each. Say that a drug that is not on formulary needs the approved value dossier before detailing. State the scoring formula the tool returns. Offer to plan engagement with the top hospital. Never say anything was sent or scheduled.",
+        ]
+      : []),
+    ...(claimPlan
+      ? [
+          "For this claims check, read it from the knowledge graph and present each claim with its verdict: the trial and result that support it (or that none does), whether the indication is on the approved label, and the approved content that carries it with its MLR approval, expiry and required safety information (including any boxed warning). Say plainly which claims are blocked and why, and that blocked claims must not appear in promotional content until a trial and the label support them. Never approve, rewrite or soften a claim yourself.",
+        ]
+      : []),
+    ...(hospitalPlan
+      ? [
+          "For this hospital plan, read it from the knowledge graph and present: the formulary status of each Lumera drug and days to the next P&T review; the patients at stake; the formulary value dossier for each drug that is not yet preferred, usable now or blocked and why; the prescriber groups with the channels they opted in to and what they engaged with; and the next steps in the order the tool returns. Never say a dossier was submitted.",
         ]
       : []),
     ...(refinePlan
@@ -193,7 +216,41 @@ export function isInventoryCheck(prompt: string) {
 const HARBORSTONE_CLIENTS =
   /\b(?:cedar valley|bayshore arts|redwood coast|mission hills|pacific dental|summit ridge|coastal freight|golden state veterinary|marin family|sierra crest|lakehouse capital|point reyes)\b/i;
 
+/** Lumera Therapeutics' fictional drugs and hospitals, for routing life-sciences requests. */
+const LUMERA_DRUGS = /\b(?:cardivance|glucora|neurelva|lumera)\b/i;
+const LUMERA_HOSPITALS =
+  /\b(?:st\.? brigid|lakeshore health|mesa verde|cascade university|pinecrest|gulf coast heart|heartland medical|harbor view)\b/i;
+
 const TOOL_PLANS: ReadonlyArray<readonly [readonly string[], (prompt: string) => boolean]> = [
+  // Life sciences: a hospital's formulary status, its P&T review, and the dossier to send.
+  [
+    ["plan_hospital_engagement"],
+    (p) =>
+      LUMERA_HOSPITALS.test(p) &&
+      /\b(?:engage\w*|plan|formulary|p&t|pharmacy and therapeutics|access|dossier|next steps?|approach)\b/i.test(
+        p,
+      ),
+  ],
+  // Life sciences: are a drug's clinical claims supported, on label, and approved for use?
+  [
+    ["check_clinical_claims"],
+    (p) =>
+      /\b(?:clinical claims?|promotional claims?|claim support|off-?label|on-?label|boxed warning|isi|important safety information|mlr)\b/i.test(
+        p,
+      ) ||
+      (LUMERA_DRUGS.test(p) &&
+        /\b(?:claims?|supported|substantiat\w*|approved content|usable)\b/i.test(p)),
+  ],
+  // Life sciences: which hospitals and prescriber groups to reach first for a drug.
+  [
+    ["build_hcp_target_list"],
+    (p) =>
+      /\b(?:target list|hcp targets?|target (?:hospitals|accounts|prescribers)|prescriber groups?|call plan|where to (?:detail|engage|focus))\b/i.test(
+        p,
+      ) ||
+      (LUMERA_DRUGS.test(p) &&
+        /\b(?:target\w*|prioriti[sz]\w*|hospitals?|prescribers?|hcps?|detail)\b/i.test(p)),
+  ],
   // Financial services: an account plan to grow a Harborstone client's assets under management.
   [
     ["build_aum_account_plan"],

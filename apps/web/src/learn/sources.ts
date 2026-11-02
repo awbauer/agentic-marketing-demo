@@ -106,6 +106,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "apps/web/src/usecases/",
     "apps/edge/src/campaign-context/store-inventory.ts",
     "packages/knowledge-graph/src/harborstone.ts",
+    "packages/knowledge-graph/src/pharma.ts",
     "apps/edge/src/inventory-risk.ts",
     "salesforce/force-app/main/default/classes/NorthstarCreateInventoryCase.cls",
   ],

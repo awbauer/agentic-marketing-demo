@@ -8,6 +8,8 @@ import {
   buildDataset,
   ALL_CAMPAIGNS,
   CLIENT_NAMES,
+  DRUG_IDS,
+  HOSPITAL_NAMES,
   createMemoryStore,
   forgetMemory,
   KNOWLEDGE_GRAPH_TOOL_SPECS,
@@ -62,6 +64,9 @@ const cases = {
   ],
   prepare_deal_release: [{ deal: "deal-bayview" }],
   build_aum_account_plan: CLIENT_NAMES.map((client) => ({ client })),
+  build_hcp_target_list: DRUG_IDS.map((drug) => ({ drug, limit: 16 })),
+  check_clinical_claims: DRUG_IDS.map((drug) => ({ drug })),
+  plan_hospital_engagement: HOSPITAL_NAMES.map((hospital) => ({ hospital })),
   map_weather_demand: [
     { location: "sacramento", conditions: ["heat"] },
     { location: "san-francisco", conditions: ["fog", "rain"] },

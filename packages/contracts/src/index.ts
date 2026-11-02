@@ -443,6 +443,9 @@ export const KNOWLEDGE_GRAPH_TOOLS = Object.freeze([
   "match_news_to_approved_content",
   "prepare_deal_release",
   "build_aum_account_plan",
+  "build_hcp_target_list",
+  "check_clinical_claims",
+  "plan_hospital_engagement",
 ] as const);
 
 /** Read-only recall tools over the workspace's long-term memory in the graph. See ADR-007. */
