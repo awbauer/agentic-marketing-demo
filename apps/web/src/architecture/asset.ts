@@ -5,8 +5,21 @@ import type { FlowEvent, FlowToolStep } from "@northstar/architecture";
 // found, and what never made it in (topics refused for want of an approved claim, and wording the
 // service rejected). Nothing here is fetched; it is what the agents' tool calls returned.
 
-export type BlockRole = "headline" | "framing" | "claim" | "disclosure";
-export type BlockStatus = "kept" | "rejected" | "refused";
+export type BlockRole = "headline" | "framing" | "claim" | "disclosure" | "image";
+export type BlockStatus = "kept" | "rejected" | "refused" | "passed";
+/** An image from the brand's asset library, as the service picked it or passed it over. */
+export type AssetImage = {
+  assetId: string;
+  source: string;
+  sourceId: string;
+  title: string;
+  kind?: string;
+  alt?: string;
+  placement?: "header" | "banner" | "inline";
+  approvalId?: string;
+  rightsUntil?: string;
+  why?: string;
+};
 export type AssetFinding = { probe: string; severity: string; message: string; byAgent?: boolean };
 
 export type AssetBlock = {
@@ -23,6 +36,8 @@ export type AssetBlock = {
   by: { agent: string; tool: string; policyId?: string };
   /** For a channel headline, which channel it was for. */
   channel?: string;
+  /** For an image: what the library says about it. */
+  image?: AssetImage;
   findings: AssetFinding[];
 };
 
@@ -32,6 +47,8 @@ export type AssetVersion = {
   title: string;
   state: string;
   blocks: AssetBlock[];
+  /** Images the service picked from the brand's library, by placement. */
+  images: AssetBlock[];
   /** Channel versions only: characters used, the channel's limit, and whether it fits. */
   length?: number;
   limit?: number;
@@ -60,6 +77,7 @@ type ModuleView = {
     channel: string;
     topics?: string[];
     blocks: Array<{ text: string; claimUrn?: string; disclosureUrn?: string }>;
+    assets?: AssetImage[];
   };
 };
 type By = AssetBlock["by"];
@@ -113,12 +131,24 @@ function versionOf(view: ModuleView, by: By): AssetVersion {
       };
     }),
   ];
+  const images = (view.attributes.assets ?? []).map(
+    (image): AssetBlock => ({
+      id: `${view.urn}#image:${image.assetId}`,
+      role: "image",
+      status: "kept",
+      text: image.title,
+      image,
+      by,
+      findings: [],
+    }),
+  );
   return {
     urn: view.urn,
     channel: view.attributes.channel,
     title: view.title,
     state: view.state,
     blocks,
+    images,
     blockers: [],
   };
 }
@@ -214,6 +244,17 @@ export function assetOf(events: readonly FlowEvent[]): Asset {
         asset.variants = [];
         asset.readiness = undefined;
       }
+      for (const item of (output.assetsPassed as Array<AssetImage & { reason: string }>) ?? [])
+        reject({
+          id: `${callId}:image:${item.assetId}`,
+          role: "image",
+          status: "passed",
+          text: item.title,
+          reason: item.reason,
+          image: item,
+          by,
+          findings: [],
+        });
       for (const item of (output.refused as Array<{ topic: string; reason: string }>) ?? [])
         reject({
           id: `${callId}:refused:${item.topic}`,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AssetPick } from "./assets.ts";
 
 export const BRANDS = ["Harborstone Wealth", "Coastline Kitchen", "Lumera Therapeutics"] as const;
 export type Brand = (typeof BRANDS)[number];
@@ -96,6 +97,8 @@ export type ModuleAttributes = {
   requiredDisclosures: string[];
   variantOf?: string;
   briefUrn?: string;
+  /** Images the service suggested from the brand's asset library. */
+  assets?: AssetPick[];
 };
 export type ClaimAttributes = { text: string; topic: string };
 export type EvidenceAttributes = {

@@ -146,6 +146,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   lifecycle: [
     "packages/architecture/src/agents.ts",
     "packages/architecture/src/language.ts",
+    "packages/architecture/src/assets.ts",
     "packages/architecture/src/farm.ts",
     "packages/architecture/src/state-machine.ts",
     "apps/edge/src/architecture/ops.ts",

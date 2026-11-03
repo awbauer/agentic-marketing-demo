@@ -2,6 +2,7 @@
 // governed objects, enforces the rules (cite or refuse, required disclosures, whole claims), and
 // returns what it would create. The agents decide what to ask for and write their own words; the
 // edge runs them on real models and persists what these services return.
+import { assetsForChannel, suggestAssets } from "./assets.ts";
 import { framingProblems, framingShape, headlineShape } from "./language.ts";
 import { CALENDAR, CHANNEL_BASELINE } from "./seed.ts";
 import {
@@ -662,7 +663,7 @@ export function authorModule(
       }),
     );
   }
-  if (cited.length === 0) return { module: undefined, gaps, refused, cited };
+  if (cited.length === 0) return { module: undefined, gaps, refused, cited, assetsPassed: [] };
   // The agent's own words may not restate a claim: the claim's exact text is inserted below.
   const restated = [request.headline ?? "", ...framing]
     .filter(Boolean)
@@ -680,6 +681,14 @@ export function authorModule(
     .map((id) => getObject(world, urnOf("disclosure", id)))
     .filter((item): item is GovernedObject => Boolean(item));
   const headline = request.headline ?? resolved.wave?.theme ?? "Untitled";
+  // Images are picked like claims: by the service, from what is approved and in rights.
+  const images = suggestAssets({
+    brand: brief.brand,
+    channel,
+    theme: resolved.wave?.theme ?? headline,
+    topics: cited.map((item) => item.topic),
+    sendOn: resolved.wave?.sendOn ?? day(world),
+  });
   const module = created(world, actor, {
     id: `${slug(brief.urn.split(":").at(-1) ?? "brief")}-${channel}-${slug(cited.map((item) => item.topic).join("-"))}${request.headline || framing.length ? `-${wordsTag(request.headline, ...framing)}` : ""}`,
     kind: "module",
@@ -702,9 +711,10 @@ export function authorModule(
           disclosureUrn: item.urn,
         })),
       ],
+      assets: images.picked,
     } satisfies ModuleAttributes,
   });
-  return { module, gaps, refused, cited };
+  return { module, gaps, refused, cited, assetsPassed: images.passed };
 }
 
 // Atomization ---------------------------------------------------------------------------------
@@ -761,6 +771,7 @@ export function atomizeModule(
           headline: headlines[channel] ?? source.headline,
           channel,
           blocks,
+          assets: assetsForChannel(source.assets ?? [], channel),
           variantOf: master.urn,
         } satisfies ModuleAttributes,
       });

@@ -1416,6 +1416,75 @@
 .asset-block.flagged {
   background: #fff6ec;
 }
+/* Images from the brand's asset library: a placeholder in the brand's color where the file goes. */
+.asset-image {
+  display: grid;
+  gap: 0;
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  background: none;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  animation: asset-arrive 0.35s ease-out;
+}
+.asset-image:hover,
+.asset-image:focus-visible {
+  border-color: var(--asset-accent, var(--forest));
+  outline: none;
+}
+.asset-image.selected {
+  border-color: var(--forest);
+  box-shadow: 0 0 0 2px rgb(23 61 49 / 15%);
+}
+.asset-image-frame {
+  display: grid;
+  place-items: center;
+  min-height: 92px;
+  color: rgb(255 255 255 / 85%);
+  background: linear-gradient(
+    135deg,
+    var(--asset-accent, var(--forest)),
+    color-mix(in srgb, var(--asset-accent, var(--forest)) 35%, white)
+  );
+}
+.asset-image.placement-inline .asset-image-frame {
+  min-height: 64px;
+}
+.asset-image-caption {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #3d4741;
+  background: #fff;
+}
+.asset-image-caption .asset-block-tag {
+  margin: 0;
+}
+.asset-image.placement-header {
+  justify-self: start;
+  width: auto;
+  border-style: dashed;
+}
+.asset-image-logo {
+  display: block;
+  padding: 3px 8px;
+  color: var(--asset-accent, var(--forest));
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.asset-phone-card .asset-image {
+  margin: 6px 0;
+}
+.asset-phone-card .asset-image-frame {
+  min-height: 70px;
+}
 .asset-block-tag {
   display: flex;
   align-items: center;
@@ -1487,6 +1556,14 @@ span.asset-block + span.asset-block {
 .asset-block.status-rejected {
   border-left-color: #b4412f;
   background: #fff;
+}
+/* An image the service passed over: not a violation, so muted rather than red. */
+.asset-block.status-passed {
+  border-left-color: #a8aea9;
+  color: var(--muted);
+}
+.asset-block.status-passed .asset-block-text {
+  text-decoration: line-through;
 }
 .asset-block.status-refused .asset-block-text,
 .asset-block.status-rejected .asset-block-text {
