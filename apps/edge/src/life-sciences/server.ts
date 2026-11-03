@@ -1,6 +1,6 @@
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server";
-import { DRUG_IDS, HOSPITAL_NAMES } from "@northstar/knowledge-graph";
+import { DRUG_IDS, HOSPITAL_NAMES } from "../../../../packages/knowledge-graph/src/index.ts";
 import { jsonSchema, type ToolSet, tool } from "ai";
 import { z } from "zod";
 import {

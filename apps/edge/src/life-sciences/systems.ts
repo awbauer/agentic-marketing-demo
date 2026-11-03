@@ -15,7 +15,7 @@ import {
   PHARMA_ASSETS,
   PRESCRIBER_GROUPS,
   TRIALS,
-} from "@northstar/knowledge-graph";
+} from "../../../../packages/knowledge-graph/src/index.ts";
 
 export const MOCK_NOTE =
   "Mocked system of record for the demo: invented data keyed to the same drugs, claims, MLR approvals and hospitals as the knowledge graph.";

@@ -27,6 +27,10 @@ import {
   EXTERNAL_SERVICES_TOOL_PREFIX,
 } from "../apps/edge/src/external-services/server.ts";
 import { applyFocusUpdate } from "../apps/edge/src/focus.ts";
+import {
+  connectLifeSciencesTools,
+  LIFE_SCIENCES_TOOL_PREFIX,
+} from "../apps/edge/src/life-sciences/server.ts";
 import { forcedToolCallMiddleware } from "../apps/edge/src/forced-tool-middleware.ts";
 import {
   connectKnowledgeGraphTools,
@@ -271,6 +275,8 @@ function shortName(name) {
     return name.slice(CAMPAIGN_CONTEXT_TOOL_PREFIX.length);
   if (name.startsWith(EXTERNAL_SERVICES_TOOL_PREFIX))
     return name.slice(EXTERNAL_SERVICES_TOOL_PREFIX.length);
+  if (name.startsWith(LIFE_SCIENCES_TOOL_PREFIX))
+    return name.slice(LIFE_SCIENCES_TOOL_PREFIX.length);
   if (name.startsWith(KNOWLEDGE_GRAPH_TOOL_PREFIX))
     return name.slice(KNOWLEDGE_GRAPH_TOOL_PREFIX.length);
   return name;
@@ -649,10 +655,13 @@ if (graphBackend.kind === "fixture") await seedEvalMemory(graphBackend, memoryCo
 const graph = await connectKnowledgeGraphTools(graphBackend, memoryContext);
 // Nager.Date holidays and National Weather Service alerts are live public APIs.
 const external = await connectExternalServiceTools();
+// The pharmaceutical systems of record are mocked, so they need no credentials.
+const lifeSciences = await connectLifeSciencesTools();
 const tools = {
   ...fixtureTools(simulator),
   ...campaignContext.tools,
   ...external.tools,
+  ...lifeSciences.tools,
   ...graph.tools,
 };
 
@@ -707,6 +716,7 @@ writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 1)}\n`);
 await campaignContext.close();
 await graph.close();
 await external.close();
+await lifeSciences.close();
 console.log(
   `Wrote ${REPORT_PATH} (${results.length} turns). Actual cost ${formatUsd(cost.totalUsd)} (models ${formatUsd(cost.contestantsUsd)}, judges ${formatUsd(cost.judgesUsd)}, simulated agent ${formatUsd(cost.simulatorUsd)}); projected ${formatUsd(estimate.totalUsd)}.`,
 );
