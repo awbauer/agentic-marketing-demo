@@ -130,6 +130,8 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
   // Short handles for what this flow created (brief-1, module-1), so the orchestrator never has to
   // copy a long urn. Rebuilt from the saved events when a flow resumes.
   const failures = new Map<string, number>();
+  /** Agents the gateway refused this flow, with its reason. A denial is policy, not bad luck. */
+  const denied = new Map<string, string>();
   const handles = new Map<string, string>();
   for (const event of state.events)
     if (event.type === "delegated")
@@ -167,6 +169,11 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
     const refs = resolveAll(given);
     // The same step failing the same way three times is not going to work a fourth time.
     const attempt = `${agent}:${JSON.stringify(refs)}`;
+    const refusal = denied.get(agent);
+    if (refusal)
+      return {
+        error: `The gateway already refused ${manifest?.name ?? agent} on this flow (${refusal}) Retrying will be refused the same way: finish and tell the marketer what could not be done, and why.`,
+      };
     if ((failures.get(attempt) ?? 0) >= 3)
       return {
         error: `${manifest?.name ?? agent} has failed this same step three times. Stop retrying it: finish and tell the marketer what could not be done.`,
@@ -228,6 +235,13 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
     } catch (failure) {
       const error = failure instanceof Error ? failure.message : String(failure);
       emit({ type: "delegated", callId, agent, ok: false, error });
+      if (failure instanceof ArchError && failure.status === 403) {
+        denied.set(agent, error);
+        return {
+          error: `The gateway refused this: ${error} That is policy and will not change on a retry. Do not delegate to this agent again on this flow: finish and tell the marketer what could not be done, and why.`,
+        };
+      }
+      failures.set(attempt, (failures.get(attempt) ?? 0) + 1);
       return {
         error: `${error} Check the refs: copy urns exactly from the goal or an earlier result.`,
       };

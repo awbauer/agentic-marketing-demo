@@ -677,6 +677,15 @@ describe("evaluators and drift", () => {
     expect(drift.drifted).toBe(true);
     expect(drift.evaluators.find((item) => item.id === "grounding")?.drifted).toBe(true);
     expect(baselineFor("module-authoring").grounding).toBe(1);
+    // A model agent's ordinary timing is not drift: a 30-second run is within the latency threshold.
+    const slow = scoreTurn({ ...healthy, latencyMs: 30_000 }).scores.latency as number;
+    expect(baselineFor("module-authoring").latency).toBe(0.5);
+    expect(detectDrift("module-authoring", Array(6).fill({ ...good, latency: slow })).drifted).toBe(
+      false,
+    );
+    expect(detectDrift("module-authoring", Array(6).fill({ ...good, latency: 0.1 })).drifted).toBe(
+      true,
+    );
   });
 
   it("sets autonomy from evidence, and drift sends it back to assistive", () => {
@@ -936,8 +945,21 @@ describe("an agent's own words", () => {
       "Many patients feel better on it.",
       "Learn how it works to protect the heart.",
       "Hello, and see why prescribers trust it.",
+      "See the meaningful outcomes.",
+      "Hello, here are the outcomes.",
     ])
       expect(() => author([sentence]), sentence).toThrow();
+  });
+
+  it("lets a call to action point at outcomes or safety, but not stop short", () => {
+    for (const sentence of [
+      "See the latest outcomes.",
+      "Review the safety information below.",
+      "See the latest data.",
+    ])
+      expect(must(author([sentence]).module).title, sentence).toBeTruthy();
+    for (const sentence of ["See", "Review the", "Please see"])
+      expect(() => author([sentence]), sentence).toThrow(/not a complete call to action/);
   });
 
   it("limits a headline to the wave's own words, the product and plain connectors", () => {
