@@ -953,6 +953,22 @@ describe("Lumera Therapeutics (pharmaceutical)", () => {
     expect(listObjects(world(), { kind: "claim", brand: "Lumera Therapeutics" }).length).toBe(6);
   });
 
+  it("shows the weakest stage across brands when none is chosen", () => {
+    const resolved = resolveWorkspace(
+      must(WORKSPACES.find((item) => item.id === "command-center")),
+      world(),
+      { persona: "admin" },
+    );
+    const tile = resolved.tiles.find((item) => item.type === "stage-readiness");
+    if (tile?.type !== "stage-readiness") throw new Error("expected a readiness tile");
+    expect(tile.stages.find((item) => item.stage === "substantiate")?.score).toBe(0);
+    expect(
+      tile.stages.some((item) =>
+        item.checks.some((check) => check.label.startsWith("Lumera Therapeutics:")),
+      ),
+    ).toBe(true);
+  });
+
   it("keeps the brand's data apart and scopes search to it", () => {
     const hits = searchObjects(world(), "heart failure outcomes", {
       brands: ["Lumera Therapeutics"],

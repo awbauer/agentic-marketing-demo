@@ -23,8 +23,6 @@ import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { ActionCards } from "./ActionCards";
 import { ArchitectureView } from "./architecture/ArchitectureView";
-import { ScopeBar } from "./ScopeBar";
-import { BRAND_PLACEHOLDER, useScope } from "./scope";
 import { MarketingWriteDetails, PermissionDetails } from "./ConfirmationDetails";
 import { EvaluationView } from "./EvaluationView";
 import { GraphEvidencePanel } from "./GraphEvidence";
@@ -33,6 +31,8 @@ import { HistoryView } from "./HistoryView";
 import { LearnView } from "./learn/LearnView";
 import { Markdown } from "./Markdown";
 import { SalesforceAgentsPanel } from "./SalesforceAgents";
+import { ScopeBar } from "./ScopeBar";
+import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
 import { executionTrace } from "./turn-trace";
 import { UseCasesView } from "./usecases/UseCasesView";
 import { WorkspacePanel } from "./WorkspacePanel";
@@ -203,9 +203,13 @@ export function App() {
     contentSize: number;
     contentHash: string;
   } | null>(null);
-  const [imageConcept, setImageConcept] = useState(
-    "A quiet trailhead at golden hour with layered hiking gear and room for campaign copy",
-  );
+  // The concept starts from the header brand until the person edits it.
+  const [editedConcept, setEditedConcept] = useState<string | null>(null);
+  const imageConcept = editedConcept ?? BRAND_IMAGE_CONCEPT[scope.brand];
+  const setImageConcept = setEditedConcept;
+  useEffect(() => {
+    setEditedConcept(null);
+  }, [scope.brand]);
   const [images, setImages] = useState<GeneratedCampaignImage[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const generatedImage =
