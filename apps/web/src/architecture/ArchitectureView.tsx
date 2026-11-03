@@ -8,7 +8,6 @@ import { EvaluationsPanel, ModelsPanel, PromptsPanel } from "./CatalogsPanel";
 import { PERSONA_FLOW, TAB_GUIDES, TAB_ORDER, type Tab } from "./guide";
 import { ObjectInspector } from "./ObjectInspector";
 import { ArchitectureIntro, TabGuideCard, useIntro } from "./Orientation";
-import { SampleFlows } from "./SampleFlows";
 import { ErrorNote, Panel } from "./Shared";
 import { TrustPanel } from "./TrustPanel";
 import { WorkspaceRenderer } from "./WorkspaceRenderer";
@@ -163,7 +162,13 @@ function Search({ scope, onOpen }: { scope: Scope; onOpen: (urn: string) => void
 }
 
 /** The architecture workspaces: one object model, many composed screens, every call through the gateway. */
-export function ArchitectureView({ onClose }: { onClose: () => void }) {
+export function ArchitectureView({
+  onClose,
+  onOpenJourneys,
+}: {
+  onClose: () => void;
+  onOpenJourneys: () => void;
+}) {
   // The brand and role come from the header, so this view always agrees with the rest of the app.
   const { scope } = useScope();
   const [tab, setTab] = useState<Tab>(PERSONA_FLOW[scope.persona].start);
@@ -212,7 +217,12 @@ export function ArchitectureView({ onClose }: { onClose: () => void }) {
         </div>
       </div>
       {intro.open && (
-        <ArchitectureIntro scope={scope} onGo={setTab} onClose={() => intro.setOpen(false)} />
+        <ArchitectureIntro
+          scope={scope}
+          onGo={setTab}
+          onJourneys={onOpenJourneys}
+          onClose={() => intro.setOpen(false)}
+        />
       )}
       <p className="arch-scope" role="status">
         Showing <strong>{scope.brand === "all" ? "all brands" : scope.brand}</strong> as{" "}
@@ -247,7 +257,6 @@ export function ArchitectureView({ onClose }: { onClose: () => void }) {
       <div className={`arch-body ${open ? "with-inspector" : ""}`}>
         <div className="arch-main" role="tabpanel" aria-label={TAB_GUIDES[tab].label}>
           <TabGuideCard tab={tab} scope={scope} />
-          {tab === "flows" && <SampleFlows scope={scope} onOpen={setOpen} onChanged={changed} />}
           {tab === "command-center" &&
             workspace(
               "command-center",

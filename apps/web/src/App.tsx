@@ -23,6 +23,7 @@ import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { ActionCards } from "./ActionCards";
 import { ArchitectureView } from "./architecture/ArchitectureView";
+import { JourneysView } from "./architecture/JourneysView";
 import { MarketingWriteDetails, PermissionDetails } from "./ConfirmationDetails";
 import { EvaluationView } from "./EvaluationView";
 import { GraphEvidencePanel } from "./GraphEvidence";
@@ -228,7 +229,14 @@ export function App() {
     disabledTools: [],
   });
   const [view, setView] = useState<
-    "overview" | "history" | "evaluations" | "learn" | "graph" | "usecases" | "architecture"
+    | "overview"
+    | "history"
+    | "evaluations"
+    | "learn"
+    | "graph"
+    | "usecases"
+    | "journeys"
+    | "architecture"
   >("overview");
   const confirmationRef = useRef<HTMLElement>(null);
   const connectorStatusLoaded = useRef(false);
@@ -691,6 +699,14 @@ export function App() {
             </button>
             <button
               type="button"
+              className={`nav-item ${view === "journeys" ? "active" : ""}`}
+              aria-current={view === "journeys" ? "page" : undefined}
+              onClick={() => setView("journeys")}
+            >
+              <span>↝</span>Journeys
+            </button>
+            <button
+              type="button"
               className={`nav-item ${view === "architecture" ? "active" : ""}`}
               aria-current={view === "architecture" ? "page" : undefined}
               onClick={() => setView("architecture")}
@@ -832,7 +848,18 @@ export function App() {
           />
         )}
         {view === "graph" && <GraphView onClose={() => setView("overview")} />}
-        {view === "architecture" && <ArchitectureView onClose={() => setView("overview")} />}
+        {view === "journeys" && (
+          <JourneysView
+            onClose={() => setView("overview")}
+            onOpenArchitecture={() => setView("architecture")}
+          />
+        )}
+        {view === "architecture" && (
+          <ArchitectureView
+            onClose={() => setView("overview")}
+            onOpenJourneys={() => setView("journeys")}
+          />
+        )}
         {view === "usecases" && (
           <UseCasesView
             onClose={() => setView("overview")}

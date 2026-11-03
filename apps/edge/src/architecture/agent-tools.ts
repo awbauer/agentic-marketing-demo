@@ -21,6 +21,7 @@ import {
   getObject,
   listObjects,
   OBJECT_KINDS,
+  type PlanAttributes,
   planContent,
   planningInputs,
   proposeOptimizations,
@@ -90,7 +91,14 @@ export function objectView(world: World, object: GovernedObject) {
   };
   if (object.kind === "brief") {
     const resolved = resolveBrief(world, object.urn);
-    return { ...base, plan: resolved?.inheritedFrom, wave: resolved?.wave };
+    if (resolved) return { ...base, plan: resolved.inheritedFrom, wave: resolved.wave };
+    // A brief just drafted is not in this world yet; read its wave from the plan it points at.
+    const { planUrn, waveId } = object.attributes as { planUrn?: string; waveId?: string };
+    const plan = planUrn ? getObject(world, planUrn) : undefined;
+    const wave = plan
+      ? attributesOf<PlanAttributes>(plan).waves.find((item) => item.id === waveId)
+      : undefined;
+    return { ...base, plan: plan ? { urn: plan.urn, version: plan.version } : undefined, wave };
   }
   return base;
 }
