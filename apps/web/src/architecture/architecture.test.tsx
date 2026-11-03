@@ -4,6 +4,7 @@ import { ScopeBar } from "../ScopeBar";
 import { ScopeProvider } from "../scope";
 import { AgentForm, FORMS } from "./AgentConsole";
 import { ArchitectureView } from "./ArchitectureView";
+import { SampleFlows } from "./SampleFlows";
 
 const renderView = () =>
   render(
@@ -118,6 +119,44 @@ describe("architecture view", () => {
     expect(screen.getByRole("status").textContent).toContain("MLR-style reviewer");
   });
 
+  it("says what the section is, why it is better, and where the viewer's role comes in", async () => {
+    renderView();
+    await screen.findByText("The lifecycle");
+    expect(
+      screen.getByRole("heading", { name: /a brand gets content from plan to proof/ }),
+    ).toBeTruthy();
+    expect(screen.getByText(/Where you come in, as Marketer/)).toBeTruthy();
+    // The Command Center has its own brand field, so change the role first.
+    fireEvent.change(screen.getByLabelText("Run as"), { target: { value: "compliance" } });
+    fireEvent.change(screen.getByLabelText("Brand"), { target: { value: "Lumera Therapeutics" } });
+    expect(
+      await screen.findByRole("heading", { name: /Lumera Therapeutics gets content/ }),
+    ).toBeTruthy();
+    expect(screen.getByText(/You own the evidence/)).toBeTruthy();
+    expect(screen.getByText(/MLR review runs on PDFs/)).toBeTruthy();
+    // The role's step is marked, and the view opens on the workspace where that step happens.
+    const steps = screen.getByRole("list", { name: /who decides at each/ });
+    expect(
+      within(steps).getByRole("button", { name: /Substantiate.*You decide here/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Approvals" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    const guide = screen.getByRole("complementary", { name: "About Approvals" });
+    expect(guide.textContent).toContain("Cardivance versus every ARB");
+    expect(guide.textContent).toContain("Under the hood");
+  });
+
+  it("hides the intro for this viewer and brings it back on request", async () => {
+    renderView();
+    await screen.findByText("The lifecycle");
+    fireEvent.click(screen.getByRole("button", { name: "Hide intro" }));
+    expect(screen.queryByText(/What you’re looking at/)).toBeNull();
+    expect(window.localStorage.getItem("northstar.architecture.intro")).toBe("closed");
+    fireEvent.click(screen.getByRole("button", { name: "What is this?" }));
+    expect(screen.getByText(/What you’re looking at/)).toBeTruthy();
+  });
+
   it("explains a gateway denial instead of failing silently", async () => {
     renderView();
     await screen.findByText("The lifecycle");
@@ -171,5 +210,96 @@ describe("agent forms follow the brand", () => {
     expect(screen.getByLabelText("cardivance-mortality")).toBeTruthy();
     expect(screen.getByLabelText("glucora-a1c")).toBeTruthy();
     expect(screen.queryByLabelText("sweep-apy")).toBeNull();
+  });
+});
+
+describe("sample flows", () => {
+  const calls: Array<{ url: string; persona: string; body: Record<string, unknown> }> = [];
+  const chain = [{ hop: "user", label: "User", identity: "u", detail: "", verified: true }];
+  const envelope = (result: unknown) => Response.json({ result, chain, decision: {} });
+  beforeEach(() => {
+    calls.length = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        calls.push({ url, persona: headers["x-persona"] ?? "", body });
+        if (url.includes("/transition"))
+          return Response.json({ card: { state: body.to, title: "Cardivance outcomes" } });
+        if (url.includes("/optimizations")) return envelope([]);
+        switch (body.action) {
+          case "draft_brief":
+            return envelope({ brief: { urn: "urn:northstar:brief:b1", title: "Brief one" } });
+          case "author_module":
+            return envelope({
+              module: {
+                urn: "urn:northstar:module:m1",
+                title: "Cardivance outcomes",
+                attributes: { blocks: [{ claimUrn: "c1" }, { disclosureUrn: "d1" }] },
+              },
+              refused: [{ topic: "cardivance-superior", reason: "The claim is rejected." }],
+              gaps: [{ urn: "urn:northstar:gap:g1", title: "Gap: cardivance-superior" }],
+            });
+          case "run_farm":
+            return envelope([]);
+          case "assemble_evidence":
+            return envelope({
+              claims: [{ text: "Reduced risk", status: "substantiated", evidence: [], issues: [] }],
+            });
+          case "propose_transition":
+            return envelope({ proposed: true, reason: "Submitted for review.", blockers: [] });
+          default:
+            return Response.json({}, { status: 404 });
+        }
+      }),
+    );
+  });
+
+  it("runs each step as its own role and hands what it made to the next step", async () => {
+    render(
+      <SampleFlows
+        scope={{ persona: "marketer", brand: "Lumera Therapeutics" }}
+        onOpen={() => {}}
+        onGo={() => {}}
+        onChanged={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Run the whole flow" }));
+    expect(await screen.findByRole("button", { name: "Flow complete" })).toBeTruthy();
+    expect(calls.map((call) => call.persona)).toEqual([
+      "marketer",
+      "content-lab",
+      "content-lab",
+      "compliance",
+      "content-lab",
+      "reviewer",
+      "reviewer",
+      "brand-lead",
+    ]);
+    const author = calls.find((call) => call.body.action === "author_module");
+    expect(author?.body.input).toMatchObject({ briefUrn: "urn:northstar:brief:b1" });
+    expect(
+      calls.filter((call) => call.url.includes("/transition")).map((call) => call.url),
+    ).toEqual([
+      "/api/arch/objects/urn%3Anorthstar%3Amodule%3Am1/transition",
+      "/api/arch/objects/urn%3Anorthstar%3Amodule%3Am1/transition",
+    ]);
+    expect(screen.getByText(/Refused 1 fact, and filed 1 gap record/)).toBeTruthy();
+    expect(screen.getByText(/is approved/)).toBeTruthy();
+  });
+
+  it("offers one flow per brand, or all three with no brand chosen", () => {
+    render(
+      <SampleFlows
+        scope={{ persona: "marketer", brand: "all" }}
+        onOpen={() => {}}
+        onGo={() => {}}
+        onChanged={() => {}}
+      />,
+    );
+    expect(
+      within(screen.getByRole("group", { name: "Pick a flow" })).getAllByRole("button"),
+    ).toHaveLength(3);
   });
 });

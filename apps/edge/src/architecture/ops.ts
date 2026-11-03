@@ -336,6 +336,7 @@ export async function runAgentOp(ctx: Ctx, agentId: string, action: string, inpu
             str(input, "planUrn"),
             str(input, "waveId"),
             actor,
+            typeof input.runTag === "string" ? input.runTag : undefined,
           );
           await persist(ctx, world, [result.brief]);
           return {
@@ -379,6 +380,7 @@ export async function runAgentOp(ctx: Ctx, agentId: string, action: string, inpu
             world,
             variants.map((item) => item.variant),
           );
+          moduleForEval = variants[0]?.variant;
           return variants;
         }
         case "assemble_evidence":
@@ -414,6 +416,7 @@ export async function runAgentOp(ctx: Ctx, agentId: string, action: string, inpu
             reason: "Readiness passed; proposed for review.",
             at: ISO(ctx),
           });
+          if (done) moduleForEval = module;
           return {
             proposed: done,
             reason: done ? "Submitted for review." : "The state changed first.",
@@ -428,9 +431,7 @@ export async function runAgentOp(ctx: Ctx, agentId: string, action: string, inpu
             typeof input.brand === "string" ? (input.brand as Brand) : undefined,
           );
         case "run_farm": {
-          const urn = str(input, "moduleUrn");
-          moduleForEval = need(world, urn, "module");
-          return runFarm(world, urn);
+          return runFarm(world, str(input, "moduleUrn"));
         }
         case "check_data_readiness":
           return dataReadiness(world, brandOf(input));
@@ -447,7 +448,9 @@ export async function runAgentOp(ctx: Ctx, agentId: string, action: string, inpu
     input,
     value,
     await worldFor(ctx),
-    moduleForEval ?? (target?.kind === "module" ? target : undefined),
+    // Content is scored only when the agent wrote it or moved it forward. An agent that inspects
+    // a flawed module and reports the flaws did its job; the flaws are not its drift.
+    moduleForEval,
     latency,
   );
   const { scores } = scoreTurn(turn);
@@ -532,7 +535,9 @@ export async function supersedeClaimOp(
   };
 }
 
-export async function optimizationsOp(ctx: Ctx, brand?: Brand) {
+export async function optimizationsOp(ctx: Ctx, requested?: Brand) {
+  // The header brand scopes proposals like every other read; a query brand can only narrow it.
+  const brand = requested ?? (ctx.user.brands === "all" ? undefined : ctx.user.brands[0]);
   return runAgentOp(ctx, "optimization", "propose_optimization", brand ? { brand } : {});
 }
 

@@ -541,23 +541,45 @@ export function AgentForm({
         <div className="arch-result denied" role="alert">
           <ErrorNote error={state.error} />
           {Array.isArray(state.error.extra.chain) && (
-            <Chain chain={state.error.extra.chain as ChainHop[]} />
+            <>
+              <p className="arch-note">
+                The gateway stopped this call. The step that failed is marked below.
+              </p>
+              <Chain chain={state.error.extra.chain as ChainHop[]} />
+            </>
           )}
         </div>
       )}
       {state.result && (
         <div className="arch-result" aria-live="polite">
           <p className="arch-decision">
-            <strong>Allowed</strong> by {state.result.decision.policyId}{" "}
-            <small>as agent:{state.result.agentId}</small>
+            <strong>Done.</strong> Here is what the agent did; nothing is approved until a person
+            approves it.
           </p>
           <Summary result={state.result.result} action={form.action} onOpen={onOpen} />
           {state.result.drift?.drifted && (
-            <p className="arch-refusal">Drift detected: this agent is now constrained.</p>
+            <p className="arch-refusal">
+              This agent’s recent work scored below its bar, so it is now limited to suggesting
+              until someone reviews it.
+            </p>
           )}
-          <Chain chain={state.result.chain} />
+          <details className="arch-how">
+            <summary>
+              How this was checked: {state.result.chain.filter((hop) => hop.verified).length} of{" "}
+              {state.result.chain.length} identity steps verified, allowed by{" "}
+              {state.result.decision.policyId}
+            </summary>
+            <p className="arch-note">
+              The call ran as agent:{state.result.agentId} on behalf of your role. The gateway
+              checked each step below before letting it through, and logged it in Trust.
+            </p>
+            <Chain chain={state.result.chain} />
+          </details>
           {state.result.scores && (
             <p className="arch-scores">
+              <span className="arch-scores-label">
+                How the evaluators scored this run (1 is a pass; see Evaluations):
+              </span>
               {Object.entries(state.result.scores).map(([id, score]) => (
                 <span key={id} className={score < 1 ? "arch-flag" : "arch-flag ok"}>
                   {id} {score}

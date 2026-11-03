@@ -1,6 +1,6 @@
+import { env, SELF } from "cloudflare:test";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
-import { env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { authorizeTool, makeCtx } from "./architecture/context";
 import { createWorkbenchMcpServer } from "./architecture/mcp";
@@ -10,12 +10,16 @@ import { createArchitectureTables } from "./worker.test-helpers";
 // biome-ignore lint/suspicious/noExplicitAny: parsed responses are untyped JSON in these tests
 type Json = Record<string, any>;
 
-async function call(path: string, init: RequestInit & { persona?: string; json?: unknown } = {}) {
-  const { persona, json, ...rest } = init;
+async function call(
+  path: string,
+  init: RequestInit & { persona?: string; brand?: string; json?: unknown } = {},
+) {
+  const { persona, brand, json, ...rest } = init;
   const response = await SELF.fetch(`http://example.com${path}`, {
     ...rest,
     headers: {
       "x-persona": persona ?? "marketer",
+      ...(brand ? { "x-brand": brand } : {}),
       ...(json ? { "content-type": "application/json" } : {}),
     },
     ...(json ? { body: JSON.stringify(json), method: rest.method ?? "POST" } : {}),
@@ -501,5 +505,79 @@ describe("agentic gateway at the edge", () => {
     });
     expect(missing.isError).toBe(true);
     await client.close();
+  });
+});
+
+describe("sample flows", () => {
+  const LT = "Lumera Therapeutics";
+  const flow = async (tag: string) => {
+    const brief = await call("/api/arch/agents/brief/run", {
+      brand: LT,
+      json: {
+        action: "draft_brief",
+        input: { planUrn: "urn:northstar:content-plan:lt-q4-hcp", waveId: "w1", runTag: tag },
+      },
+    });
+    const briefUrn = brief.body.result.brief.urn;
+    const authored = await call("/api/arch/agents/module-authoring/run", {
+      persona: "content-lab",
+      brand: LT,
+      json: {
+        action: "author_module",
+        input: {
+          briefUrn,
+          topics: ["cardivance-mortality", "cardivance-superior"],
+          channel: "email",
+        },
+      },
+    });
+    const moduleUrn = authored.body.result.module.urn;
+    const proposed = await call("/api/arch/agents/readiness/run", {
+      persona: "content-lab",
+      brand: LT,
+      json: { action: "propose_transition", input: { moduleUrn } },
+    });
+    for (const to of ["in_review", "approved"])
+      expect(
+        (
+          await call(`/api/arch/objects/${urn(moduleUrn)}/transition`, {
+            persona: "reviewer",
+            brand: LT,
+            json: { to },
+          })
+        ).status,
+      ).toBe(200);
+    return { briefUrn, moduleUrn, refused: authored.body.result.refused, proposed };
+  };
+
+  it("runs a flow from brief to approval, and again with a new run tag", async () => {
+    const first = await flow("run-a");
+    expect(first.briefUrn).toBe("urn:northstar:brief:lt-q4-hcp-w1-run-a");
+    expect(first.refused.map((item: Json) => item.topic)).toEqual(["cardivance-superior"]);
+    expect(first.proposed.body.result.proposed).toBe(true);
+    const second = await flow("run-b");
+    expect(second.moduleUrn).not.toBe(first.moduleUrn);
+    expect(second.proposed.body.result.proposed).toBe(true);
+  });
+
+  it("does not hold an agent's correct refusal of a flawed module against it", async () => {
+    for (let index = 0; index < 6; index += 1) {
+      const refused = await run(
+        "readiness",
+        "propose_transition",
+        { moduleUrn: "urn:northstar:module:hs-mod-fee-waiver-email" },
+        "content-lab",
+      );
+      expect(refused.body.result.proposed).toBe(false);
+    }
+    const registry = await call("/api/arch/registry");
+    const readiness = registry.body.agents.find((item: Json) => item.id === "readiness");
+    expect(readiness.lifecycle).not.toBe("constrain");
+  });
+
+  it("scopes optimization proposals to the brand in the header", async () => {
+    const proposals = await call("/api/arch/optimizations", { persona: "brand-lead", brand: LT });
+    expect(proposals.status).toBe(200);
+    expect(proposals.body.result.every((item: Json) => item.brand === LT)).toBe(true);
   });
 });

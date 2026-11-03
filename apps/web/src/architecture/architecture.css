@@ -71,6 +71,11 @@
   gap: 16px;
   min-width: 0;
 }
+/* Wide content (the lifecycle board) scrolls inside its tile instead of widening the column. */
+.arch-main > *,
+.arch-workspace > * {
+  min-width: 0;
+}
 .arch-lede {
   max-width: 780px;
   margin: 0;
@@ -733,4 +738,389 @@
   .arch-scope {
     margin-inline: 16px;
   }
+}
+
+/* Orientation: what this is, why it's better, where you come in */
+.arch-header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.arch-intro {
+  margin: 14px 26px 0;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.arch-intro > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+.arch-intro h3 {
+  margin: 2px 0 0;
+  font-size: 20px;
+}
+.arch-intro h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.arch-intro-what {
+  max-width: 860px;
+  margin: 10px 0 14px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.arch-flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.arch-flow li {
+  counter-increment: step;
+}
+.arch-flow button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.arch-flow button:hover {
+  border-color: var(--forest);
+}
+.arch-flow strong::before {
+  content: counter(step) ". ";
+  color: var(--muted);
+  font-weight: 400;
+}
+.arch-flow small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.arch-flow em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--forest);
+}
+.arch-flow li.mine button {
+  border-color: var(--forest);
+  background: var(--lime);
+}
+.arch-intro-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
+  gap: 20px;
+}
+.arch-intro-you p {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.arch-intro-compare table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.arch-intro-compare th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0 8px 4px 0;
+}
+.arch-intro-compare td {
+  padding: 6px 8px 6px 0;
+  border-top: 1px solid var(--line);
+  vertical-align: top;
+}
+.arch-intro-compare td:first-child {
+  color: var(--muted);
+  width: 45%;
+}
+.arch-glossary {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.arch-glossary summary {
+  cursor: pointer;
+  color: var(--forest);
+}
+.arch-glossary dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px 20px;
+  margin: 10px 0 0;
+}
+.arch-glossary dt {
+  font-weight: 600;
+}
+.arch-glossary dd {
+  margin: 0;
+  color: var(--muted);
+}
+.arch-tabgroups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  padding: 14px 26px 0;
+}
+.arch-tabgroups .arch-tabs {
+  padding: 0;
+  align-items: center;
+}
+.arch-tabgroup-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.arch-guide {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--forest);
+  border-radius: 10px;
+  background: #fff;
+}
+.arch-guide dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 20px;
+  margin: 0;
+}
+.arch-guide dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.arch-guide dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.arch-guide-try dd {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--lime) 35%, #fff);
+}
+.arch-guide-tech {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.arch-guide-tech span {
+  font-weight: 600;
+  margin-right: 4px;
+}
+.arch-how {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.arch-how summary {
+  cursor: pointer;
+  color: var(--forest);
+}
+@media (max-width: 760px) {
+  .arch-intro {
+    margin: 12px 16px 0;
+  }
+  .arch-intro-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .arch-tabgroups {
+    padding: 12px 16px 0;
+  }
+}
+.arch-scores-label {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Sample flows */
+.arch-flows {
+  display: grid;
+  gap: 12px;
+}
+.arch-flow-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.arch-flow-picker legend {
+  margin-bottom: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.arch-flow-picker button {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.arch-flow-picker button[aria-pressed="true"] {
+  border-color: var(--forest);
+  box-shadow: inset 0 0 0 1px var(--forest);
+}
+.arch-flow-picker small,
+.arch-flow-picker span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.arch-flow-runner {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.arch-flow-runner > header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+.arch-flow-runner h3 {
+  margin: 2px 0 4px;
+  font-size: 18px;
+}
+.arch-flow-situation {
+  max-width: 760px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.arch-flow-actions {
+  display: flex;
+  gap: 8px;
+}
+.arch-flow-steps {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.arch-flow-step {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.arch-flow-step.finished {
+  background: #fff;
+}
+.arch-flow-step p {
+  margin: 6px 0 0;
+}
+.arch-flow-step-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+.arch-flow-step-head h4 {
+  margin: 0;
+  font-size: 14px;
+}
+.arch-flow-step-number {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-weight: 600;
+  font-size: 12px;
+}
+.arch-flow-step.finished .arch-flow-step-number {
+  border-color: var(--forest);
+  background: var(--forest);
+  color: #fff;
+}
+.arch-flow-role {
+  color: var(--muted);
+  font-size: 12px;
+}
+.arch-flow-role strong {
+  color: var(--forest);
+}
+.arch-flow-why span,
+.arch-flow-where {
+  color: var(--muted);
+}
+.arch-flow-why span {
+  font-weight: 600;
+  margin-right: 4px;
+}
+.arch-flow-where {
+  font-size: 12px;
+}
+.arch-flow-outcome {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 4px solid var(--forest);
+  background: color-mix(in srgb, var(--lime) 30%, #fff);
+}
+.arch-flow-outcome.stopped {
+  border-left-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 14%, #fff);
+}
+.arch-flow-outcome p {
+  margin: 0;
+  font-weight: 500;
+}
+.arch-flow-outcome ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.arch-flow-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-weight: 400;
+}
+@media (max-width: 760px) {
+  .arch-flow-step-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .arch-flow-step-head > button {
+    grid-column: 1 / -1;
+  }
+}
+.arch-flow-step.finished.stopped .arch-flow-step-number {
+  border-color: var(--amber);
+  background: var(--amber);
 }

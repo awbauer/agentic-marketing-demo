@@ -1385,9 +1385,13 @@ Most marketing tools copy things forward: a plan becomes a brief, a brief become
 
 **Workspaces are manifests.** A workspace says who it is for, which objects it lists, which tiles it composes, and which agents and services it calls. One renderer turns any manifest into a screen, with the same loading, empty, error and permission-denied states. The **Command Center** lists every object by lifecycle stage with the person whose decision it is waiting on; **Brief Builder**, **Module Library**, **Approvals** and **Performance** are other manifests over the same objects. Choose **Run as** in the header to see a brand planner, a marketer, a reviewer or a brand lead's view of the same data. The role opens that person's workspace and is sent with each request, and the server enforces what it may do.
 
+**Each screen explains itself.** The Architecture view opens with a short intro: what you are looking at, why it beats copying claims by hand and reviewing over email, and where your role comes in. It shows the seven steps with the person who decides at each, highlights yours, and offers a button to the workspace where your step happens. Each workspace then opens with a card: what it is, why it is better, where it fits in the flow, something to try for the brand in the header, and the technical idea it demonstrates. The words live in one file, `apps/web/src/architecture/guide.ts`, beside the manifests they describe, so they follow the brand and role just as the data does.
+
+**Sample flows.** The **Sample flows** tab runs a real piece of work for each brand, step by step: a brief drafted from an approved plan, content written from approved claims (and what it refused), red-team probes, the evidence packet, submission, a person's approval, and what the results suggest next. Each step runs as the role that would do it, through the same API and gateway as the workspaces, so you watch the hand-offs. Each run gets its own run tag, so its brief and module are new and the flow can be run again.
+
 **Channels.** An approval card is composed once, with brand rules (accent, disclosure label, rule version) applied, and then rendered four ways: React, an **Adaptive Card** for Teams and Outlook, **data for a Lightning Web Component**, and an **MCP Apps** resource for MCP clients such as Claude. Change one brand rule and all four renderings change. The preview renders these payloads on screen; nothing is sent to Teams, Outlook or Copilot.
 
-**Where the data lives.** Seed objects for Harborstone Wealth and Coastline Kitchen ship in code. What you create (a plan, a module, a gap, a new claim version) and every approval state go to D1, scoped to you, and expire with the 24-hour audit. They are not in the Neo4j graph; making them graph nodes is a later step.
+**Where the data lives.** Seed objects for all three brands ship in code. What you create (a plan, a module, a gap, a new claim version) and every approval state go to D1, scoped to you, and expire with the 24-hour audit. They are not in the Neo4j graph; making them graph nodes is a later step.
 
 The seed has three brands: Harborstone Wealth, Coastline Kitchen and Lumera Therapeutics. The approval card's brand rules for Lumera label its disclosures as safety information.
 
@@ -1397,6 +1401,8 @@ The seed has three brands: Harborstone Wealth, Coastline Kitchen and Lumera Ther
 
 **In this demo**
 
+- Architecture → read the intro, then pick a step to jump to its workspace
+- Architecture → Sample flows → Run the whole flow
 - Architecture → Command Center, then open any card
 - Header → Run as: Brand planner, Marketer, Reviewer, Brand lead
 - Architecture → open a module → Channels (React, Adaptive Card, LWC data, MCP Apps)
@@ -1631,7 +1637,7 @@ Agents change over time: their prompts get edited, models get swapped, data shif
 
 **Thirteen evaluators.** Tool selection, grounding, cite-or-refuse, claim accuracy, disclosure presence, brand rules, personal-data leakage, prompt-injection resistance, policy adherence, write discipline, answer quality (a judge), latency and cost. Every agent run is scored from its own trace. The judge needs a judge run, so sampled turns carry no judge score, and the view says so.
 
-**Drift and staged autonomy.** Each agent has a baseline. When an evaluator's mean over the last twenty runs falls more than 0.15 below baseline (with at least five runs), the agent is moved to **constrain**: it keeps its reads and loses everything else, until a person reviews it. The hourly job runs the same check, and so does the **Run drift watch** button. Evidence also says how much autonomy an agent has *earned*: assistive, then orchestrated at twenty clean runs, then agentically led at a hundred. Raising a level is a pull request, and no level removes the human gate.
+**Drift and staged autonomy.** Each agent has a baseline. When an evaluator's mean over the last twenty runs falls more than 0.15 below baseline (with at least five runs), the agent is moved to **constrain**: it keeps its reads and loses everything else, until a person reviews it. Content scores (claim accuracy, disclosures, brand rules) count only against content the agent wrote or moved forward. An agent that inspects a flawed module and reports the flaws, such as the readiness agent refusing to submit an email whose evidence has expired, did its job, so those flaws are not its drift. The hourly job runs the same check, and so does the **Run drift watch** button. Evidence also says how much autonomy an agent has *earned*: assistive, then orchestrated at twenty clean runs, then agentically led at a hundred. Raising a level is a pull request, and no level removes the human gate.
 
 **Trust.** The **Trust** view lays out each agentic threat (hallucination, prompt injection, data leakage, unauthorized action, drift, audit gaps) beside its control and the live evidence, such as the grounding mean, the denied calls, the farm's findings and the constrained agents. Where nothing has been measured, it says "no samples yet".
 
