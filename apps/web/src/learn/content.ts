@@ -864,12 +864,15 @@ The library follows the header's brand: choosing Lumera Therapeutics shows only 
 
 **Workspaces are manifests.** A workspace says who it is for, which objects it lists, which tiles it composes, and which agents and services it calls. One renderer turns any manifest into a screen, with the same loading, empty, error and permission-denied states. The **Command Center** lists every object by lifecycle stage with the person whose decision it is waiting on; **Brief Builder**, **Module Library**, **Approvals** and **Performance** are other manifests over the same objects. Choose **Run as** in the header to see a brand planner, a marketer, a reviewer or a brand lead's view of the same data. The role opens that person's workspace and is sent with each request, and the server enforces what it may do.
 
+**Each screen explains itself.** The Architecture view opens with a short intro: what you are looking at, why it beats copying claims by hand and reviewing over email, and where your role comes in. It shows the seven steps with the person who decides at each, highlights yours, and offers a button to the workspace where your step happens. Each workspace then opens with a card: what it is, why it is better, where it fits in the flow, something to try for the brand in the header, and the technical idea it demonstrates. The words live in one file, \`apps/web/src/architecture/guide.ts\`, beside the manifests they describe, so they follow the brand and role just as the data does.
+
 **Channels.** An approval card is composed once, with brand rules (accent, disclosure label, rule version) applied, and then rendered four ways: React, an **Adaptive Card** for Teams and Outlook, **data for a Lightning Web Component**, and an **MCP Apps** resource for MCP clients such as Claude. Change one brand rule and all four renderings change. The preview renders these payloads on screen; nothing is sent to Teams, Outlook or Copilot.
 
-**Where the data lives.** Seed objects for Harborstone Wealth and Coastline Kitchen ship in code. What you create (a plan, a module, a gap, a new claim version) and every approval state go to D1, scoped to you, and expire with the 24-hour audit. They are not in the Neo4j graph; making them graph nodes is a later step.
+**Where the data lives.** Seed objects for all three brands ship in code. What you create (a plan, a module, a gap, a new claim version) and every approval state go to D1, scoped to you, and expire with the 24-hour audit. They are not in the Neo4j graph; making them graph nodes is a later step.
 
 The seed has three brands: Harborstone Wealth, Coastline Kitchen and Lumera Therapeutics. The approval card's brand rules for Lumera label its disclosures as safety information.`,
         inDemo: [
+          "Architecture → read the intro, then pick a step to jump to its workspace",
           "Architecture → Command Center, then open any card",
           "Header → Run as: Brand planner, Marketer, Reviewer, Brand lead",
           "Architecture → open a module → Channels (React, Adaptive Card, LWC data, MCP Apps)",

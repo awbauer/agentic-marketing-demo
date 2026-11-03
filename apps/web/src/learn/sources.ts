@@ -121,6 +121,8 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "packages/architecture/src/index.ts",
     "apps/web/src/architecture/ArchitectureView.tsx",
     "apps/web/src/architecture/WorkspaceRenderer.tsx",
+    "apps/web/src/architecture/Orientation.tsx",
+    "apps/web/src/architecture/guide.ts",
     "apps/web/src/architecture/ObjectInspector.tsx",
     "apps/web/src/architecture/Shared.tsx",
     "apps/web/src/architecture/api.ts",
