@@ -10,11 +10,6 @@ import {
   attributeResult,
   authorModule,
   BRAND_RULES,
-  outOfScopeTool,
-  parseScope,
-  scopeAllowsTool,
-  scopePrompt,
-  toolBrand,
   baselineFor,
   buildApprovalCard,
   buildPolicies,
@@ -43,8 +38,10 @@ import {
   lineage,
   listObjects,
   mintAgentToken,
+  outOfScopeTool,
   PERSONAS,
   PROMPT_CATALOG,
+  parseScope,
   planContent,
   proposeOptimizations,
   rankModules,
@@ -55,11 +52,14 @@ import {
   routeModel,
   runFarm,
   runScenario,
+  scopeAllowsTool,
+  scopePrompt,
   scoreTurn,
   searchObjects,
   supersedeClaim,
   supportedAutonomy,
   TRANSITIONS,
+  toolBrand,
   validateCatalog,
   verifyAgentToken,
   versionChain,
@@ -559,9 +559,9 @@ describe("prompt catalog", () => {
     const changed = PROMPT_CATALOG.map((prompt, index) =>
       index === 0 ? { ...prompt, template: `${prompt.template} Be brief.` } : prompt,
     );
-    expect(validateCatalog(changed, lock).join(" ")).toMatch(/still 1/);
+    expect(validateCatalog(changed, lock).join(" ")).toMatch(/still \d+/);
     const bumped = changed.map((prompt, index) =>
-      index === 0 ? { ...prompt, version: 2 } : prompt,
+      index === 0 ? { ...prompt, version: prompt.version + 1 } : prompt,
     );
     expect(validateCatalog(bumped, lock)).toEqual([]);
   });
@@ -944,6 +944,13 @@ describe("Lumera Therapeutics (pharmaceutical)", () => {
     expect(
       checkReadiness(world(), "urn:northstar:module:lt-mod-cardivance-outcomes-email").ready,
     ).toBe(true);
+  });
+
+  it("scores Lumera's stages and offers a plan for it", () => {
+    const readiness = dataReadiness(world(), "Lumera Therapeutics");
+    expect(readiness).toHaveLength(7);
+    expect(readiness.find((item) => item.stage === "plan")?.score).toBe(1);
+    expect(listObjects(world(), { kind: "claim", brand: "Lumera Therapeutics" }).length).toBe(6);
   });
 
   it("keeps the brand's data apart and scopes search to it", () => {

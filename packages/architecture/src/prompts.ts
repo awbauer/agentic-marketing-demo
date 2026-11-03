@@ -1,4 +1,4 @@
-import type { ObjectKind } from "./types.ts";
+import { BRANDS, type ObjectKind } from "./types.ts";
 import { getObject, type World } from "./world.ts";
 
 /** Hard rules are always enforced: the loader appends them to every prompt, and an entry cannot opt out. */
@@ -45,9 +45,10 @@ const entry = (
   template: string,
   variables: PromptVariable[],
   evaluators: string[] = ["grounding", "cite-or-refuse", "policy-adherence"],
+  version = 1,
 ): PromptEntry => ({
   id,
-  version: 1,
+  version,
   agentId,
   template,
   variables,
@@ -58,7 +59,7 @@ const entry = (
 const brand = {
   name: "brand",
   kind: "enum",
-  values: ["Harborstone Wealth", "Coastline Kitchen"],
+  values: [...BRANDS],
 } as const;
 
 export const PROMPT_CATALOG: readonly PromptEntry[] = [
@@ -75,6 +76,9 @@ export const PROMPT_CATALOG: readonly PromptEntry[] = [
         fields: ["title", "attributes.sends", "attributes.clicks", "attributes.channel"],
       },
     ],
+    ["grounding", "cite-or-refuse", "policy-adherence"],
+    // 2: the brand list now includes Lumera Therapeutics.
+    2,
   ),
   entry(
     "scenario",
@@ -196,6 +200,8 @@ export const PROMPT_CATALOG: readonly PromptEntry[] = [
     "Check the inputs a stage in {{brand}} depends on and report a readiness score with the reasons.",
     [brand],
     ["grounding"],
+    // 2: the brand list now includes Lumera Therapeutics.
+    2,
   ),
   entry(
     "adversarial-farm",

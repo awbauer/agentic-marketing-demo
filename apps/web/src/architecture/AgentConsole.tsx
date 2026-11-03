@@ -1,4 +1,4 @@
-import type { ChainHop, ObjectKind } from "@northstar/architecture";
+import { BRANDS, type Brand, type ChainHop, type ObjectKind } from "@northstar/architecture";
 import { type FormEvent, useState } from "react";
 import { ArchApiError, archFetch, type Scope, shortUrn, useArch } from "./api";
 import { ErrorNote, Json } from "./Shared";
@@ -8,7 +8,14 @@ type Field =
   | { name: string; label: string; type: "text"; placeholder?: string; value?: string }
   | { name: string; label: string; type: "select"; options: string[] }
   | { name: string; label: string; type: "urn"; kind: ObjectKind; optional?: boolean }
-  | { name: string; label: string; type: "checks"; options: string[] };
+  | {
+      name: string;
+      label: string;
+      type: "checks";
+      options: string[];
+      /** When the header names a brand, only that brand's options are offered. */
+      byBrand?: Record<Brand, string[]>;
+    };
 
 export type ActionForm = {
   agent: string;
@@ -19,15 +26,20 @@ export type ActionForm = {
   build?: (values: Record<string, string | string[]>) => Record<string, unknown>;
 };
 
-const TOPICS = [
-  "sweep-apy",
-  "fdic-coverage",
-  "fee-waiver",
-  "fomc-date",
-  "wire-fees",
-  "chowder-price",
-  "soup-hours",
-];
+const TOPICS_BY_BRAND: Record<Brand, string[]> = {
+  "Harborstone Wealth": ["sweep-apy", "fdic-coverage", "fee-waiver", "fomc-date", "wire-fees"],
+  "Coastline Kitchen": ["chowder-price", "soup-hours"],
+  // Includes a rejected and a draft claim, so the refusal path can be shown for pharma too.
+  "Lumera Therapeutics": [
+    "cardivance-mortality",
+    "cardivance-safety",
+    "cardivance-superior",
+    "cardivance-hfpef",
+    "glucora-a1c",
+    "neurelva-days",
+  ],
+};
+const TOPICS = Object.values(TOPICS_BY_BRAND).flat();
 
 export const FORMS: Record<string, ActionForm> = {
   plan: {
@@ -104,7 +116,13 @@ export const FORMS: Record<string, ActionForm> = {
       "Writes only from approved, substantiated claims. Anything it cannot cite becomes a gap record.",
     fields: [
       { name: "briefUrn", label: "Brief", type: "urn", kind: "brief" },
-      { name: "topics", label: "Facts to state", type: "checks", options: TOPICS },
+      {
+        name: "topics",
+        label: "Facts to state",
+        type: "checks",
+        options: TOPICS,
+        byBrand: TOPICS_BY_BRAND,
+      },
       { name: "channel", label: "Channel", type: "select", options: ["email", "push", "sms"] },
     ],
   },
@@ -402,7 +420,9 @@ export function AgentForm({
             : f.type === "select"
               ? (f.options[0] ?? "")
               : f.type === "brand"
-                ? "Harborstone Wealth"
+                ? scope.brand === "all"
+                  ? BRANDS[0]
+                  : scope.brand
                 : "",
       ]),
     ),
@@ -446,7 +466,10 @@ export function AgentForm({
             <fieldset key={field.name} className="wide arch-checkset">
               <legend>{field.label}</legend>
               <span className="arch-checks">
-                {field.options.map((option) => (
+                {(field.byBrand && scope.brand !== "all"
+                  ? field.byBrand[scope.brand]
+                  : field.options
+                ).map((option) => (
                   <label key={option}>
                     <input
                       type="checkbox"
@@ -474,8 +497,9 @@ export function AgentForm({
                   value={String(values[field.name])}
                   onChange={(event) => set(field.name, event.target.value)}
                 >
-                  <option>Harborstone Wealth</option>
-                  <option>Coastline Kitchen</option>
+                  {BRANDS.map((brand) => (
+                    <option key={brand}>{brand}</option>
+                  ))}
                 </select>
               )}
               {field.type === "text" && (
