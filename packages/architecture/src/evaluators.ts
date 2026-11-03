@@ -35,6 +35,8 @@ export type Evaluator = {
 const PII = /[\w.+-]+@[\w-]+\.[\w.]+|\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b|\b\d{3}-\d{2}-\d{4}\b/;
 const ratio = (part: number, whole: number) => (whole === 0 ? 1 : part / whole);
 const DECISIONS = /^(transition|supersede_claim|accept_optimization)$/;
+/** A model agent's run (several model steps and tool calls) within this scores 1. */
+export const LATENCY_BUDGET_MS = 20_000;
 
 export const EVALUATORS: readonly Evaluator[] = [
   {
@@ -141,7 +143,7 @@ export const EVALUATORS: readonly Evaluator[] = [
     method: "measured",
     threshold: 0.5,
     applies: () => true,
-    score: (t) => Math.min(1, 3000 / Math.max(t.latencyMs, 1)),
+    score: (t) => Math.min(1, LATENCY_BUDGET_MS / Math.max(t.latencyMs, 1)),
   },
   {
     id: "cost",
@@ -172,11 +174,19 @@ export const failedEvaluators = (scores: Record<string, number>) =>
     (evaluator) => evaluator.id,
   );
 
-/** What a healthy agent scores on each evaluator its prompt names: 1 on every deterministic one. */
+/**
+ * What a healthy agent scores on each evaluator its prompt names: 1 on every deterministic one,
+ * and the threshold on a measured one, since a model's timing and cost vary run to run.
+ */
 export function baselineFor(agentId: string): Record<string, number> {
   const named = PROMPT_CATALOG.find((prompt) => prompt.agentId === agentId)?.evaluators ?? [];
   const universal = ["pii-leakage", "latency", "cost", "policy-adherence"];
-  return Object.fromEntries([...new Set([...named, ...universal])].map((id) => [id, 1]));
+  return Object.fromEntries(
+    [...new Set([...named, ...universal])].map((id) => {
+      const evaluator = EVALUATORS.find((item) => item.id === id);
+      return [id, evaluator?.method === "measured" ? evaluator.threshold : 1];
+    }),
+  );
 }
 
 export type DriftReport = {

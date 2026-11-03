@@ -226,9 +226,11 @@ function evalTurnFor(
   );
   return {
     agentId,
+    // The gateway's decision, not the call's outcome: wording a service sends back for another try
+    // was allowed, and retrying it is the agent doing its job.
     calls: steps.map((step) => ({
       action: step.tool,
-      decision: step.ok ? ("allow" as const) : ("deny" as const),
+      decision: step.decision?.decision === "deny" ? ("deny" as const) : ("allow" as const),
     })),
     expectedAction: action,
     statements,
