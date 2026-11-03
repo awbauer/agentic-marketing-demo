@@ -64,6 +64,10 @@ pnpm kg:parity   # needs NEO4J_QUERY_URL, NEO4J_USERNAME, NEO4J_PASSWORD
 
 One, run on Andrew's request: `pnpm kg:seed --confirm` against the Neo4j instance configured in the local `.dev.vars`. It merges nodes by id under the unchanged dataset version, so it only added Lumera and the read-back matched (2,530 nodes and 20,701 relationships). `pnpm kg:parity` then passed. Rollback: re-seed with `--reset` from `main`. Any other instance needs the same `pnpm kg:seed --confirm`.
 
+### Preview builds
+
+Branch builds in Cloudflare run `npx wrangler preview`, which needs a `previews` block in `wrangler.jsonc`. Created on Andrew's request and logged in: D1 database `northstar-marketing-workbench-preview` (all six migrations applied) and R2 bucket `northstar-marketing-workbench-preview-assets`. The block gives previews their own database and bucket, `ENVIRONMENT: "preview"`, no Salesforce MCP URL, and `AUTH_MODE: "access"` with no verifier, which fails closed: a preview shows the app shell but signs no one in until Access is configured for it. Previews do not get a Durable Object namespace or the hourly cron (Cloudflare's preview limitations). The AI Gateway ID is shared with production; it only proxies model calls. Rollback: delete the two resources and the block.
+
 ## Evidence
 
 - Reports: `artifacts/reports/` from `pnpm verify`.
