@@ -363,13 +363,14 @@ export function toolsFor({
       grant: "author_module",
       tool: tool({
         description:
-          'Write and save a module for a brief. Pass every topic that was requested, even ones you expect to be refused: the service inserts each substantiated claim\'s exact text with the disclosures it requires, and refuses the rest and records each as a gap. Your own words are limited to three things. headline: a label, 10 words or fewer, reusing the words of the wave\'s theme (see the brief) and the product name. framing: at most three short sentences, each a greeting that starts "Hello" or a call to action that starts "See", "Read", "Review", "Visit" or similar, without the product or brand name. Anything else in your own words is rejected; the claims say everything that is a fact.',
+          "Write and save a module for a brief. Pass every topic that was requested, even ones you expect to be refused: the service inserts each substantiated claim's exact text with the disclosures it requires, and refuses the rest and records each as a gap. Write the rest as an email a person would read, in natural sentences. headline: the subject line, 12 words or fewer, naming the occasion and the product. opening: one or two short paragraphs before the claims, greeting the reader and setting the occasion (the meeting, the season, the date). closing: one or two short paragraphs after the claims, saying what to do next and signing off. Your own words may name the product, the occasion and dates, but may not state a number, price, outcome, benefit, comparison or reason: the claims say what the product does, word for word. A sentence that does is rejected with the words that did it.",
         inputSchema: z.object({
           briefUrn: z.string(),
           topics: z.array(z.string()).min(1),
           channel: z.enum(CHANNELS),
-          headline: z.string().min(3).max(90),
-          framing: z.array(z.string()).max(3),
+          headline: z.string().min(3).max(120),
+          opening: z.array(z.string()).max(2),
+          closing: z.array(z.string()).max(2),
         }),
         execute: async (input) =>
           call("author_module", "author_module", input, input.briefUrn, async (world) => {

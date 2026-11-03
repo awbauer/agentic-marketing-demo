@@ -1,7 +1,7 @@
 // The adversarial farm and the data readiness agent. Both only report; neither changes an object.
 
 import { type Blocker, claimPacket } from "./agents.ts";
-import { ABSOLUTE, FACT, PHARMA_OVERREACH } from "./language.ts";
+import { ABSOLUTE, PHARMA_OVERREACH, statesFact } from "./language.ts";
 import { STAGE_LABELS, STAGES, type Stage } from "./registry.ts";
 import type { CHANNEL_BASELINE } from "./seed.ts";
 import {
@@ -48,7 +48,7 @@ export function runFarm(world: World, moduleUrn: string): Finding[] {
   for (const block of attributes.blocks) {
     if (block.disclosureUrn) continue;
     if (!block.claimUrn) {
-      if (FACT.test(block.text))
+      if (statesFact(block.text))
         add("claim-attacker", "block", `Uncited factual statement: "${block.text}"`);
       continue;
     }

@@ -15,7 +15,6 @@ import {
   detectDrift,
   type EvalTurn,
   evidencePacket,
-  FACT,
   farmBlockers,
   type GovernedObject,
   getObject,
@@ -28,6 +27,7 @@ import {
   runFarm,
   scoreTurn,
   searchObjects,
+  statesFact,
   supersedeClaim,
   versionChain,
   type World,
@@ -213,7 +213,7 @@ function evalTurnFor(
   // Factual statements only: a cited claim, or uncited text that states a fact. An agent's own
   // framing is checked to state none when it is saved, so it is not counted against it.
   const statements = (attributes?.blocks ?? [])
-    .filter((block) => !block.disclosureUrn && (block.claimUrn || FACT.test(block.text)))
+    .filter((block) => !block.disclosureUrn && (block.claimUrn || statesFact(block.text)))
     .map((block) => {
       const claim = block.claimUrn ? getObject(world, block.claimUrn) : undefined;
       return {

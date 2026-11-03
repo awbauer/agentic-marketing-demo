@@ -120,7 +120,7 @@ export function taskFor(action: string, input: Record<string, unknown>): string 
     case "reuse_modules":
       return `Find existing modules worth reusing${input.briefUrn ? ` for brief ${input.briefUrn}` : ""}${input.query ? ` for "${input.query}"` : ""}. Say why the best ones fit and flag any that need a refresh.`;
     case "author_module":
-      return `Write a ${input.channel ?? "email"} module for brief ${input.briefUrn}. The facts requested: ${list(input.topics)}. List the claims first, then write the module with those topics, a headline and one or two framing sentences in your own words. Say which requested facts were refused and why.`;
+      return `Write a ${input.channel ?? "email"} module for brief ${input.briefUrn}. The facts requested: ${list(input.topics)}. List the claims first, then write the module with those topics, a subject line, an opening and a closing in your own words, written as an email a person would read. Say which requested facts were refused and why.`;
     case "atomize_module":
       return `Make ${list(input.channels) || "push and sms"} versions of module ${input.moduleUrn}, keeping every claim whole.`;
     case "assemble_evidence":

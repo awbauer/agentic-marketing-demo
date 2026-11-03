@@ -187,11 +187,13 @@ export function assetOf(events: readonly FlowEvent[]): Asset {
           ...(typeof input.headline === "string"
             ? [["headline", input.headline] as [BlockRole, string]]
             : []),
-          ...(Array.isArray(input.framing)
-            ? input.framing
-                .filter((text): text is string => typeof text === "string")
-                .map((text) => ["framing", text] as [BlockRole, string])
-            : []),
+          ...[input.opening, input.closing, input.framing].flatMap((texts) =>
+            Array.isArray(texts)
+              ? texts
+                  .filter((text): text is string => typeof text === "string")
+                  .map((text) => ["framing", text] as [BlockRole, string])
+              : [],
+          ),
         ];
         for (const { role, text, reason } of error ? rejectedWords(error, pieces) : [])
           reject({
