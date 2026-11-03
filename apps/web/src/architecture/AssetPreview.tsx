@@ -1,5 +1,5 @@
 import { BRAND_RULES, type Brand } from "@northstar/architecture";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { shortUrn } from "./api";
 import type { Asset, AssetBlock, AssetFinding, AssetVersion } from "./asset";
 
@@ -8,11 +8,13 @@ const ROLE_LABEL: Record<AssetBlock["role"], string> = {
   framing: "Agent’s own words",
   claim: "Approved claim",
   disclosure: "Required disclosure",
+  image: "Image",
 };
 const STATUS_LABEL: Record<AssetBlock["status"], string> = {
   kept: "In the asset",
   rejected: "Rejected wording",
   refused: "Refused: no approved claim",
+  passed: "Passed over",
 };
 const STATE_LABEL: Record<string, string> = {
   draft: "Draft",
@@ -24,18 +26,22 @@ const STATE_LABEL: Record<string, string> = {
 };
 const WHY: Record<AssetBlock["role"], string> = {
   headline:
-    "The agent wrote this label. It may only reuse the wave’s theme words, the product name and plain connecting words, so it cannot assert anything.",
+    "The agent wrote this subject line. It may name the occasion and the product, but the service rejects any word that asserts an outcome, benefit, comparison or reason.",
   framing:
-    "The agent wrote this greeting or call to action. Its own words may not state a fact, name the product or make a comparison; the service checks each sentence.",
+    "The agent wrote these words around the claims. They may greet, set the occasion and say what to do next; the service rejects any sentence that states a fact or asserts what the product does.",
   claim:
     "The service inserted this claim’s approved text exactly. The agent chose the topic; it did not write or reword the sentence.",
   disclosure:
     "A cited claim requires this disclosure, so the service attached it. The agent cannot leave it out.",
+  image:
+    "The service picked this image from the brand’s asset library, the way it inserts claims: approved, in rights on the send date, and showing nothing the module doesn’t cite. The agent didn’t choose it.",
 };
 
 function blockTag(block: AssetBlock) {
   if (block.status === "refused") return "Refused";
   if (block.status === "rejected") return "Rejected";
+  if (block.status === "passed") return "Image passed over";
+  if (block.image) return `Image from ${block.image.source}`;
   return ROLE_LABEL[block.role];
 }
 
@@ -88,6 +94,57 @@ function Block({
   );
 }
 
+/**
+ * An image from the asset library. The library is mocked, so the preview draws a placeholder in the
+ * brand's color with the image's alt text, where the real file from the library would go.
+ */
+function Image({
+  block,
+  brand,
+  selected,
+  onSelect,
+}: {
+  block: AssetBlock;
+  brand: Brand;
+  selected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const image = block.image;
+  if (!image) return null;
+  const accent = BRAND_RULES[brand].accent;
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={`${blockTag(block)}: ${image.title}`}
+      className={`asset-image placement-${image.placement ?? "inline"} ${selected ? "selected" : ""}`}
+      style={{ "--asset-accent": accent } as React.CSSProperties}
+      onClick={() => onSelect(block.id)}
+    >
+      {image.placement === "header" ? (
+        <span className="asset-image-logo">{image.alt ?? image.title}</span>
+      ) : (
+        <>
+          <span className="asset-image-frame" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1 2v8.6l3.8-3.8a1 1 0 0 1 1.4 0l2.3 2.3 3.3-3.3a1 1 0 0 1 1.4 0L19 12.6V7H5Zm4 2.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"
+              />
+            </svg>
+          </span>
+          <span className="asset-image-caption">
+            <span className="asset-block-tag">
+              {image.source} · {image.sourceId}
+            </span>
+            <span>{image.alt ?? image.title}</span>
+          </span>
+        </>
+      )}
+    </button>
+  );
+}
+
 /** Who the wave reaches and when, read from the brief the flow drafted. */
 function Audience({ asset }: { asset: Asset }) {
   const audience = asset.audience;
@@ -129,6 +186,20 @@ function Email({
   const body = rest.filter((block) => block.role !== "disclosure");
   const disclosures = rest.filter((block) => block.role === "disclosure");
   const rules = BRAND_RULES[brand];
+  const placed = (placement: string) =>
+    version.images.filter((block) => block.image?.placement === placement);
+  const logo = placed("header")[0];
+  // The inline image sits after the last claim, before the closing words.
+  const lastClaim = body.map((block) => block.role).lastIndexOf("claim");
+  const image = (block: AssetBlock) => (
+    <Image
+      key={block.id}
+      block={block}
+      brand={brand}
+      selected={selected === block.id}
+      onSelect={onSelect}
+    />
+  );
   return (
     <div className="asset-email" style={{ borderTopColor: rules.accent }}>
       <dl className="asset-email-meta">
@@ -147,16 +218,19 @@ function Email({
         </div>
       </dl>
       <div className="asset-email-body">
-        <p className="asset-brandmark" style={{ color: rules.accent }}>
-          {brand}
-        </p>
-        {body.map((block) => (
-          <Block
-            key={block.id}
-            block={block}
-            selected={selected === block.id}
-            onSelect={onSelect}
-          />
+        {logo ? (
+          image(logo)
+        ) : (
+          <p className="asset-brandmark" style={{ color: rules.accent }}>
+            {brand}
+          </p>
+        )}
+        {placed("banner").map(image)}
+        {body.map((block, index) => (
+          <Fragment key={block.id}>
+            <Block block={block} selected={selected === block.id} onSelect={onSelect} />
+            {index === lastClaim && placed("inline").map(image)}
+          </Fragment>
         ))}
       </div>
       {disclosures.length > 0 && (
@@ -207,6 +281,16 @@ function Short({
           {push ? brand : `${brand} · text message`}
           <small>now</small>
         </p>
+        {push &&
+          version.images.map((block) => (
+            <Image
+              key={block.id}
+              block={block}
+              brand={brand}
+              selected={selected === block.id}
+              onSelect={onSelect}
+            />
+          ))}
         {push && headline && (
           <p className="asset-phone-title">
             <Block
@@ -271,37 +355,83 @@ function Detail({
       <dl>
         {block.reason && (
           <div>
-            <dt>{block.status === "refused" ? "Why it was refused" : "Why it was rejected"}</dt>
+            <dt>
+              {block.status === "refused"
+                ? "Why it was refused"
+                : block.status === "passed"
+                  ? "Why it was passed over"
+                  : "Why it was rejected"}
+            </dt>
             <dd>{block.reason}</dd>
           </div>
+        )}
+        {block.image && (
+          <>
+            <div>
+              <dt>Library</dt>
+              <dd>
+                {block.image.source} · <code>{block.image.sourceId}</code>
+              </dd>
+            </div>
+            {block.image.alt && (
+              <div>
+                <dt>Alt text</dt>
+                <dd>{block.image.alt}</dd>
+              </div>
+            )}
+            {block.image.approvalId && (
+              <div>
+                <dt>Approval</dt>
+                <dd>
+                  <code>{block.image.approvalId}</code>
+                </dd>
+              </div>
+            )}
+            {block.image.rightsUntil && (
+              <div>
+                <dt>Usage rights until</dt>
+                <dd>{block.image.rightsUntil}</dd>
+              </div>
+            )}
+            {block.image.why && (
+              <div>
+                <dt>Why this one</dt>
+                <dd>{block.image.why}</dd>
+              </div>
+            )}
+          </>
         )}
         <div>
           <dt>How it got here</dt>
           <dd>
             {block.status === "refused"
               ? "The agent asked for this topic. The service found no substantiated claim for it, so it wrote nothing and filed a gap for the content lab instead."
-              : block.status === "rejected"
-                ? "The agent proposed these words. The service checked them and refused the whole draft, so the agent had to try again."
-                : WHY[block.role]}
+              : block.status === "passed"
+                ? "The service considered this image from the brand’s library and left it out. Only approved images, in rights on the send date and showing only claims the module cites, go in."
+                : block.status === "rejected"
+                  ? "The agent proposed these words. The service checked them and refused the whole draft, so the agent had to try again."
+                  : WHY[block.role]}
           </dd>
         </div>
-        <div>
-          <dt>Written by</dt>
-          <dd>
-            {block.role === "claim" && block.status === "kept"
-              ? "Compliance approved the text"
-              : block.role === "disclosure"
-                ? "Legal text, attached by the service"
-                : block.by.agent}{" "}
-            · via <code>{block.by.tool}</code>
-            {block.by.policyId && (
-              <>
-                {" "}
-                · allowed by <code>{block.by.policyId}</code>
-              </>
-            )}
-          </dd>
-        </div>
+        {block.role !== "image" && (
+          <div>
+            <dt>Written by</dt>
+            <dd>
+              {block.role === "claim" && block.status === "kept"
+                ? "Compliance approved the text"
+                : block.role === "disclosure"
+                  ? "Legal text, attached by the service"
+                  : block.by.agent}{" "}
+              · via <code>{block.by.tool}</code>
+              {block.by.policyId && (
+                <>
+                  {" "}
+                  · allowed by <code>{block.by.policyId}</code>
+                </>
+              )}
+            </dd>
+          </div>
+        )}
         {block.topic && block.status === "kept" && (
           <div>
             <dt>Claim topic</dt>
@@ -364,7 +494,7 @@ export function AssetPreview({
   const [selected, setSelected] = useState<string | null>(null);
   const version = versions.find((item) => item.channel === channel) ?? versions[0];
   // A new draft replaces the old one; let go of a block that is no longer there.
-  const all = [...versions.flatMap((item) => item.blocks), ...asset.rejected];
+  const all = [...versions.flatMap((item) => [...item.blocks, ...item.images]), ...asset.rejected];
   const block = all.find((item) => item.id === selected);
   useEffect(() => {
     if (selected && !block) setSelected(null);

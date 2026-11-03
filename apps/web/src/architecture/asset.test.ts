@@ -166,4 +166,46 @@ describe("assetOf", () => {
     ]);
     expect(asset.readiness).toBeUndefined();
   });
+
+  it("places the library's images and lists the ones the service passed over", () => {
+    const image = {
+      assetId: "ck-img-chowder-hero",
+      source: "Content Builder",
+      sourceId: "CB-88214",
+      title: "Clam chowder on a cold day",
+      alt: "A bowl of clam chowder",
+      placement: "banner",
+      why: "Matches chowder, cold.",
+    };
+    const asset = assetOf([
+      delegate("a", "module-authoring", "Module authoring agent"),
+      tool("a", {
+        tool: "author_module",
+        output: {
+          module: moduleView({ attributes: { ...moduleView().attributes, assets: [image] } }),
+          refused: [],
+          assetsPassed: [
+            {
+              assetId: "ck-img-price-tile",
+              source: "Content Builder",
+              sourceId: "CB-88241",
+              title: "Chowder price tile",
+              reason: "It shows chowder-price, which this module doesn't cite.",
+            },
+          ],
+        },
+      }),
+    ]);
+    expect(asset.master?.images).toMatchObject([
+      {
+        role: "image",
+        status: "kept",
+        text: "Clam chowder on a cold day",
+        image: { placement: "banner" },
+      },
+    ]);
+    expect(asset.rejected).toMatchObject([
+      { role: "image", status: "passed", text: "Chowder price tile", reason: /doesn't cite/ },
+    ]);
+  });
 });

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACTION_RISK,
   AGENT_REGISTRY,
+  assetsForChannel,
   APPROVAL_STATES,
   acceptOptimization,
   allowedTransitions,
@@ -45,6 +46,7 @@ import {
   planContent,
   proposeOptimizations,
   rankModules,
+  suggestAssets,
   refreshReasons,
   renderPrompt,
   resolveBrief,
@@ -1003,6 +1005,76 @@ describe("an agent's own words", () => {
     expect(() => author([], "Cardivance Shows Meaningful Benefit in Heart Failure")).toThrow(
       /shows, meaningful, benefit/,
     );
+  });
+});
+
+describe("images from the asset library", () => {
+  const lumera = (topics: string[], sendOn = "2026-11-10") =>
+    suggestAssets({
+      brand: "Lumera Therapeutics",
+      channel: "email",
+      theme: "Cardivance outcomes at the heart failure meeting",
+      topics,
+      sendOn,
+    });
+
+  it("picks the logo, a banner and an image beside the claims, from Aprimo", () => {
+    const { picked } = lumera(["cardivance-mortality"]);
+    expect(picked.map((item) => [item.placement, item.assetId])).toEqual([
+      ["header", "lt-img-logo"],
+      ["banner", "lt-img-congress-hero"],
+      ["inline", "lt-img-cardivance-pack"],
+    ]);
+    expect(picked.every((item) => item.source === "Aprimo" && item.approvalId)).toBe(true);
+  });
+
+  it("passes over what isn't approved, is out of rights on the send date, or shows an uncited claim", () => {
+    const { passed } = lumera(["cardivance-mortality"]);
+    const reason = (id: string) => passed.find((item) => item.assetId === id)?.reason;
+    expect(reason("lt-img-superiority-chart")).toMatch(/Pending in Aprimo \(MLR-2026-0702\)/);
+    expect(reason("lt-img-patient-walk")).toMatch(
+      /rights end 2026-10-31, before the send on 2026-11-10/,
+    );
+    // Another brand's or another product's images are never considered.
+    expect(
+      passed.some((item) => item.assetId.startsWith("hs-") || item.assetId.includes("glucora")),
+    ).toBe(false);
+    const coastline = suggestAssets({
+      brand: "Coastline Kitchen",
+      channel: "email",
+      theme: "Chowder on a cold day",
+      topics: ["soup-hours"],
+      sendOn: "2026-11-09",
+    });
+    expect(coastline.passed.find((item) => item.assetId === "ck-img-price-tile")?.reason).toMatch(
+      /shows chowder-price, which this module doesn't cite/,
+    );
+    expect(coastline.picked.every((item) => item.source === "Content Builder")).toBe(true);
+  });
+
+  it("attaches the picks to the module the authoring service writes", () => {
+    const result = authorModule(world(), {
+      briefUrn: "urn:northstar:brief:lt-brief-w1",
+      topics: ["cardivance-mortality", "cardivance-superior"],
+      channel: "email",
+    });
+    const assets = (must(result.module).attributes as { assets: Array<{ assetId: string }> })
+      .assets;
+    expect(assets.map((item) => item.assetId)).toContain("lt-img-congress-hero");
+    expect(result.assetsPassed.map((item) => item.assetId)).toContain("lt-img-superiority-chart");
+  });
+
+  it("keeps the banner on a push and no image in a text message", () => {
+    const { picked } = lumera(["cardivance-mortality"]);
+    expect(assetsForChannel(picked, "sms")).toEqual([]);
+    const coastline = suggestAssets({
+      brand: "Coastline Kitchen",
+      channel: "email",
+      theme: "Chowder on a cold day",
+      topics: ["chowder-price"],
+      sendOn: "2026-11-09",
+    }).picked;
+    expect(assetsForChannel(coastline, "push").map((item) => item.placement)).toEqual(["banner"]);
   });
 });
 

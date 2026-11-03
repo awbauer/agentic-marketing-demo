@@ -383,6 +383,7 @@ export function toolsFor({
               module: result.module ? objectView(world, result.module) : undefined,
               refused: result.refused,
               gaps: result.gaps.map((gap) => ({ urn: gap.urn, title: gap.title })),
+              assetsPassed: result.assetsPassed,
             };
           }),
       }),

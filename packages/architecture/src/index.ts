@@ -1,4 +1,5 @@
 export * from "./agents.ts";
+export * from "./assets.ts";
 export * from "./channels.ts";
 export * from "./evaluators.ts";
 export * from "./farm.ts";
