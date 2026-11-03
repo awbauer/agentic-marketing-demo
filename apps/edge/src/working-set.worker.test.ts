@@ -5,6 +5,7 @@ import type { MemoryView } from "../../../packages/knowledge-graph/src/index.ts"
 import { connectCampaignContextTools } from "./campaign-context/server";
 import { connectExternalServiceTools } from "./external-services/server";
 import { connectKnowledgeGraphTools, knowledgeGraphBackend } from "./knowledge-graph/server";
+import { aprimoSearch } from "./life-sciences/systems";
 import { agentStubFor, CATALOG_CAMPAIGN_ID, openCatalogCampaign } from "./worker.test-helpers";
 import {
   baseToolName,
@@ -169,6 +170,26 @@ describe("working set", () => {
       at,
     });
     expect(failed).toEqual(emptyWorkingSet());
+  });
+
+  it("lists each Aprimo asset on its card, usable ones first, with why the rest can't be used", () => {
+    const assets = aprimoSearch("drug-cardivance", { today: "2026-11-03", channel: "email" });
+    const body = { system: "Aprimo", mock: true, drug: "drug-cardivance", assets, usableNow: 1 };
+    const set = ingestToolResult(emptyWorkingSet(), {
+      toolName: "ls_aprimo_search_approved_assets",
+      input: { drug: "drug-cardivance", channel: "email" },
+      output: { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body },
+      at,
+    });
+    const card = set.cards[0];
+    expect(card?.summary).toBe("2 assets, 1 usable now.");
+    expect(card?.details).toEqual([
+      "Usable: Cardivance HFrEF outcomes email (MLR-2026-0412), approved until 2027-06-12",
+      "Not usable: Cardivance “superior to ARBs” email (MLR-2026-0577), pending MLR review",
+    ]);
+    // The card names the system, not that its data is mocked.
+    expect(card?.source.label).toBe("Aprimo");
+    expect(JSON.stringify(card)).not.toMatch(/mocked/i);
   });
 
   it("tells the model what is open and keeps the catalog separate", () => {

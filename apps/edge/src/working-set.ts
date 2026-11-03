@@ -287,6 +287,42 @@ const LIFE_SCIENCES_LABELS: Record<string, string> = {
   drupal_list_hcp_site_content: "Drupal: HCP site",
 };
 
+/** Why an asset can't be used now, in the marketer's words. */
+function notUsable(asset: Record<string, unknown>) {
+  const status = str(asset.status);
+  if (status === "Pending") return "pending MLR review";
+  if (status === "Expired")
+    return `MLR approval expired${str(asset.expiresOn) ? ` ${str(asset.expiresOn)}` : ""}`;
+  return "failed a compliance check";
+}
+
+/** One line per item the system returned: each asset, claim, job or page, and its standing. */
+const LIFE_SCIENCES_DETAILS: Record<string, (data: Record<string, unknown>) => string[]> = {
+  aprimo_search_approved_assets: (data) =>
+    (list(data.assets) as Array<Record<string, unknown>>)
+      .sort((a, b) => Number(Boolean(b.usableNow)) - Number(Boolean(a.usableNow)))
+      .map((asset) => {
+        const name = `${str(asset.title) ?? "Asset"} (${str(asset.mlrApprovalId) ?? str(asset.aprimoAssetId) ?? "no ID"})`;
+        return asset.usableNow
+          ? `Usable: ${name}${str(asset.expiresOn) ? `, approved until ${str(asset.expiresOn)}` : ""}`
+          : `Not usable: ${name}, ${notUsable(asset)}`;
+      }),
+  vault_list_approved_claims: (data) =>
+    (list(data.claims) as Array<Record<string, unknown>>).map(
+      (claim) =>
+        `${str(claim.status) ?? "Unknown"}: ${clip(str(claim.text) ?? "Claim", 110)}${str(claim.reason) ? ` (${str(claim.reason)})` : ""}`,
+    ),
+  screendragon_list_jobs: (data) =>
+    (list(data.jobs) as Array<Record<string, unknown>>).map(
+      (job) =>
+        `${str(job.title) ?? "Job"} (${str(job.jobId) ?? "no ID"}): ${str(job.stage) ?? "unknown stage"}, due ${str(job.dueOn) ?? "unscheduled"}${job.atRisk ? ", at risk" : ""}`,
+    ),
+  drupal_list_hcp_site_content: (data) =>
+    (list(data.pages) as Array<Record<string, unknown>>).map(
+      (page) => `${str(page.title) ?? "Page"}: ${page.compliant ? "compliant" : "not compliant"}`,
+    ),
+};
+
 function lifeSciencesCard(data: Record<string, unknown>, tool: string, at: Date): Ingested {
   const system = str(data.system) ?? "Life sciences system";
   const headline: Record<string, () => string> = {
@@ -330,13 +366,11 @@ function lifeSciencesCard(data: Record<string, unknown>, tool: string, at: Date)
         state: "ready",
         source: {
           system: "life-sciences",
-          label: `${system} (mocked)`,
+          label: system,
           freshness: "just now",
           status: "ready",
         },
-        details: [
-          "Mocked system of record with invented data, keyed to the knowledge graph's identifiers.",
-        ],
+        details: (LIFE_SCIENCES_DETAILS[tool]?.(data) ?? []).slice(0, 8),
         updatedAt: at.toISOString(),
         toolName: tool,
       },
