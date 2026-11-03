@@ -504,7 +504,7 @@ Four properties make it trustworthy:
 
 **Life-sciences cards.** The three Lumera tools add working-set cards: a target list, a claims check and a hospital plan, each with the summary line the card shows.
 
-The life-sciences systems add a card per answer, labeled as mocked, so what came from Aprimo, Reltio or Drupal stays visible beside the graph's evidence.
+The life-sciences systems add a card per answer, named for the system, so what came from Aprimo, Reltio or Drupal stays visible beside the graph's evidence. A card lists what was found, one line each: every Aprimo asset as usable (with its MLR ID and approval date) or not and why (pending review, expired, failed a check), each claim in the Vault library with its status, each Screendragon job with its stage and due date, and each HCP page as compliant or not.
 
 **Try it**
 
