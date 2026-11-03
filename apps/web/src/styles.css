@@ -2529,96 +2529,111 @@ select:disabled,
   }
 }
 
-/* How the agents used the knowledge graph: the tools, then a map of the nodes they walked. */
+/* How the agents used the knowledge graph: a summary, then the evidence as a tree of cards. */
+.graph-usage-summary {
+  margin: 0 0 2px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #2b3a33;
+}
 .graph-usage-lede {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin: 0 0 10px;
+  font-size: 11px;
   color: #5b6a62;
 }
-.graph-usage-tools {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 8px;
+.graph-tree,
+.graph-tree-children {
+  margin: 0;
   padding: 0;
   list-style: none;
 }
-.graph-usage-tools li {
-  padding: 3px 9px;
-  border: 1px solid #d9e2d6;
-  border-radius: 999px;
-  background: #f4f7f1;
-  font-size: 11px;
-  color: #3e4c44;
+.graph-tree-children {
+  margin-left: 14px;
+  padding-left: 14px;
 }
-.graph-usage-tools strong {
-  text-transform: capitalize;
+.graph-tree-item {
+  position: relative;
+  padding-top: 6px;
 }
-.graph-usage-map {
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 1px solid #e3e8e1;
-  border-radius: 10px;
-  background: radial-gradient(circle at 50% 0%, #f7faf2, #fdfefc 70%);
+/* Each card below the first level draws its rail: an elbow into the card, and a line on down
+   to its next sibling if it has one. */
+.graph-tree-children > .graph-tree-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -14px;
+  width: 11px;
+  height: 22px;
+  border-left: 1.5px solid #cbd5ca;
+  border-bottom: 1.5px solid #cbd5ca;
+  border-bottom-left-radius: 6px;
 }
-.graph-usage-edge path {
-  fill: none;
-  stroke: #b9c4bc;
-  stroke-width: 1.4;
+.graph-tree-children > .graph-tree-item:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -14px;
+  border-left: 1.5px solid #cbd5ca;
 }
-.graph-usage-edge:hover path {
-  stroke: var(--forest);
-  stroke-width: 2.2;
+.graph-tree-card {
+  display: grid;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 1px solid #e1e7df;
+  border-left: 3px solid var(--type);
+  border-radius: 7px;
+  background: #fff;
+  animation: graph-tree-arrive 0.3s ease-out both;
 }
-.graph-usage-node circle {
-  stroke: #fff;
-  stroke-width: 2.5;
-  filter: drop-shadow(0 1px 1.5px rgb(23 61 49 / 25%));
-  animation: graph-usage-arrive 0.4s ease-out both;
+.graph-tree-item.root > .graph-tree-card {
+  border-color: color-mix(in srgb, var(--type) 35%, #e1e7df);
+  background: color-mix(in srgb, var(--type) 7%, #fff);
 }
-.graph-usage-node text {
+.graph-tree-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.graph-tree-type {
   font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--type);
+}
+.graph-tree-via {
+  font-size: 11px;
+  font-style: italic;
+  color: #6a7a71;
+}
+.graph-tree-name {
+  font-size: 13px;
   font-weight: 600;
-  fill: #2b3a33;
-  paint-order: stroke;
-  stroke: #fdfefc;
-  stroke-width: 3px;
+  line-height: 1.35;
+  color: #1d2a24;
 }
-.graph-usage-node:hover circle {
-  stroke: var(--forest);
+.graph-tree-item.root > .graph-tree-card .graph-tree-name {
+  font-size: 14px;
 }
-@keyframes graph-usage-arrive {
-  from {
-    opacity: 0;
-    transform: scale(0.4);
-  }
+.graph-tree-also {
+  font-size: 11px;
+  color: #6a7a71;
 }
 .graph-usage-more {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-size: 11px;
   color: #5b6a62;
 }
-.graph-usage-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  font-size: 11px;
-  color: #4b5a51;
-}
-.graph-usage-legend i {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  margin-right: 5px;
-  border-radius: 50%;
-  vertical-align: -1px;
+@keyframes graph-tree-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .graph-usage-node circle {
+  .graph-tree-card {
     animation: none;
   }
 }

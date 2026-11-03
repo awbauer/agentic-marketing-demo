@@ -2,7 +2,7 @@ import type { UIMessage } from "ai";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { type GraphEvidence, latestGraphEvidence } from "./GraphEvidence";
-import { GraphUsage, graphLayout } from "./GraphUsage";
+import { GraphUsage, graphTree, typeName } from "./GraphUsage";
 import { toolCalls } from "./ToolActivity";
 
 afterEach(cleanup);
@@ -30,26 +30,75 @@ const evidence: GraphEvidence[] = [
   },
 ];
 
-describe("the knowledge-graph map", () => {
-  it("draws a shared node once, in the row nearest the start", () => {
-    const layout = graphLayout(evidence);
-    expect(layout.nodes.map((node) => [node.id, node.row])).toEqual([
-      ["drug-cardivance", 0],
-      ["c1", 1],
-      ["c2", 1],
-      ["trial-cardio-hf", 2],
+describe("the knowledge-graph tree", () => {
+  it("hangs each node once under the first node that reached it", () => {
+    const tree = graphTree(evidence);
+    const root = tree.roots[0];
+    expect(tree.roots.map((node) => node.id)).toEqual(["drug-cardivance"]);
+    expect(root?.children.map((node) => [node.id, node.via?.type])).toEqual([
+      ["c1", "HAS_CLAIM"],
+      ["c2", "HAS_CLAIM"],
     ]);
-    expect(layout.edges).toHaveLength(3);
-    expect(layout.labels).toEqual(["Drug", "Claim", "Trial"]);
+    expect(root?.children[0]?.children.map((node) => node.name)).toEqual(["CARDIO-HF"]);
+    expect(tree.count).toBe(4);
+    expect(tree.byType).toEqual([
+      ["Drug", 1],
+      ["Claim", 2],
+      ["Trial", 1],
+    ]);
   });
 
-  it("names the tools, counts their paths, and shows a legend", () => {
-    render(<GraphUsage evidence={evidence} />);
-    expect(screen.getByText("check clinical claims")).toBeTruthy();
-    expect(screen.getByRole("img").getAttribute("aria-label")).toBe(
-      "4 nodes and 3 relationships along 2 evidence paths",
+  it("reads a link pointing back up the tree from the child's side", () => {
+    const asset = { id: "a1", label: "ContentAsset", name: "Outcomes email" };
+    const tree = graphTree([
+      {
+        tool: "check clinical claims",
+        source: "fixture",
+        paths: [
+          {
+            nodes: [drug, claim("c1"), asset],
+            relationships: [
+              { type: "HAS_CLAIM", from: drug.id, to: "c1" },
+              { type: "CARRIES", from: "a1", to: "c1" },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(tree.roots[0]?.children[0]?.children[0]?.via).toEqual({
+      type: "CARRIES",
+      forward: false,
+    });
+    render(
+      <GraphUsage
+        evidence={[
+          {
+            tool: "check clinical claims",
+            source: "fixture",
+            paths: [
+              {
+                nodes: [drug, claim("c1"), asset],
+                relationships: [
+                  { type: "HAS_CLAIM", from: drug.id, to: "c1" },
+                  { type: "CARRIES", from: "a1", to: "c1" },
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
     );
-    expect(screen.getByRole("list", { name: "Node types" }).textContent).toContain("Trial");
+    expect(screen.getByText("carried in")).toBeTruthy();
+    expect(typeName("ContentAsset")).toBe("Content asset");
+    expect(typeName("MlrApproval")).toBe("MLR approval");
+  });
+
+  it("sums up what the answer reached, names the tools, and shows every name in full", () => {
+    render(<GraphUsage evidence={evidence} />);
+    expect(screen.getByText(/→ 2 claims · 1 trial/)).toBeTruthy();
+    expect(screen.getByText(/Check clinical claims \(2 paths\)/)).toBeTruthy();
+    expect(screen.getByText("Claim c1")).toBeTruthy();
+    expect(screen.getByRole("list", { name: "How the evidence connects" })).toBeTruthy();
   });
 
   it("uses the latest answer that queried the graph", () => {

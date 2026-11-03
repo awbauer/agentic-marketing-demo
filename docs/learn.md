@@ -347,7 +347,7 @@ flowchart TB
 
 The Graph's brand filter and the header's brand are the same setting: choosing Lumera in either shows only Lumera's nodes and what sits close to it.
 
-Every evidence path an answer used is shown twice: in words under the answer, and as a map in the workspace that merges the paths, so you can see which drug, claim, trial or asset several paths ran through.
+Every evidence path an answer used is shown twice: in words under the answer, and as a tree in the workspace that merges the paths, so you can see which drug, claim, trial or asset several paths ran through.
 
 **Try it**
 
@@ -510,7 +510,7 @@ Four properties make it trustworthy:
 
 The life-sciences systems add a card per answer, named for the system, so what came from Aprimo, Reltio or Drupal stays visible beside the graph's evidence. A card lists what was found, one row each, with a status label, its ID and the date that matters: every Aprimo asset as usable (with its MLR ID and approval date) or not and why (pending review, expired, failed a check), each claim in the Vault library with its status, each Screendragon job with its stage and due date, and each HCP page as compliant or not.
 
-**The knowledge graph, as a map.** When an answer queries the graph, the workspace draws the nodes and relationships its tools walked: one row per hop from where a path starts, a node several paths share drawn once, colored by type as in the Graph view, with the tools that used the graph and how many paths each returned. Hover a node or a link for what it is. The answer's own *Graph evidence* lists every path in words.
+**The knowledge graph, as a tree.** When an answer queries the graph, the workspace shows what its tools reached and how it connects. A summary line comes first ("Cardivance → 3 claims · 2 trials · 2 content assets…"), with the tools and how many paths each returned. Then the evidence branches from where the paths start, one card per node with its type and full name, each saying how it links to the card above ("supported by", "carried in"). A node several paths share appears once, noting where else it's linked. The answer's own *Graph evidence* lists every path in words.
 
 **Try it**
 
@@ -1017,7 +1017,7 @@ flowchart LR
 - **Markdown answers.** The model may use concise Markdown. The UI renders it with `react-markdown`, which never renders raw HTML, so model output can't inject markup.
 - **HXL cards.** Salesforce's HXL widgets (MCP Apps) let an agent action return a typed, interactive card, such as campaign readiness. When a host can't render HXL, the workbench shows an equivalent accessible **native fallback** built from the same contract.
 - **Salesforce agents panel.** Under each answer that called Salesforce, a panel lists each call's agent, its type and template, the subagent, and the actions (with their flow or Apex targets) behind it. The confirmation card shows the same for the write it prepares.
-- **Graph evidence panel.** Knowledge-graph paths render as directional chains, each with a text alternative for screen readers. The workspace also draws them as a map; see *The workspace*.
+- **Graph evidence panel.** Knowledge-graph paths render as directional chains, each with a text alternative for screen readers. The workspace also shows them as a tree; see *The workspace*.
 - **Item rows on native cards.** A card whose tool returned a list shows one row per item: a colored status label (usable, waiting, blocked), the item, a monospaced ID and a readable date, so an MLR ID and its expiry stand out.
 - **Live write progress.** Accepting an action card switches its button to **Preparing…** and shows the preparation's steps until the confirmation card appears. Clicking **Confirm** disables the buttons and shows the write's steps in the card as the Worker reports them, kept in view while they run. Afterwards a collapsible **Behind the scenes** record keeps each step and how long it took; it opens by itself when a write fails.
 - **Inventory case confirmation.** The card lists the store manager, the forecast, and a table of each low item: on hand, needed, and the dishes it goes into. After you confirm, a banner links to the Case.
