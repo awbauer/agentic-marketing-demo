@@ -920,81 +920,88 @@ describe("trust matrix", () => {
 
 describe("an agent's own words", () => {
   const LT_BRIEF = "urn:northstar:brief:lt-brief-w1";
-  const author = (framing: string[], headline?: string) =>
+  const author = (opening: string[], headline?: string, closing: string[] = []) =>
     authorModule(world(), {
       briefUrn: LT_BRIEF,
       topics: ["cardivance-mortality"],
       channel: "email",
-      framing,
+      opening,
+      closing,
       ...(headline ? { headline } : {}),
     });
+  const textsOf = (result: ReturnType<typeof author>) =>
+    (
+      must(result.module).attributes as {
+        blocks: Array<{ text: string; claimUrn?: string; disclosureUrn?: string }>;
+      }
+    ).blocks.map((block) =>
+      block.claimUrn ? "<claim>" : block.disclosureUrn ? "<disclosure>" : block.text,
+    );
 
-  it("accepts a greeting and a call to action, and nothing else", () => {
-    const result = author([
+  it("reads as an email: an opening before the claims, a closing after them", () => {
+    const result = author(
+      [
+        "Hello cardiology colleagues,",
+        "Ahead of the heart failure meeting on November 10, here is an update on Cardivance.",
+      ],
+      undefined,
+      [
+        "Please see the full prescribing information below, and reply to this email if you would like a visit from your Lumera representative.",
+        "Best regards, the Lumera medical team",
+      ],
+    );
+    expect(textsOf(result).slice(0, 5)).toEqual([
       "Hello cardiology colleagues,",
-      "See the full prescribing information below.",
+      "Ahead of the heart failure meeting on November 10, here is an update on Cardivance.",
+      "<claim>",
+      "Please see the full prescribing information below, and reply to this email if you would like a visit from your Lumera representative.",
+      "Best regards, the Lumera medical team",
     ]);
-    expect(must(result.module).title).toBeTruthy();
-    const blocks = (
-      must(result.module).attributes as { blocks: Array<{ text: string; claimUrn?: string }> }
-    ).blocks;
-    expect(
-      blocks
-        .filter((block) => !block.claimUrn)
-        .slice(0, 2)
-        .map((block) => block.text),
-    ).toEqual(["Hello cardiology colleagues,", "See the full prescribing information below."]);
   });
 
-  it("refuses an unsupported assertion that no keyword list would catch", () => {
+  it("refuses what a claim would have to support, however naturally it is put", () => {
     for (const sentence of [
       "Cardivance prevents strokes.",
       "Many patients feel better on it.",
       "Learn how it works to protect the heart.",
       "Hello, and see why prescribers trust it.",
       "See the meaningful outcomes.",
-      "Hello, here are the outcomes.",
+      "The trial showed what Cardivance can do.",
+      "Cardivance is well tolerated.",
+      "Over 3 million patients have taken it.",
+      // What the first journeys on these rules wrote: natural, but each implies a benefit.
+      "We're pleased to share the latest data, underscoring its impact for our community.",
+      "It's a chance to make your idle cash work harder.",
     ])
       expect(() => author([sentence]), sentence).toThrow();
   });
 
-  it("lets a call to action point at outcomes or safety, but not stop short", () => {
+  it("allows natural sentences that set the occasion or say what to do next", () => {
     for (const sentence of [
-      "See the latest outcomes.",
-      "Review the safety information below.",
-      "See the latest data.",
-      "See the full prescribing information below.",
-      "Review the full study details.",
-      "Visit the app.",
-      "Talk to your doctor.",
-      // The wave's theme may be named: this brief's wave is about the heart failure meeting.
-      "Join us at the heart failure meeting.",
+      "Hello cardiology prescribers,",
+      "We're looking forward to seeing you at the heart failure meeting on November 10.",
+      "Here are the latest outcomes from the Cardivance program.",
+      "Feel free to reach out with any questions.",
+      "Visit us at the Lumera booth during the meeting.",
+      "Thank you for reading.",
     ])
       expect(must(author([sentence]).module).title, sentence).toBeTruthy();
-    // Calls to action the journeys produced that persuade instead of pointing.
-    for (const sentence of [
-      "Visit to transfer idle cash.",
-      "Visit for warm comfort.",
-      "See your warm bowl waiting.",
-      "Read the upcoming congress details.",
-    ])
-      expect(() => author([sentence]), sentence).toThrow(/says more than what to do/);
-    // A greeting greets; a call to action hidden in it would skip the checks above.
-    for (const sentence of ["Hello, consider moving idle cash.", "Hello, see your options."])
-      expect(() => author([sentence]), sentence).toThrow(/adds to the greeting/);
-    for (const sentence of ["Hello cardiology prescribers,", "Hello!", "Dear colleague,"])
-      expect(must(author([sentence]).module).title, sentence).toBeTruthy();
-    for (const sentence of ["See", "Review the", "Please see"])
-      expect(() => author([sentence]), sentence).toThrow(/not a complete call to action/);
   });
 
-  it("limits a headline to the wave's own words, the product and plain connectors", () => {
-    expect(must(author([], "Cardivance outcomes at the heart failure meeting").module).title).toBe(
-      "Cardivance outcomes at the heart failure meeting",
-    );
+  it("rejects a fragment a reader would see as broken", () => {
+    for (const sentence of ["See", "Review the", "Please see"])
+      expect(() => author([sentence]), sentence).toThrow(/not a complete sentence/);
+  });
+
+  it("lets a headline name the occasion and product, but not assert", () => {
+    expect(
+      must(
+        author([], "Cardivance at the heart failure meeting: what's new for your patients").module,
+      ).title,
+    ).toBeTruthy();
     expect(() => author([], "Cardivance prevents strokes")).toThrow(/could assert something/);
     expect(() => author([], "Cardivance Shows Meaningful Benefit in Heart Failure")).toThrow(
-      /meaningful, benefit/,
+      /shows, meaningful, benefit/,
     );
   });
 });

@@ -572,9 +572,6 @@ export function evidencePacket(world: World, moduleUrn: string) {
 
 // Cite or refuse ------------------------------------------------------------------------------
 
-/** The words of a brand's name, such as "harborstone" and "wealth". */
-const brandWords = (brand: string) => brand.toLowerCase().match(/[a-z]+/g) ?? [];
-
 /**
  * A short tag from what an agent wrote. Objects named with it are new whenever the words differ,
  * so a second draft never collides with, or overwrites, the first; the same words are a no-op.
@@ -611,7 +608,11 @@ export function authorModule(
     topics: readonly string[];
     channel?: Channel;
     headline?: string;
-    /** Sentences in the agent's own words (an opening, a call to action). They may not state facts. */
+    /** Paragraphs in the agent's own words before the claims: a greeting and the occasion. */
+    opening?: readonly string[];
+    /** Paragraphs in the agent's own words after the claims: what to do next and a sign-off. */
+    closing?: readonly string[];
+    /** Earlier name for `opening`. */
     framing?: readonly string[];
   },
   actor = "agent:module-authoring",
@@ -619,26 +620,15 @@ export function authorModule(
   const resolved = resolveBrief(world, request.briefUrn);
   if (!resolved) throw new Error(`${request.briefUrn} is not a brief.`);
   const { brief } = resolved;
-  const framing = (request.framing ?? []).map((text) => text.trim()).filter(Boolean);
-  // Names the agent may not use in its own words, and the only words a headline may reuse.
-  const product = new Set<string>([
-    ...brandWords(brief.brand),
-    ...listObjects(world, { kind: "claim", brand: brief.brand }).flatMap((claim) =>
-      attributesOf<ClaimAttributes>(claim).topic.split("-"),
-    ),
-  ]);
-  const theme = new Set((resolved.wave?.theme ?? "").toLowerCase().match(/[a-z0-9]+/g) ?? []);
-  const allowedHeadline = new Set<string>([...theme, ...product]);
+  const clean = (texts?: readonly string[]) =>
+    (texts ?? []).map((text) => text.trim()).filter(Boolean);
+  const opening = clean(request.opening ?? request.framing);
+  const closing = clean(request.closing);
+  const framing = [...opening, ...closing];
   const wording = [
-    ...framing.flatMap((text) => [
-      ...framingProblems(text, brief.brand),
-      ...framingShape(text, product, theme),
-    ]),
+    ...framing.flatMap((text) => [...framingProblems(text, brief.brand), ...framingShape(text)]),
     ...(request.headline
-      ? [
-          ...framingProblems(request.headline, brief.brand),
-          ...headlineShape(request.headline, allowedHeadline),
-        ]
+      ? [...framingProblems(request.headline, brief.brand), ...headlineShape(request.headline)]
       : []),
   ];
   if (wording.length) throw new Error(wording.join(" "));
@@ -681,7 +671,7 @@ export function authorModule(
         .filter((item) => restates(text, item.text))
         .map(
           (item) =>
-            `"${text}" restates the claim "${item.text}". Its exact text is inserted for you; write a greeting or a call to action instead.`,
+            `"${text}" restates the claim "${item.text}". Its exact text is inserted for you; set the occasion or say what to do next instead.`,
         ),
     );
   if (restated.length) throw new Error(restated.join(" "));
@@ -704,8 +694,9 @@ export function authorModule(
       briefUrn: brief.urn,
       // Facts come only from cited claims and required disclosures; the agent's own words state none.
       blocks: [
-        ...framing.map((text) => ({ text })),
+        ...opening.map((text) => ({ text })),
         ...cited.map((item) => ({ text: item.text, claimUrn: item.claimUrn })),
+        ...closing.map((text) => ({ text })),
         ...disclosures.map((item) => ({
           text: attributesOf<DisclosureAttributes>(item).text,
           disclosureUrn: item.urn,
@@ -731,13 +722,8 @@ export function atomizeModule(
   const master = getObject(world, moduleUrn);
   if (master?.kind !== "module") throw new Error(`${moduleUrn} is not a module.`);
   const source = attributesOf<ModuleAttributes>(master);
-  const reusable = new Set<string>([
-    ...(source.headline.toLowerCase().match(/[a-z0-9]+/g) ?? []),
-    ...brandWords(master.brand),
-    ...CHANNELS,
-  ]);
   const wording = Object.values(headlines).flatMap((text) =>
-    text ? [...framingProblems(text, master.brand), ...headlineShape(text, reusable)] : [],
+    text ? [...framingProblems(text, master.brand), ...headlineShape(text)] : [],
   );
   if (wording.length) throw new Error(wording.join(" "));
   return channels
