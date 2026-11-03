@@ -13,6 +13,7 @@ import {
 import {
   type ApprovalState,
   attributesOf,
+  BRANDS,
   type Brand,
   type GovernedObject,
   type ObjectKind,
@@ -119,6 +120,28 @@ export const WORKSPACES: readonly WorkspaceManifest[] = [
 ];
 
 export const workspaceById = (id: string) => WORKSPACES.find((workspace) => workspace.id === id);
+
+/** One brand's readiness, or with no brand chosen the weakest score per stage with each brand's checks. */
+function readinessFor(world: World, brand: Brand | undefined) {
+  if (brand) return dataReadiness(world, brand);
+  const perBrand = BRANDS.map((item) => [item, dataReadiness(world, item)] as const);
+  return STAGES.flatMap((stage) => {
+    const rows = perBrand.flatMap(([item, stages]) =>
+      stages.filter((row) => row.stage === stage).map((row) => [item, row] as const),
+    );
+    const first = rows[0]?.[1];
+    if (!first) return [];
+    return [
+      {
+        ...first,
+        score: Math.min(...rows.map(([, row]) => row.score)),
+        checks: rows.flatMap(([item, row]) =>
+          row.checks.map((check) => ({ ...check, label: `${item}: ${check.label}` })),
+        ),
+      },
+    ];
+  });
+}
 
 export type WorkspaceContext = { persona: Persona; brand?: Brand | undefined };
 
@@ -273,7 +296,7 @@ export function resolveWorkspace(
         id: tile.id,
         title: tile.title,
         type: "stage-readiness",
-        stages: dataReadiness(world, context.brand ?? "Harborstone Wealth"),
+        stages: readinessFor(world, context.brand),
       };
     const waiting = scoped.filter((row) => row.allowed.length > 0 && row.waitingOn).length;
     const results = listObjects(world, {

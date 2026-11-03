@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BRAND_NODE_IDS, brandForNode, useScope } from "../scope";
 import { type CanvasCommand, GraphCanvas } from "./GraphCanvas";
 import {
   brandScope,
@@ -18,7 +19,6 @@ import {
   relationshipPhrase,
   type SimNode,
 } from "./graph-model";
-import { BRAND_NODE_IDS, brandForNode, useScope } from "../scope";
 import "./graph.css";
 
 type Load =
@@ -283,9 +283,11 @@ export function GraphView({ onClose }: { onClose: () => void }) {
           <p className="kicker">Knowledge graph</p>
           <h2 id="graph-title">Graph explorer</h2>
           <p className="graph-lede">
-            The fictional Northstar, Coastline Kitchen, Harborstone Wealth, and Lumera Therapeutics
-            graph that the orchestrator's graph tools read. Pick a tour, search, or click any node
-            to see how it connects.
+            {header.brand === "all"
+              ? "The fictional Northstar, Coastline Kitchen, Harborstone Wealth, and Lumera Therapeutics graph"
+              : `The fictional Northstar graph, showing ${header.brand},`}{" "}
+            that the orchestrator's graph tools read. Pick a tour, search, or click any node to see
+            how it connects.
           </p>
         </div>
         <button type="button" className="text-button" onClick={onClose}>
@@ -563,7 +565,7 @@ export function GraphView({ onClose }: { onClose: () => void }) {
                     }}
                   />
                 ) : (
-                  !tour && <GraphPrimer />
+                  !tour && <GraphPrimer brand={header.brand} />
                 )}
               </aside>
             </div>
@@ -574,7 +576,15 @@ export function GraphView({ onClose }: { onClose: () => void }) {
   );
 }
 
-function GraphPrimer() {
+const PRIMER_COLORS: Record<string, string> = {
+  all: "Coastline Kitchen's restaurants and Lumera's drugs, trials, claims and hospitals",
+  "Coastline Kitchen": "Coastline Kitchen's restaurants and menu",
+  "Harborstone Wealth": "Harborstone's market events, assets and approvals",
+  "Lumera Therapeutics":
+    "Lumera's drugs, indications, trials, claims, hospitals and prescriber groups",
+};
+
+function GraphPrimer({ brand }: { brand: string }) {
   return (
     <div className="graph-primer">
       <p className="kicker">How to read it</p>
@@ -582,7 +592,7 @@ function GraphPrimer() {
       <ol>
         <li>
           <strong>Colors are node types</strong>, grouped into brands and campaigns, audience and
-          consent, and Coastline Kitchen's restaurants.
+          consent, and {PRIMER_COLORS[brand]}.
         </li>
         <li>
           <strong>Size is connectedness</strong>: bigger nodes take part in more relationships.

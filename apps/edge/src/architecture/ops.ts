@@ -10,6 +10,7 @@ import {
   attributeResult,
   attributesOf,
   authorModule,
+  BRANDS,
   type Brand,
   buildApprovalCard,
   type Channel,
@@ -229,9 +230,9 @@ const str = (input: AgentInput, key: string) => {
 };
 const brandOf = (input: AgentInput): Brand => {
   const value = str(input, "brand");
-  if (value !== "Harborstone Wealth" && value !== "Coastline Kitchen")
-    throw new ArchError(400, "BAD_REQUEST", `Unknown brand ${value}.`);
-  return value;
+  const brand = BRANDS.find((item) => item === value);
+  if (!brand) throw new ArchError(400, "BAD_REQUEST", `Unknown brand ${value}.`);
+  return brand;
 };
 
 /** What an agent run looked like to the evaluators. */

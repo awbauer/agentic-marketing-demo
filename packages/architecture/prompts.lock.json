@@ -1,7 +1,7 @@
 {
   "content-plan": {
-    "version": 1,
-    "hash": "f7bc208f"
+    "version": 2,
+    "hash": "a03cf316"
   },
   "scenario": {
     "version": 1,
@@ -40,8 +40,8 @@
     "hash": "31edf12e"
   },
   "data-readiness": {
-    "version": 1,
-    "hash": "0b865adc"
+    "version": 2,
+    "hash": "796712af"
   },
   "adversarial-farm": {
     "version": 1,

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ScopeBar } from "../ScopeBar";
 import { ScopeProvider } from "../scope";
+import { AgentForm, FORMS } from "./AgentConsole";
 import { ArchitectureView } from "./ArchitectureView";
 
 const renderView = () =>
@@ -124,5 +125,51 @@ describe("architecture view", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("No policy grants this.");
     expect(alert.textContent).toContain("Not allowed");
+  });
+});
+
+describe("agent forms follow the brand", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ objects: [] })),
+    );
+  });
+  afterEach(cleanup);
+
+  it("offers Lumera in the brand list and defaults to the brand in the header", () => {
+    const form = FORMS.plan;
+    if (!form) throw new Error("missing form");
+    render(
+      <AgentForm
+        form={form}
+        scope={{ persona: "brand-planner", brand: "Lumera Therapeutics" }}
+        onDone={() => {}}
+        onOpen={() => {}}
+      />,
+    );
+    const select = screen.getByLabelText("Brand") as HTMLSelectElement;
+    expect(select.value).toBe("Lumera Therapeutics");
+    expect([...select.options].map((option) => option.text)).toEqual([
+      "Harborstone Wealth",
+      "Coastline Kitchen",
+      "Lumera Therapeutics",
+    ]);
+  });
+
+  it("offers only the header brand's facts to state", () => {
+    const form = FORMS.author;
+    if (!form) throw new Error("missing form");
+    render(
+      <AgentForm
+        form={form}
+        scope={{ persona: "content-lab", brand: "Lumera Therapeutics" }}
+        onDone={() => {}}
+        onOpen={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("cardivance-mortality")).toBeTruthy();
+    expect(screen.getByLabelText("glucora-a1c")).toBeTruthy();
+    expect(screen.queryByLabelText("sweep-apy")).toBeNull();
   });
 });

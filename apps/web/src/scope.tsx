@@ -28,6 +28,17 @@ export const BRAND_PLACEHOLDER: Record<Brand | "all", string> = {
   "Lumera Therapeutics": "Try: Which hospitals should we target first for Cardivance?",
 };
 
+/** A starting image concept for the chosen brand; the box stays editable. */
+export const BRAND_IMAGE_CONCEPT: Record<Brand | "all", string> = {
+  all: "A quiet trailhead at golden hour with layered hiking gear and room for campaign copy",
+  "Coastline Kitchen":
+    "A steaming bowl of clam chowder on a rainy window table with room for campaign copy",
+  "Harborstone Wealth":
+    "A calm morning desk with a notebook and a coffee, soft light, room for campaign copy",
+  "Lumera Therapeutics":
+    "A clinician-education scene: a cardiologist reviewing a chart with a colleague, no patient imagery, room for campaign copy",
+};
+
 function load(): WorkbenchScope {
   try {
     const stored = window.localStorage.getItem(KEY);

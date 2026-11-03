@@ -114,6 +114,13 @@ function Proposals({
   );
 }
 
+const SEARCH_EXAMPLE: Record<Brand | "all", string> = {
+  all: "e.g. which claims are approved for use",
+  "Harborstone Wealth": "e.g. what backs our sweep account rate",
+  "Coastline Kitchen": "e.g. which soup is on the menu this week",
+  "Lumera Therapeutics": "e.g. what supports the heart failure outcomes claim",
+};
+
 function Search({ scope, onOpen }: { scope: Scope; onOpen: (urn: string) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Array<{
@@ -146,7 +153,7 @@ function Search({ scope, onOpen }: { scope: Scope; onOpen: (urn: string) => void
           aria-label="Search governed objects"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="e.g. what backs our sweep account rate"
+          placeholder={SEARCH_EXAMPLE[scope.brand]}
           minLength={2}
           required
         />
