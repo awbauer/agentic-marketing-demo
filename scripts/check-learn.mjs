@@ -24,6 +24,7 @@ import {
   TAUGHT_ROOTS,
   UNTAUGHT_SOURCES,
 } from "../apps/web/src/learn/sources.ts";
+import { AGENT_TOOL_NAMES } from "../packages/architecture/src/flows.ts";
 import { ConfirmationSchema, ORCHESTRATOR_TOOLS } from "../packages/contracts/src/index.ts";
 import {
   buildDataset,
@@ -69,7 +70,7 @@ function salesforceComponents() {
 
 const dataset = buildDataset();
 const inventory = {
-  Tool: [...ORCHESTRATOR_TOOLS],
+  Tool: [...ORCHESTRATOR_TOOLS, ...AGENT_TOOL_NAMES],
   "Write action": [...ConfirmationSchema.shape.action.options],
   "Graph node": [...new Set(dataset.nodes.map((node) => node.label)), ...MEMORY_LABELS],
   "Graph relationship": [

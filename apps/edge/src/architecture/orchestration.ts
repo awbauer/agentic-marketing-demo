@@ -15,7 +15,7 @@ import { type ModelMessage, stepCountIs, streamText, tool, wrapLanguageModel } f
 import { z } from "zod";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import { AGENT_GENERATION, championsFrom, modelFactory, PRIMARY_ACTION } from "./agent-runtime";
-import { ArchError, type Ctx } from "./context";
+import { ArchError, type Ctx, invoke } from "./context";
 import { ISO, worldFor } from "./objects";
 import { runAgentOp } from "./ops";
 
@@ -103,6 +103,18 @@ type State = {
   events: FlowEvent[];
 };
 
+/**
+ * The orchestrator's own gateway check. Its policy is withheld when an operator disables it or it
+ * is retired, so this is its kill switch: nothing runs, and no step is taken, once it is off.
+ */
+function authorizeOrchestrator(ctx: Ctx, tool: string) {
+  return invoke(
+    ctx,
+    { principal: { type: "agent", id: "orchestrator" }, action: `tool:${tool}` },
+    () => null,
+  );
+}
+
 async function drive(ctx: Ctx, state: State, emitOut: Emit) {
   const emit: Emit = (event) => {
     state.events.push(event);
@@ -112,10 +124,12 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
   const model = modelFactory(ctx.env)(route.model);
   let paused: { moduleUrn: string } | null = null;
   let finished: string | null = null;
+  let stopped = false;
   const brand = state.brand;
 
   // Short handles for what this flow created (brief-1, module-1), so the orchestrator never has to
   // copy a long urn. Rebuilt from the saved events when a flow resumes.
+  const failures = new Map<string, number>();
   const handles = new Map<string, string>();
   for (const event of state.events)
     if (event.type === "delegated")
@@ -151,6 +165,12 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
   ): Promise<unknown> {
     const manifest = agentById(agent);
     const refs = resolveAll(given);
+    // The same step failing the same way three times is not going to work a fourth time.
+    const attempt = `${agent}:${JSON.stringify(refs)}`;
+    if ((failures.get(attempt) ?? 0) >= 3)
+      return {
+        error: `${manifest?.name ?? agent} has failed this same step three times. Stop retrying it: finish and tell the marketer what could not be done.`,
+      };
     // A subagent acts for the person who owns its step. Platform agents are owned by Admin;
     // they act for whoever started the flow instead, so a flow never takes on Admin.
     const owner = manifest?.owner && manifest.owner !== "admin" ? manifest.owner : ctx.user.persona;
@@ -179,6 +199,10 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
           runTag: state.id,
           onStep: (step) => emit({ type: "tool", callId, agent, step }),
         },
+      );
+      failures.set(
+        attempt,
+        out.summary.startsWith("The agent stopped") ? (failures.get(attempt) ?? 0) + 1 : 0,
       );
       const created = nameAll(out.created);
       emit({
@@ -259,6 +283,14 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
         summary: z.string().optional(),
       }),
       execute: async (input, { toolCallId }) => {
+        try {
+          await authorizeOrchestrator(ctx, "next_step");
+        } catch (failure) {
+          const message = failure instanceof Error ? failure.message : String(failure);
+          stopped = true;
+          emit({ type: "error", message: `The gateway stopped the orchestrator: ${message}` });
+          return { error: message };
+        }
         if (input.kind === "finish") {
           if (!input.summary?.trim()) return { error: "Give the summary for the marketer." };
           finished = input.summary;
@@ -281,7 +313,7 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
 
   // A turn ends when the orchestrator asks a person or finishes. A step that ends without a call
   // the middleware can recover gets a reminder, up to twice.
-  for (let attempt = 0; attempt < 3 && !paused && !finished; attempt += 1) {
+  for (let attempt = 0; attempt < 3 && !paused && !finished && !stopped; attempt += 1) {
     if (attempt > 0)
       state.messages.push({
         role: "user",
@@ -294,7 +326,7 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
       messages: state.messages,
       tools,
       toolChoice: { type: "tool", toolName: "next_step" },
-      stopWhen: [stepCountIs(16), () => Boolean(paused || finished)],
+      stopWhen: [stepCountIs(16), () => Boolean(paused || finished || stopped)],
       ...AGENT_GENERATION,
     });
     await result.consumeStream();
@@ -302,7 +334,7 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
   }
   const waiting = paused as { moduleUrn: string } | null;
   const summary = finished as string | null;
-  if (!waiting)
+  if (!waiting && !stopped)
     emit({
       type: "done",
       summary: summary ?? "The orchestrator stopped before finishing the goal.",
@@ -323,9 +355,10 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
  * Starts a sample flow: the orchestrator receives the goal and works until it needs a person.
  * Validates before anything streams, so a bad request fails with its status; returns the work.
  */
-export function startOrchestration(ctx: Ctx, flowId: string) {
+export async function startOrchestration(ctx: Ctx, flowId: string) {
   const goal = sampleGoalById(flowId);
   if (!goal) throw new ArchError(404, "NOT_FOUND", `No sample flow ${flowId}.`);
+  await authorizeOrchestrator(ctx, "start_flow");
   const id = `flow-${Date.now().toString(36)}`;
   const route = routeModel("orchestrate", { champions: championsFrom(ctx.env) });
   const state: State = {
@@ -354,6 +387,7 @@ export function startOrchestration(ctx: Ctx, flowId: string) {
 export async function continueOrchestration(ctx: Ctx, id: string) {
   const saved = await ctx.store.orchestration(id);
   if (!saved) throw new ArchError(404, "NOT_FOUND", `No flow ${id}.`);
+  await authorizeOrchestrator(ctx, "continue_flow");
   if (saved.status !== "waiting" || !saved.waitingOn)
     throw new ArchError(409, "NOT_WAITING", "This flow is not waiting for a decision.");
   const module = getObject(await worldFor(ctx), saved.waitingOn);

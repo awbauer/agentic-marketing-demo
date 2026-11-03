@@ -45,6 +45,108 @@ const edge = (name: string, summary: string, section = "graphrag-here"): Referen
 });
 
 export const LEARN_REFERENCE: ReferenceEntry[] = [
+  // Tools the architecture agents and the sample-flow orchestrator call.
+  tool(
+    "next_step",
+    "agent-operations",
+    "The sample-flow orchestrator's one tool: delegate a step to a subagent, ask a person to decide, or finish. It is forced on every step, and passes the gateway as the orchestrator each time.",
+  ),
+  tool(
+    "read_object",
+    "lifecycle",
+    "Reads one governed object by urn for an agent, limited to the run's brand.",
+  ),
+  tool(
+    "list_objects",
+    "lifecycle",
+    "Lists the run's brand's governed objects of one kind, with their urns and states.",
+  ),
+  tool(
+    "search_objects",
+    "lifecycle",
+    "Searches the run's brand's governed objects by meaning; the reuse agent uses it.",
+  ),
+  tool(
+    "get_planning_inputs",
+    "lifecycle",
+    "Reads what a plan is built from: today's date, the calendar, past results against the channel baseline, and the waves already planned.",
+  ),
+  tool(
+    "list_claims",
+    "lifecycle",
+    "Lists the brand's current claims by topic with their exact text and whether each is substantiated; only a substantiated claim can be stated.",
+  ),
+  tool(
+    "plan_content",
+    "lifecycle",
+    "Saves a content plan from the plan agent's own waves and rationale, after the service checks channels, dates and audience sizes.",
+  ),
+  tool(
+    "run_scenario",
+    "lifecycle",
+    "Estimates what moving a send, dropping a channel or changing an audience does to expected clicks, with its basis; it changes nothing.",
+  ),
+  tool(
+    "draft_brief",
+    "lifecycle",
+    "Saves a brief for one wave of an approved plan, with the agent's own one-sentence objective; the brief points at the plan for audience, channel and timing.",
+  ),
+  tool(
+    "reuse_modules",
+    "lifecycle",
+    "Ranks the brand's existing modules for a brief or query by meaning and past results, flagging any that need a refresh.",
+  ),
+  tool(
+    "author_module",
+    "lifecycle",
+    "Writes a module: the service inserts each substantiated claim's exact text and its required disclosures, refuses unsupported topics as gap records, and rejects the agent's own words unless they are a greeting, a call to action or a label built from the wave's theme.",
+  ),
+  tool(
+    "atomize_module",
+    "lifecycle",
+    "Makes channel versions of a module, never shortening a claim and using each disclosure's short form on tight channels.",
+  ),
+  tool(
+    "assemble_evidence",
+    "lifecycle",
+    "Assembles the evidence packet for a module's cited claims: evidence, expiry, supersession and conflicts.",
+  ),
+  tool(
+    "check_readiness",
+    "lifecycle",
+    "Checks whether a module is ready for review: every claim substantiated, every disclosure present, no blocking probe finding.",
+  ),
+  tool(
+    "propose_transition",
+    "lifecycle",
+    "Submits a draft module for review only if readiness passes; the furthest an agent can move anything, since a person decides after it.",
+  ),
+  tool(
+    "run_farm",
+    "lifecycle",
+    "Runs the four automatic probes on a module and reports findings; it changes nothing, and a blocking finding blocks approval.",
+  ),
+  tool(
+    "report_finding",
+    "lifecycle",
+    "Lets the red-team agent add a concern the probes missed. It is advice to the reviewer, shown beside the probes' findings, and blocks nothing, because only the deterministic probes can.",
+  ),
+  tool(
+    "attribute_result",
+    "lifecycle",
+    "Traces a result to the module and the claim that carried it, with the path to the evidence.",
+  ),
+  tool(
+    "propose_optimization",
+    "lifecycle",
+    "Reads the brand's performance signals: modules below baseline or citing a superseded claim, each with a suggested re-issue, refresh or retire.",
+  ),
+  tool(
+    "check_data_readiness",
+    "lifecycle",
+    "Scores the inputs each lifecycle stage depends on for a brand, with reasons.",
+  ),
+
   // Salesforce Hosted MCP tools.
   tool(
     "summarize_campaign",

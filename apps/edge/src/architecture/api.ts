@@ -171,7 +171,7 @@ export async function handleArchitecture(
     }
     if (path === "/api/arch/orchestrations" && method === "POST") {
       const input = await body(request);
-      return streamFlow(startOrchestration(ctx, String(input.flowId ?? "")));
+      return streamFlow(await startOrchestration(ctx, String(input.flowId ?? "")));
     }
     const flow = ORCHESTRATION.exec(path);
     if (flow?.[1] && flow[2] === "continue" && method === "POST")

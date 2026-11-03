@@ -355,7 +355,7 @@ export function toolsFor({
       grant: "author_module",
       tool: tool({
         description:
-          "Write and save a module for a brief. Pass every topic that was requested, even ones you expect to be refused: the service inserts each substantiated claim's exact text with the disclosures it requires, and refuses the rest and records each as a gap. Add a short headline and one or two framing sentences in your own words: a greeting, why it matters to the reader, or a call to action. Your own words must not state or restate any fact (no numbers, prices, rates, outcomes, promises, comparisons or citations); the claims say that.",
+          'Write and save a module for a brief. Pass every topic that was requested, even ones you expect to be refused: the service inserts each substantiated claim\'s exact text with the disclosures it requires, and refuses the rest and records each as a gap. Your own words are limited to three things. headline: a label, 10 words or fewer, reusing the words of the wave\'s theme (see the brief) and the product name. framing: at most three short sentences, each a greeting that starts "Hello" or a call to action that starts "See", "Read", "Review", "Visit" or similar, without the product or brand name. Anything else in your own words is rejected; the claims say everything that is a fact.',
         inputSchema: z.object({
           briefUrn: z.string(),
           topics: z.array(z.string()).min(1),
@@ -503,16 +503,15 @@ export function toolsFor({
       grant: "run_farm",
       tool: tool({
         description:
-          "Report a problem you found yourself in the module's text that the automatic probes missed. Use block only for something a reviewer must not approve.",
+          "Report a concern you found yourself in the module's text that the automatic probes missed. It is advice to the reviewer, shown with the probes' findings; it does not block anything, because only the deterministic probes can.",
         inputSchema: z.object({
           probe: z.enum(["claim-attacker", "injection-prober", "brand-checker", "consent-prober"]),
-          severity: z.enum(["block", "warn"]),
           message: z.string().min(5),
         }),
         execute: async (input) =>
           call("report_finding", "run_farm", input, undefined, () => {
-            run.findings.push(input);
-            return { recorded: true };
+            run.findings.push({ ...input, severity: "warn" });
+            return { recorded: true, note: "Recorded as a warning for the reviewer." };
           }),
       }),
     },

@@ -220,9 +220,11 @@ describe("sample flows", () => {
       headers: { "content-type": "application/x-ndjson" },
     });
   const moduleUrn = "urn:northstar:module:m1";
+  let moduleState = "submitted";
   const allow = { decision: "allow", policyId: "agent-module-authoring", reason: "granted" };
   beforeEach(() => {
     calls.length = 0;
+    moduleState = "submitted";
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
@@ -284,6 +286,8 @@ describe("sample flows", () => {
             },
           ]);
         if (url.includes("/transition")) return Response.json({ card: {} });
+        if (url.startsWith("/api/arch/objects/"))
+          return Response.json({ object: { approvalState: moduleState } });
         return Response.json({}, { status: 404 });
       }),
     );
@@ -316,6 +320,31 @@ describe("sample flows", () => {
       ["reviewer", "approved"],
     ]);
     expect(calls.at(-1)?.url).toBe("/api/arch/orchestrations/flow-1/continue");
+  });
+
+  it("takes only the steps still needed when the module has moved on", async () => {
+    // A first attempt got as far as review, or the person decided in another tab.
+    for (const [state, expected] of [
+      ["in_review", ["approved"]],
+      ["approved", []],
+    ] as const) {
+      cleanup();
+      calls.length = 0;
+      moduleState = state;
+      render(
+        <SampleFlows
+          scope={{ persona: "marketer", brand: "Lumera Therapeutics" }}
+          onOpen={() => {}}
+          onChanged={() => {}}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Start the orchestrator" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+      expect(await screen.findByText("The orchestrator’s wrap-up")).toBeTruthy();
+      expect(
+        calls.filter((call) => call.url.includes("/transition")).map((call) => call.body.to),
+      ).toEqual(expected);
+    }
   });
 
   it("offers one flow per brand, or all three with no brand chosen", () => {

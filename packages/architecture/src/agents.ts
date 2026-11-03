@@ -2,7 +2,7 @@
 // governed objects, enforces the rules (cite or refuse, required disclosures, whole claims), and
 // returns what it would create. The agents decide what to ask for and write their own words; the
 // edge runs them on real models and persists what these services return.
-import { framingProblems } from "./language.ts";
+import { framingProblems, framingShape, headlineShape } from "./language.ts";
 import { CALENDAR, CHANNEL_BASELINE } from "./seed.ts";
 import {
   attributesOf,
@@ -572,6 +572,9 @@ export function evidencePacket(world: World, moduleUrn: string) {
 
 // Cite or refuse ------------------------------------------------------------------------------
 
+/** The words of a brand's name, such as "harborstone" and "wealth". */
+const brandWords = (brand: string) => brand.toLowerCase().match(/[a-z]+/g) ?? [];
+
 /**
  * A short tag from what an agent wrote. Objects named with it are new whenever the words differ,
  * so a second draft never collides with, or overwrites, the first; the same words are a no-op.
@@ -617,9 +620,27 @@ export function authorModule(
   if (!resolved) throw new Error(`${request.briefUrn} is not a brief.`);
   const { brief } = resolved;
   const framing = (request.framing ?? []).map((text) => text.trim()).filter(Boolean);
-  const wording = [request.headline ?? "", ...framing].flatMap((text) =>
-    text ? framingProblems(text, brief.brand) : [],
-  );
+  // Names the agent may not use in its own words, and the only words a headline may reuse.
+  const product = new Set<string>([
+    ...brandWords(brief.brand),
+    ...listObjects(world, { kind: "claim", brand: brief.brand }).flatMap((claim) =>
+      attributesOf<ClaimAttributes>(claim).topic.split("-"),
+    ),
+  ]);
+  const theme = new Set((resolved.wave?.theme ?? "").toLowerCase().match(/[a-z0-9]+/g) ?? []);
+  const allowedHeadline = new Set<string>([...theme, ...product]);
+  const wording = [
+    ...framing.flatMap((text) => [
+      ...framingProblems(text, brief.brand),
+      ...framingShape(text, product),
+    ]),
+    ...(request.headline
+      ? [
+          ...framingProblems(request.headline, brief.brand),
+          ...headlineShape(request.headline, allowedHeadline),
+        ]
+      : []),
+  ];
   if (wording.length) throw new Error(wording.join(" "));
   const channel = request.channel ?? resolved.wave?.channel ?? "email";
   const cited: ClaimPacket[] = [];
@@ -710,8 +731,13 @@ export function atomizeModule(
   const master = getObject(world, moduleUrn);
   if (master?.kind !== "module") throw new Error(`${moduleUrn} is not a module.`);
   const source = attributesOf<ModuleAttributes>(master);
+  const reusable = new Set<string>([
+    ...(source.headline.toLowerCase().match(/[a-z0-9]+/g) ?? []),
+    ...brandWords(master.brand),
+    ...CHANNELS,
+  ]);
   const wording = Object.values(headlines).flatMap((text) =>
-    text ? framingProblems(text, master.brand) : [],
+    text ? [...framingProblems(text, master.brand), ...headlineShape(text, reusable)] : [],
   );
   if (wording.length) throw new Error(wording.join(" "));
   return channels

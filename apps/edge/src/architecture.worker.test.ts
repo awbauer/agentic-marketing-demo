@@ -1,7 +1,9 @@
 import { env, SELF } from "cloudflare:test";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
+import { AGENT_REGISTRY, AGENT_TOOL_NAMES } from "@northstar/architecture";
 import { beforeAll, describe, expect, it } from "vitest";
+import { newRunState, toolsFor } from "./architecture/agent-tools";
 import { authorizeTool, makeCtx } from "./architecture/context";
 import { createWorkbenchMcpServer } from "./architecture/mcp";
 import { ArchitectureStore, pruneArchitecture } from "./architecture/store";
@@ -510,6 +512,25 @@ describe("agentic gateway at the edge", () => {
   });
 });
 
+describe("agent tools", () => {
+  it("are exactly the ones Learn lists, and each agent gets only what its grants name", () => {
+    const ctx = makeCtx(env as never, { subject: "x", persona: "marketer", brands: "all" }, "t");
+    const seen = new Set<string>();
+    for (const agent of AGENT_REGISTRY.filter((item) => item.status === "live")) {
+      const tools = Object.keys(
+        toolsFor({ ctx, agent, brand: "Lumera Therapeutics", run: newRunState() }),
+      );
+      for (const name of tools) seen.add(name);
+      // A tool exists for an agent only through a grant that its registry entry holds.
+      if (agent.grants.length === 0) expect(tools).toEqual([]);
+    }
+    // next_step belongs to the orchestrator in orchestration.ts, not to a subagent.
+    expect([...seen].sort()).toEqual(
+      AGENT_TOOL_NAMES.filter((name) => name !== "next_step").sort(),
+    );
+  });
+});
+
 describe("sample flows", () => {
   const LT = "Lumera Therapeutics";
   const flow = async (tag: string) => {
@@ -641,6 +662,24 @@ describe("orchestration", () => {
     expect(resumed.at(-1)).toMatchObject({ type: "done" });
     const saved = await call(`/api/arch/orchestrations/${id}`);
     expect(saved.body.status).toBe("done");
+  });
+
+  it("stops at the gateway when the orchestrator is retired, and again when it is restored", async () => {
+    const store = new ArchitectureStore(env.APP_DB, "local-evaluator");
+    await store.setLifecycle(
+      "orchestrator",
+      "retire",
+      "Retired for the test.",
+      new Date().toISOString(),
+    );
+    const denied = await post("/api/arch/orchestrations", { flowId: "lumera-congress" });
+    expect(denied.status).toBe(403);
+    expect(((await denied.json()) as Json).error.decision.policyId).toBe("default-deny");
+    await store.setLifecycle("orchestrator", "monitor", "Restored.", new Date().toISOString());
+    const restored = await post("/api/arch/orchestrations", { flowId: "lumera-congress" });
+    expect(restored.status).toBe(200);
+    // Let the flow finish its turn, so it can't run on into another test.
+    await restored.text();
   });
 
   it("rejects a flow that does not exist", async () => {

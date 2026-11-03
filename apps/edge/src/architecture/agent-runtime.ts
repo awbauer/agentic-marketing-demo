@@ -116,7 +116,7 @@ export function taskFor(action: string, input: Record<string, unknown>): string 
     case "run_scenario":
       return `Estimate the effect of this change to plan ${input.planUrn}: ${JSON.stringify(input.change)}. Then say plainly whether it helps.`;
     case "draft_brief":
-      return `Draft a brief for wave ${input.waveId} of plan ${input.planUrn}. Read the plan, write a one-sentence objective in your own words, and save the brief.`;
+      return `Draft a brief for wave ${input.waveId} of plan ${input.planUrn}. Write a one-sentence objective in your own words, saying what the content should achieve for its audience, and save the brief. An objective states no facts, so it cites no claim and needs no claims listed first.`;
     case "reuse_modules":
       return `Find existing modules worth reusing${input.briefUrn ? ` for brief ${input.briefUrn}` : ""}${input.query ? ` for "${input.query}"` : ""}. Say why the best ones fit and flag any that need a refresh.`;
     case "author_module":
@@ -312,31 +312,44 @@ export async function runModelAgent(
   ]
     .filter(Boolean)
     .join("\n\n");
-  const result = streamText({
-    model: wrapLanguageModel({ model, middleware: forcedToolCallMiddleware }),
-    system,
-    prompt: userPrompt,
-    tools,
-    stopWhen: [
-      stepCountIs(8),
-      () => repeatedFailure(options.run.steps),
-      // Once the work is done, stop; only the red team goes on to report what it found itself.
-      () => done() && agent.id !== "adversarial-farm",
-    ],
-    // Until the action's own tool has succeeded, it is the tool to call: a model may otherwise
-    // describe the work in prose, or bury the call in its reasoning, without doing it.
-    prepareStep: () =>
-      done() || !(primaryTool in tools)
-        ? {}
-        : { toolChoice: { type: "tool" as const, toolName: primaryTool } },
-    ...AGENT_GENERATION,
-  });
-  await result.consumeStream();
-  const [usage, steps, messages] = await Promise.all([
-    result.totalUsage,
-    result.steps,
-    result.responseMessages,
-  ]);
+  // Until the action's own tool has succeeded, it is the tool to call: a model may otherwise
+  // describe the work in prose, or bury the call in its reasoning, without doing it. If a forced
+  // step yields no call at all (the model wanted to read something first), try once more letting it
+  // call any tool; the next step is forced again.
+  const attempt = async (loose: boolean) => {
+    const result = streamText({
+      model: wrapLanguageModel({ model, middleware: forcedToolCallMiddleware }),
+      system,
+      prompt: userPrompt,
+      tools,
+      stopWhen: [
+        stepCountIs(8),
+        () => repeatedFailure(options.run.steps),
+        // Once the work is done, stop; only the red team goes on to report what it found itself.
+        () => done() && agent.id !== "adversarial-farm",
+      ],
+      prepareStep: ({ stepNumber }) =>
+        done() || !(primaryTool in tools)
+          ? {}
+          : loose && stepNumber === 0
+            ? { toolChoice: "required" as const }
+            : { toolChoice: { type: "tool" as const, toolName: primaryTool } },
+      ...AGENT_GENERATION,
+    });
+    await result.consumeStream();
+    return result;
+  };
+  let result = await attempt(false);
+  let steps = await result.steps;
+  if (
+    !done() &&
+    steps.every((step) => step.toolCalls.length === 0) &&
+    options.run.steps.length === 0
+  ) {
+    result = await attempt(true);
+    steps = await result.steps;
+  }
+  const [usage, messages] = await Promise.all([result.totalUsage, result.responseMessages]);
   // The account of the work comes from one plain call over what happened, without tools: streamed
   // text from the tool loop can arrive with words missing.
   const text = done()

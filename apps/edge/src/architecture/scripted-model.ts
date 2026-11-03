@@ -83,7 +83,7 @@ const AGENTS: Record<string, (input: Input, done: Done) => Next> = {
         briefUrn: input.briefUrn,
         topics: input.topics ?? [],
         channel: input.channel ?? "email",
-        headline: (input.headline as string | undefined) ?? "A note for you",
+        headline: (input.headline as string | undefined) ?? "Your update",
         framing: [],
       },
       "Wrote the module from approved claims and refused the rest.",

@@ -89,3 +89,31 @@ export type FlowEvent =
   | { type: "decided"; moduleUrn: string; state: string; persona: string }
   | { type: "done"; summary: string }
   | { type: "error"; message: string };
+
+/**
+ * The tools the architecture agents and the sample-flow orchestrator call. Each agent gets only
+ * those its registry grants name; the gateway checks every call. Learn has an entry for each.
+ */
+export const AGENT_TOOL_NAMES = [
+  "read_object",
+  "list_objects",
+  "search_objects",
+  "get_planning_inputs",
+  "list_claims",
+  "plan_content",
+  "run_scenario",
+  "draft_brief",
+  "reuse_modules",
+  "author_module",
+  "atomize_module",
+  "assemble_evidence",
+  "check_readiness",
+  "propose_transition",
+  "run_farm",
+  "report_finding",
+  "attribute_result",
+  "propose_optimization",
+  "check_data_readiness",
+  /** The sample-flow orchestrator's one tool. */
+  "next_step",
+] as const;

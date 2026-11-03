@@ -273,8 +273,21 @@ function FlowRunner({
     const reviewer: Scope = { persona: goal.decider, brand: goal.brand };
     const path = `/objects/${encodeURIComponent(waiting.moduleUrn)}/transition`;
     try {
-      await archFetch(path, reviewer, { body: { to: "in_review" } });
-      await archFetch(path, reviewer, { body: { to, ...(reason ? { reason } : {}) } });
+      // Start from where the module really is: a first attempt may have got part way, or someone
+      // may have decided in another tab. Take only the steps that are left.
+      const { object } = await archFetch<{ object: { approvalState: string } }>(
+        `/objects/${encodeURIComponent(waiting.moduleUrn)}`,
+        reviewer,
+      );
+      let state = object.approvalState;
+      if (state === "submitted") {
+        await archFetch(path, reviewer, { body: { to: "in_review" } });
+        state = "in_review";
+      }
+      if (state === "in_review")
+        await archFetch(path, reviewer, { body: { to, ...(reason ? { reason } : {}) } });
+      else if (state === "draft")
+        throw new ArchApiError(409, "NOT_SUBMITTED", "This module is not waiting for review.", {});
     } catch (failure) {
       setRun((current) => ({ ...current, status: "waiting", error: asError(failure) }));
       return;
