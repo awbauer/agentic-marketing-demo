@@ -2317,3 +2317,44 @@ a {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* Brand and role selectors in the header */
+.scope-bar {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.scope-bar label {
+  display: grid;
+  gap: 1px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #b9c7bf;
+}
+.scope-bar select {
+  min-width: 150px;
+  max-width: 210px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.scope-bar select option {
+  color: #15221d;
+}
+@media (max-width: 900px) {
+  .scope-bar select {
+    min-width: 0;
+    max-width: 130px;
+  }
+}

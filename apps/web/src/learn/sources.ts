@@ -35,7 +35,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "apps/web/src/ActionCards.tsx",
   ],
   model: [],
-  mcp: ["apps/edge/src/campaign-context/server.ts"],
+  mcp: ["apps/edge/src/campaign-context/server.ts", "apps/edge/src/life-sciences/"],
   salesforce: [
     "salesforce/force-app/main/default/aiAuthoringBundles/Campaign_Readiness_Governance/",
     "salesforce/force-app/main/default/aiAuthoringBundles/Northstar_Account_Discovery/",
@@ -65,6 +65,8 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   ui: [
     "apps/web/src/App.tsx",
     "apps/web/src/WriteProgress.tsx",
+    "apps/web/src/ScopeBar.tsx",
+    "apps/web/src/scope.tsx",
     "apps/web/src/Markdown.tsx",
     "packages/ui/src/",
     "salesforce/force-app/main/default/lightningTypes/",
@@ -126,6 +128,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   ],
   gateway: [
     "packages/architecture/src/gateway.ts",
+    "packages/architecture/src/scope.ts",
     "apps/edge/src/architecture/context.ts",
     "apps/edge/src/architecture/api.ts",
     "apps/edge/src/architecture/mcp.ts",

@@ -1,6 +1,7 @@
 import {
   CAMPAIGN_CONTEXT_TOOLS,
   EXTERNAL_SERVICE_TOOLS,
+  LIFE_SCIENCES_TOOLS,
   type FocusItem,
   FocusKindSchema,
   type InsightTile,
@@ -264,6 +265,78 @@ function inventoryCard(data: Record<string, unknown>, tool: string, at: Date): I
           status: "ready",
         },
         details: thin.slice(0, 6),
+        updatedAt: at.toISOString(),
+        toolName: tool,
+      },
+    ],
+    records: [],
+  };
+}
+
+/** A card for a mocked life-sciences system of record: what it is, and the headline from its answer. */
+const LIFE_SCIENCES_LABELS: Record<string, string> = {
+  aprimo_search_approved_assets: "Aprimo: approved assets",
+  aprimo_get_mlr_review: "Aprimo: MLR review",
+  reltio_resolve_organization: "Reltio: golden record",
+  vault_list_approved_claims: "Veeva Vault: claims library",
+  vault_get_prescribing_information: "Veeva Vault: label",
+  screendragon_list_jobs: "Screendragon: jobs",
+  screendragon_get_job: "Screendragon: job",
+  iqvia_get_prescribing_trends: "IQVIA: prescribing trends",
+  lsc_get_call_plan: "Life Sciences Cloud: call plan",
+  drupal_list_hcp_site_content: "Drupal: HCP site",
+};
+
+function lifeSciencesCard(data: Record<string, unknown>, tool: string, at: Date): Ingested {
+  const system = str(data.system) ?? "Life sciences system";
+  const headline: Record<string, () => string> = {
+    aprimo_search_approved_assets: () =>
+      `${list(data.assets).length} assets, ${num(data.usableNow) ?? 0} usable now.`,
+    aprimo_get_mlr_review: () =>
+      `${str((data.review as Record<string, unknown> | undefined)?.mlrApprovalId) ?? "MLR review"}: ${str((data.review as Record<string, unknown> | undefined)?.status) ?? "unknown"}.`,
+    reltio_resolve_organization: () =>
+      `${str((data.organization as Record<string, unknown> | undefined)?.name) ?? "Organization"} resolved to one golden record.`,
+    vault_list_approved_claims: () =>
+      `${num(data.approved) ?? 0} claims approved, ${num(data.notApproved) ?? 0} not approved.`,
+    vault_get_prescribing_information: () =>
+      `Prescribing information ${str((data.label as Record<string, unknown> | undefined)?.currentVersion) ?? ""}.`,
+    screendragon_list_jobs: () =>
+      `${list(data.jobs).length} jobs, ${num(data.atRisk) ?? 0} at risk.`,
+    screendragon_get_job: () =>
+      `${str((data.job as Record<string, unknown> | undefined)?.title) ?? "Job"}.`,
+    iqvia_get_prescribing_trends: () =>
+      `${list((data.trends as Record<string, unknown> | undefined)?.rows).length} hospitals, six months of prescriptions.`,
+    lsc_get_call_plan: () =>
+      `${list((data.plan as Record<string, unknown> | undefined)?.groups).length} prescriber groups on the call plan.`,
+    drupal_list_hcp_site_content: () =>
+      `${list(data.pages).length} pages, ${num(data.nonCompliant) ?? 0} not compliant.`,
+  };
+  const key = JSON.stringify([
+    tool,
+    str(data.drug),
+    str((data.review as Record<string, unknown> | undefined)?.mlrApprovalId),
+    str((data.organization as Record<string, unknown> | undefined)?.name),
+    str((data.plan as Record<string, unknown> | undefined)?.hospital),
+    str((data.job as Record<string, unknown> | undefined)?.jobId),
+  ]);
+  return {
+    cards: [
+      {
+        id: `ls:${key}`,
+        kind: "context",
+        eyebrow: system,
+        title: LIFE_SCIENCES_LABELS[tool] ?? tool,
+        summary: headline[tool]?.() ?? `${system} responded.`,
+        state: "ready",
+        source: {
+          system: "life-sciences",
+          label: `${system} (mocked)`,
+          freshness: "just now",
+          status: "ready",
+        },
+        details: [
+          "Mocked system of record with invented data, keyed to the knowledge graph's identifiers.",
+        ],
         updatedAt: at.toISOString(),
         toolName: tool,
       },
@@ -717,6 +790,10 @@ export function ingestionFor(event: ToolResultEvent): Ingested {
     if (tool === "get_location_inventory") return inventoryCard(payload.data, tool, event.at);
     return restaurantCard(payload.data, tool, event.at);
   }
+  if ((LIFE_SCIENCES_TOOLS as readonly string[]).includes(tool))
+    return payload.data
+      ? lifeSciencesCard(payload.data, tool, event.at)
+      : { cards: [], records: [] };
   if ((EXTERNAL_SERVICE_TOOLS as readonly string[]).includes(tool))
     return payload.data ? externalCard(payload.data, tool, event.at) : { cards: [], records: [] };
   if ([...KNOWLEDGE_GRAPH_TOOLS, ...MEMORY_TOOLS].includes(tool as never))

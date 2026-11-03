@@ -1,5 +1,6 @@
-import { BRANDS, type Brand, PERSONA_LABELS, type Persona } from "@northstar/architecture";
-import { type ReactNode, useState } from "react";
+import { type Brand, PERSONA_LABELS, type Persona } from "@northstar/architecture";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useScope } from "../scope";
 import { AgentForm, FORMS } from "./AgentConsole";
 import { AgentsPanel } from "./AgentsPanel";
 import { ArchApiError, archFetch, type Scope, shortUrn, useArch } from "./api";
@@ -23,7 +24,18 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
-type Session = { persona: Persona; personas: Array<{ id: Persona; label: string }>; role: string };
+/** The workspace each role opens to. */
+const PERSONA_HOME: Record<Persona, Tab> = {
+  "brand-planner": "brief-builder",
+  marketer: "command-center",
+  "content-lab": "module-library",
+  compliance: "approvals",
+  reviewer: "approvals",
+  senior: "approvals",
+  "brand-lead": "performance",
+  admin: "agents",
+};
+
 type Proposals = {
   result: Array<{
     id: string;
@@ -162,14 +174,19 @@ function Search({ scope, onOpen }: { scope: Scope; onOpen: (urn: string) => void
 
 /** The architecture workspaces: one object model, many composed screens, every call through the gateway. */
 export function ArchitectureView({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>("command-center");
-  const [persona, setPersona] = useState<Persona>("marketer");
-  const [brand, setBrand] = useState<Brand | "all">("all");
+  // The brand and role come from the header, so this view always agrees with the rest of the app.
+  const { scope } = useScope();
+  const [tab, setTab] = useState<Tab>(PERSONA_HOME[scope.persona]);
   const [open, setOpen] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const scope: Scope = { persona, brand };
+  // Running as a different role opens that role's workspace.
+  const lastPersona = useRef(scope.persona);
+  useEffect(() => {
+    if (lastPersona.current === scope.persona) return;
+    lastPersona.current = scope.persona;
+    setTab(PERSONA_HOME[scope.persona]);
+  }, [scope.persona]);
   const changed = () => setRefreshKey((value) => value + 1);
-  const session = useArch<Session>("/session", scope);
   const forms = (...names: Array<keyof typeof FORMS>): ReactNode =>
     names.map((name) => {
       const form = FORMS[name];
@@ -196,33 +213,11 @@ export function ArchitectureView({ onClose }: { onClose: () => void }) {
           Back to workspace
         </button>
       </div>
-      <div className="arch-controls">
-        <label>
-          <span>Act as</span>
-          <select value={persona} onChange={(event) => setPersona(event.target.value as Persona)}>
-            {(session.data?.personas ?? [{ id: persona, label: PERSONA_LABELS[persona] }]).map(
-              (item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ),
-            )}
-          </select>
-        </label>
-        <label>
-          <span>Brand scope</span>
-          <select value={brand} onChange={(event) => setBrand(event.target.value as Brand | "all")}>
-            <option value="all">All brands</option>
-            {BRANDS.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-        <small>
-          The persona picks the workspace and the decisions you may take. The gateway enforces both
-          on the server.
-        </small>
-      </div>
+      <p className="arch-scope" role="status">
+        Showing <strong>{scope.brand === "all" ? "all brands" : scope.brand}</strong> as{" "}
+        <strong>{PERSONA_LABELS[scope.persona]}</strong>. Change the brand or role in the header;
+        the decisions you may take follow the role, and the gateway enforces both on the server.
+      </p>
       <div role="tablist" aria-label="Architecture workspaces" className="arch-tabs">
         {TABS.map((item) => (
           <button

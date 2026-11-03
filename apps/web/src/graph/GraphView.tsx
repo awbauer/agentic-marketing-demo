@@ -18,6 +18,7 @@ import {
   relationshipPhrase,
   type SimNode,
 } from "./graph-model";
+import { BRAND_NODE_IDS, brandForNode, useScope } from "../scope";
 import "./graph.css";
 
 type Load =
@@ -123,7 +124,13 @@ export function GraphView({ onClose }: { onClose: () => void }) {
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [graph, setGraph] = useState<GraphState>({ nodes: [], links: [] });
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
-  const [brand, setBrand] = useState<string | null>(null);
+  // The brand chosen in the header decides the graph's brand filter, and the filter updates it.
+  const { scope: header, setBrand: setScopeBrand } = useScope();
+  const brand = header.brand === "all" ? null : BRAND_NODE_IDS[header.brand];
+  const setBrand = useCallback(
+    (nodeId: string | null) => setScopeBrand(brandForNode(nodeId)),
+    [setScopeBrand],
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hovered, setHovered] = useState<SimNode | null>(null);
   const [expanded, setExpanded] = useState<Record<string, { shown: number; total: number }>>({});

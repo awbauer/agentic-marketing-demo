@@ -10,6 +10,11 @@ import {
   attributeResult,
   authorModule,
   BRAND_RULES,
+  outOfScopeTool,
+  parseScope,
+  scopeAllowsTool,
+  scopePrompt,
+  toolBrand,
   baselineFor,
   buildApprovalCard,
   buildPolicies,
@@ -966,5 +971,45 @@ describe("Lumera Therapeutics (pharmaceutical)", () => {
     );
     expect(byModule["lt-mod-cardivance-outcomes-email"]).toBe("re-issue");
     expect(byModule["lt-mod-glucora-a1c-email"]).toBe("refresh");
+  });
+});
+
+describe("the brand and role chosen in the header", () => {
+  it("reads only valid scopes and defaults the rest", () => {
+    expect(parseScope({ brand: "Lumera Therapeutics", persona: "reviewer" })).toEqual({
+      brand: "Lumera Therapeutics",
+      persona: "reviewer",
+    });
+    expect(parseScope({ brand: "Acme", persona: "wizard" })).toEqual({
+      brand: "all",
+      persona: "marketer",
+    });
+    expect(parseScope(null)).toEqual({ brand: "all", persona: "marketer" });
+  });
+
+  it("withholds another brand's tools, however the tool is prefixed", () => {
+    const lumera = parseScope({ brand: "Lumera Therapeutics" });
+    expect(toolBrand("graph_build_hcp_target_list")).toBe("Lumera Therapeutics");
+    expect(toolBrand("ls_drupal_list_hcp_site_content")).toBe("Lumera Therapeutics");
+    expect(toolBrand("context_get_restaurant_profile")).toBe("Coastline Kitchen");
+    expect(toolBrand("ext_get_fed_announcements")).toBe("Harborstone Wealth");
+    expect(toolBrand("graph_get_graph_overview")).toBeUndefined();
+    expect(scopeAllowsTool(lumera, "ls_aprimo_search_approved_assets")).toBe(true);
+    expect(scopeAllowsTool(lumera, "graph_prepare_deal_release")).toBe(false);
+    expect(scopeAllowsTool(lumera, "graph_get_graph_overview")).toBe(true);
+    expect(scopeAllowsTool(parseScope({ brand: "all" }), "graph_prepare_deal_release")).toBe(true);
+    expect(
+      outOfScopeTool(lumera, ["context_get_current_weather", "graph_map_weather_demand"]),
+    ).toBe("context_get_current_weather");
+    expect(outOfScopeTool(lumera, ["graph_check_clinical_claims"])).toBeUndefined();
+  });
+
+  it("tells the model the brand and role, and that the role grants nothing", () => {
+    const prompt = scopePrompt({ brand: "Lumera Therapeutics", persona: "compliance" });
+    expect(prompt).toMatch(/working on Lumera Therapeutics/);
+    expect(prompt).toMatch(/switch the brand in the header/);
+    expect(prompt).toMatch(/running as compliance/);
+    expect(prompt).toMatch(/does not change what Salesforce allows/);
+    expect(scopePrompt({ brand: "all", persona: "marketer" })).toMatch(/No single brand/);
   });
 });

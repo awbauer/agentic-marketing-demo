@@ -723,3 +723,14 @@
   font-size: 12px;
   color: var(--muted);
 }
+
+.arch-scope {
+  margin: 10px 26px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+@media (max-width: 900px) {
+  .arch-scope {
+    margin-inline: 16px;
+  }
+}
