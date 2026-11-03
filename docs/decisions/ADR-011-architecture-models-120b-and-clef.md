@@ -15,6 +15,18 @@ The services and the drift scoring were fixed separately (#115). The remaining q
 
 Separately, the answer-quality evaluator has never scored a production run: it needs a judge, and sampled runs had none.
 
+A local comparison on real Workers AI (2026-11-03; the three sample journeys, 12 runs on 120b and 6 on 20b, each approved when it asked) bore this out:
+
+| | gpt-oss-120b | gpt-oss-20b |
+|---|---|---|
+| Reached the reviewer | 12 of 12 | 4 of 6 |
+| Authoring attempts rejected for wording | 26 of 38 (2.2 a run) | 32 of 37 (5.3 a run) |
+| Delegations failed on a bad reference | 1 | 2 |
+| Authoring answer quality (Clef) | 0.751 | 0.687 |
+| Mean run time / tokens | 133 s / 18,054 | 127 s / 19,815 |
+
+On 20b, two of six journeys never produced an email: one had all 7 authoring attempts rejected, another 11 of 12. Its accepted framing also dropped punctuation ("See the outcomes"). 120b took about as long and used fewer tokens, because it retried less.
+
 ## Decision
 
 - `gpt-oss-120b` becomes champion for `orchestrate` and `draft`. `gpt-oss-20b` becomes their challenger.

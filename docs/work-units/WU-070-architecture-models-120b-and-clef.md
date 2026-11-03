@@ -20,4 +20,4 @@ Status: done
 
 - `packages/architecture/src/architecture.test.ts` (model routing)
 - `apps/edge/src/architecture.worker.test.ts` (answer-quality judge; models endpoint)
-- `docs/decisions/ADR-011-architecture-models-120b-and-clef.md`
+- `docs/decisions/ADR-011-architecture-models-120b-and-clef.md`, including the local journey comparison (12 runs on 120b, 6 on 20b)
