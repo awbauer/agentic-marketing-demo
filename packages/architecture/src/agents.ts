@@ -1,10 +1,14 @@
-// The lifecycle agents. Each is a pure function over the world: it reads governed objects, and
-// returns what it would create. The edge persists those objects; nothing here writes anywhere.
+// The lifecycle services the agents call. Each is a pure function over the world: it reads
+// governed objects, enforces the rules (cite or refuse, required disclosures, whole claims), and
+// returns what it would create. The agents decide what to ask for and write their own words; the
+// edge runs them on real models and persists what these services return.
+import { framingProblems, framingShape, headlineShape } from "./language.ts";
 import { CALENDAR, CHANNEL_BASELINE } from "./seed.ts";
 import {
   attributesOf,
   type Brand,
   type BriefAttributes,
+  CHANNELS,
   type Channel,
   type ClaimAttributes,
   type DisclosureAttributes,
@@ -87,7 +91,54 @@ const round = (value: number, places = 2) => Number(value.toFixed(places));
 
 // Plan and scenario ---------------------------------------------------------------------------
 
-export function planContent(world: World, brand: Brand, actor = "agent:content-plan") {
+/** Waves an agent proposes. Ids, the module count and the basis are filled in by the service. */
+export type ProposedWave = Omit<Wave, "id" | "moduleCount">;
+
+/** What the content-plan agent reads before it proposes waves. */
+export function planningInputs(world: World, brand: Brand) {
+  const today = day(world);
+  return {
+    today,
+    calendar: CALENDAR[brand].filter((event) => event.date >= today),
+    pastResults: performance(world, brand)
+      .sort((a, b) => b.index - a.index)
+      .map((item) => ({
+        result: item.result.urn,
+        module: item.module.title,
+        channel: attributesOf<ResultAttributes>(item.result).channel,
+        indexVersusBaseline: round(item.index),
+      })),
+    currentWaves: listObjects(world, { kind: "content-plan", brand }).flatMap((plan) =>
+      attributesOf<PlanAttributes>(plan).waves.map((wave) => ({ plan: plan.urn, ...wave })),
+    ),
+  };
+}
+
+/** Problems with proposed waves; an empty list means the service will save them. */
+export function waveProblems(world: World, waves: readonly ProposedWave[]): string[] {
+  const today = day(world);
+  if (waves.length === 0) return ["A plan needs at least one wave."];
+  return waves.flatMap((wave, index) => {
+    const at = `Wave ${index + 1}`;
+    const problems: string[] = [];
+    if (!(CHANNELS as readonly string[]).includes(wave.channel))
+      problems.push(`${at}: channel must be one of ${CHANNELS.join(", ")}.`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(wave.sendOn) || wave.sendOn < today)
+      problems.push(`${at}: sendOn must be a date on or after ${today} (YYYY-MM-DD).`);
+    if (!(wave.audienceSize > 0)) problems.push(`${at}: audienceSize must be above zero.`);
+    if (!wave.theme?.trim() || !wave.rationale?.trim())
+      problems.push(`${at}: give a theme and a rationale.`);
+    return problems;
+  });
+}
+
+export function planContent(
+  world: World,
+  brand: Brand,
+  actor = "agent:content-plan",
+  /** What the agent proposed. Without it the service drafts waves from the calendar. */
+  proposal?: { objective: string; waves: readonly ProposedWave[] },
+) {
   const today = day(world);
   const events = CALENDAR[brand].filter((event) => event.date >= today);
   const past = performance(world, brand).sort((a, b) => b.index - a.index);
@@ -100,7 +151,11 @@ export function planContent(world: World, brand: Brand, actor = "agent:content-p
     .filter((wave) => wave.channel === channel)
     .sort((a, b) => b.audienceSize - a.audienceSize)[0];
   const basis = past.slice(0, 2).map((item) => item.result.urn);
-  const waves: Wave[] = (events.length ? events : [{ date: today, label: "Evergreen send" }]).map(
+  if (proposal) {
+    const problems = waveProblems(world, proposal.waves);
+    if (problems.length) throw new Error(problems.join(" "));
+  }
+  const drafted: Wave[] = (events.length ? events : [{ date: today, label: "Evergreen send" }]).map(
     (event, index) => ({
       id: `w${index + 1}`,
       theme: event.label,
@@ -114,14 +169,19 @@ export function planContent(world: World, brand: Brand, actor = "agent:content-p
         : `${event.label}. No past results for this brand yet.`,
     }),
   );
+  const waves: Wave[] = proposal
+    ? proposal.waves.map((wave, index) => ({ ...wave, id: `w${index + 1}`, moduleCount: 1 }))
+    : drafted;
   const plan = created(world, actor, {
-    id: `${brandSlug(brand)}-plan-${today}`,
+    id: `${brandSlug(brand)}-plan-${today}${proposal ? `-${wordsTag(JSON.stringify(proposal))}` : ""}`,
     kind: "content-plan",
     title: `${brand} plan from ${today}`,
     brand,
     owner: "brand-planner",
     attributes: {
-      objective: `Reach ${brand} audiences on the dates that matter, using what performed.`,
+      objective:
+        proposal?.objective ??
+        `Reach ${brand} audiences on the dates that matter, using what performed.`,
       waves,
       basis,
     } satisfies PlanAttributes,
@@ -203,13 +263,18 @@ export function draftBriefFromPlan(
   actor = "agent:brief",
   /** Makes the brief, and the modules and gaps named after it, new for each run of a sample flow. */
   runTag?: string,
+  /** The objective in the agent's words; without it the service states the wave's theme. */
+  objective?: string,
 ) {
   const plan = getObject(world, planUrn);
   if (plan?.kind !== "content-plan") throw new Error(`${planUrn} is not a content plan.`);
   const wave = attributesOf<PlanAttributes>(plan).waves.find((item) => item.id === waveId);
   if (!wave) throw new Error(`${planUrn} has no wave ${waveId}.`);
+  // The objective is the agent's own words: it says what the content should achieve, never a fact.
+  const wording = objective?.trim() ? framingProblems(objective, plan.brand) : [];
+  if (wording.length) throw new Error(wording.join(" "));
   const brief = created(world, actor, {
-    id: `${slug(planUrn.split(":").at(-1) ?? "plan")}-${waveId}${runTag ? `-${slug(runTag)}` : ""}`,
+    id: `${slug(planUrn.split(":").at(-1) ?? "plan")}-${waveId}${runTag ? `-${slug(runTag)}` : ""}${objective?.trim() ? `-${wordsTag(objective)}` : ""}`,
     kind: "brief",
     title: `Brief: ${wave.theme}, wave ${waveId}`,
     brand: plan.brand,
@@ -218,7 +283,7 @@ export function draftBriefFromPlan(
     attributes: {
       planUrn,
       waveId,
-      objective: `Deliver "${wave.theme}" to ${wave.segment}.`,
+      objective: objective?.trim() || `Deliver "${wave.theme}" to ${wave.segment}.`,
     } satisfies BriefAttributes,
   });
   return { brief };
@@ -507,14 +572,76 @@ export function evidencePacket(world: World, moduleUrn: string) {
 
 // Cite or refuse ------------------------------------------------------------------------------
 
+/** The words of a brand's name, such as "harborstone" and "wealth". */
+const brandWords = (brand: string) => brand.toLowerCase().match(/[a-z]+/g) ?? [];
+
+/**
+ * A short tag from what an agent wrote. Objects named with it are new whenever the words differ,
+ * so a second draft never collides with, or overwrites, the first; the same words are a no-op.
+ */
+export function wordsTag(...parts: ReadonlyArray<string | undefined>) {
+  let hash = 2166136261;
+  for (const char of parts.filter(Boolean).join("|"))
+    hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
+  return hash.toString(36).slice(0, 6);
+}
+
+const words = (text: string) =>
+  new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter((word) => word.length > 3),
+  );
+/**
+ * Whether a sentence restates a claim: it shares at least four of the claim's content words, and
+ * they are over a third of its own. Naming the product alone ("the Sweep Account") is not enough.
+ */
+function restates(sentence: string, claim: string) {
+  const mine = words(sentence);
+  const theirs = words(claim);
+  const shared = [...mine].filter((word) => theirs.has(word)).length;
+  return shared >= 4 && shared / Math.max(mine.size, 1) >= 0.35;
+}
+
 export function authorModule(
   world: World,
-  request: { briefUrn: string; topics: readonly string[]; channel?: Channel; headline?: string },
+  request: {
+    briefUrn: string;
+    topics: readonly string[];
+    channel?: Channel;
+    headline?: string;
+    /** Sentences in the agent's own words (an opening, a call to action). They may not state facts. */
+    framing?: readonly string[];
+  },
   actor = "agent:module-authoring",
 ) {
   const resolved = resolveBrief(world, request.briefUrn);
   if (!resolved) throw new Error(`${request.briefUrn} is not a brief.`);
   const { brief } = resolved;
+  const framing = (request.framing ?? []).map((text) => text.trim()).filter(Boolean);
+  // Names the agent may not use in its own words, and the only words a headline may reuse.
+  const product = new Set<string>([
+    ...brandWords(brief.brand),
+    ...listObjects(world, { kind: "claim", brand: brief.brand }).flatMap((claim) =>
+      attributesOf<ClaimAttributes>(claim).topic.split("-"),
+    ),
+  ]);
+  const theme = new Set((resolved.wave?.theme ?? "").toLowerCase().match(/[a-z0-9]+/g) ?? []);
+  const allowedHeadline = new Set<string>([...theme, ...product]);
+  const wording = [
+    ...framing.flatMap((text) => [
+      ...framingProblems(text, brief.brand),
+      ...framingShape(text, product),
+    ]),
+    ...(request.headline
+      ? [
+          ...framingProblems(request.headline, brief.brand),
+          ...headlineShape(request.headline, allowedHeadline),
+        ]
+      : []),
+  ];
+  if (wording.length) throw new Error(wording.join(" "));
   const channel = request.channel ?? resolved.wave?.channel ?? "email";
   const cited: ClaimPacket[] = [];
   const gaps: GovernedObject[] = [];
@@ -546,13 +673,25 @@ export function authorModule(
     );
   }
   if (cited.length === 0) return { module: undefined, gaps, refused, cited };
+  // The agent's own words may not restate a claim: the claim's exact text is inserted below.
+  const restated = [request.headline ?? "", ...framing]
+    .filter(Boolean)
+    .flatMap((text) =>
+      cited
+        .filter((item) => restates(text, item.text))
+        .map(
+          (item) =>
+            `"${text}" restates the claim "${item.text}". Its exact text is inserted for you; write a greeting or a call to action instead.`,
+        ),
+    );
+  if (restated.length) throw new Error(restated.join(" "));
   const required = [...new Set(cited.flatMap((packet) => DISCLOSURE_RULES[packet.topic] ?? []))];
   const disclosures = required
     .map((id) => getObject(world, urnOf("disclosure", id)))
     .filter((item): item is GovernedObject => Boolean(item));
   const headline = request.headline ?? resolved.wave?.theme ?? "Untitled";
   const module = created(world, actor, {
-    id: `${slug(brief.urn.split(":").at(-1) ?? "brief")}-${channel}-${slug(cited.map((item) => item.topic).join("-"))}`,
+    id: `${slug(brief.urn.split(":").at(-1) ?? "brief")}-${channel}-${slug(cited.map((item) => item.topic).join("-"))}${request.headline || framing.length ? `-${wordsTag(request.headline, ...framing)}` : ""}`,
     kind: "module",
     title: headline,
     brand: brief.brand,
@@ -563,8 +702,9 @@ export function authorModule(
       topics: cited.map((item) => item.topic),
       requiredDisclosures: disclosures.map((item) => item.urn),
       briefUrn: brief.urn,
-      // Every sentence is a cited claim or a required disclosure; the agent writes nothing else.
+      // Facts come only from cited claims and required disclosures; the agent's own words state none.
       blocks: [
+        ...framing.map((text) => ({ text })),
         ...cited.map((item) => ({ text: item.text, claimUrn: item.claimUrn })),
         ...disclosures.map((item) => ({
           text: attributesOf<DisclosureAttributes>(item).text,
@@ -585,10 +725,21 @@ export function atomizeModule(
   moduleUrn: string,
   channels: readonly Channel[],
   actor = "agent:atomization",
+  /** A headline per channel in the agent's words; it may not state facts. */
+  headlines: Partial<Record<Channel, string>> = {},
 ) {
   const master = getObject(world, moduleUrn);
   if (master?.kind !== "module") throw new Error(`${moduleUrn} is not a module.`);
   const source = attributesOf<ModuleAttributes>(master);
+  const reusable = new Set<string>([
+    ...(source.headline.toLowerCase().match(/[a-z0-9]+/g) ?? []),
+    ...brandWords(master.brand),
+    ...CHANNELS,
+  ]);
+  const wording = Object.values(headlines).flatMap((text) =>
+    text ? [...framingProblems(text, master.brand), ...headlineShape(text, reusable)] : [],
+  );
+  if (wording.length) throw new Error(wording.join(" "));
   return channels
     .filter((channel) => channel !== source.channel)
     .map((channel) => {
@@ -614,13 +765,14 @@ export function atomizeModule(
           `${channel} allows ${limit} characters and the cited claims and disclosures need ${text.length}. A claim is never shortened.`,
         );
       const variant = created(world, actor, {
-        id: `${master.urn.split(":").at(-1)}-${channel}`,
+        id: `${master.urn.split(":").at(-1)}-${channel}${headlines[channel] ? `-${wordsTag(headlines[channel])}` : ""}`,
         kind: "module",
-        title: `${source.headline} (${channel})`,
+        title: `${headlines[channel] ?? source.headline} (${channel})`,
         brand: master.brand,
         owner: "content-lab",
         attributes: {
           ...source,
+          headline: headlines[channel] ?? source.headline,
           channel,
           blocks,
           variantOf: master.urn,

@@ -16,6 +16,8 @@ pnpm dev
 
 Open `http://127.0.0.1:5173`. Local mode contains fictional sample data and a local-only evaluator. It performs no external mutation.
 
+The architecture agents and sample flows run on real models. `pnpm dev:local` keeps D1 and R2 local and runs them on Workers AI (it needs `wrangler login`); without a model they say none is available rather than fall back to a script.
+
 ## Stable commands
 
 - `pnpm verify:fast`: formatting, lint, types, unit contracts, documentation, and invariants.

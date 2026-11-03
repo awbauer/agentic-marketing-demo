@@ -231,6 +231,16 @@ export function Chain({ chain }: { chain: ChainHop[] }) {
 type RunResult = {
   agentId: string;
   action: string;
+  /** The agent's own account of what it did. */
+  summary?: string;
+  model?: string;
+  latencyMs?: number;
+  steps?: Array<{
+    tool: string;
+    ok: boolean;
+    error?: string;
+    decision?: { decision: string; policyId: string };
+  }>;
   decision: { decision: string; policyId: string; reason: string };
   chain: ChainHop[];
   result: unknown;
@@ -257,6 +267,8 @@ function Summary({
       {shortUrn(urn)}
     </button>
   );
+  // An agent that stopped before its tool succeeded has no result; its own account says why.
+  if (result === null || result === undefined) return null;
   const r = result as Record<string, unknown>;
   if (action === "author_module") {
     const module = r.module as { urn: string } | undefined;
@@ -264,7 +276,10 @@ function Summary({
     return (
       <div>
         {module ? (
-          <p>Drafted {link(module.urn)}. Every sentence cites a claim or a required disclosure.</p>
+          <p>
+            Drafted {link(module.urn)}. Every fact in it is a cited claim or a required disclosure;
+            the agent's own words state none.
+          </p>
         ) : (
           <p>No module was written: nothing could be cited.</p>
         )}
@@ -556,6 +571,29 @@ export function AgentForm({
             <strong>Done.</strong> Here is what the agent did; nothing is approved until a person
             approves it.
           </p>
+          {state.result.summary && (
+            <blockquote className="arch-agent-words">
+              {state.result.summary}
+              <small>
+                {state.result.agentId} on {state.result.model?.replace("@cf/", "") ?? "its model"}
+                {state.result.latencyMs !== undefined &&
+                  ` · ${(state.result.latencyMs / 1000).toFixed(1)}s`}
+              </small>
+            </blockquote>
+          )}
+          {state.result.steps && state.result.steps.length > 0 && (
+            <ul className="arch-flow-tools" aria-label="Tool calls">
+              {state.result.steps.map((step, index) => (
+                <li key={`${step.tool}-${index}`} className={step.ok ? "ok" : "failed"}>
+                  <code>{step.tool}</code>{" "}
+                  {step.decision
+                    ? `${step.decision.decision === "allow" ? "allowed" : "denied"} by ${step.decision.policyId}`
+                    : "refused by the service"}
+                  {step.error && ` — ${step.error}`}
+                </li>
+              ))}
+            </ul>
+          )}
           <Summary result={state.result.result} action={form.action} onOpen={onOpen} />
           {state.result.drift?.drifted && (
             <p className="arch-refusal">

@@ -12,7 +12,7 @@ Section 17, default 5, and ADR-005 fix the orchestrator model at `@cf/openai/gpt
 - Each agent declares a **task class** (`orchestrate`, `draft`, `classify`, `judge`, `embed`). A **router** binds the class to its **champion** at run time.
 - `gpt-oss-20b` **stays the champion for `orchestrate`**. This ADR does not change what the chat orchestrator runs. It changes how a future change would happen: only by a pull request that edits the catalog after a challenger beats the champion on the same evaluations (`canPromote`).
 - **Challengers** are chosen per task class. A deterministic share of turns (10%) is marked for **shadow** evaluation, capped at USD 1 a day. A shadow run is never shown to a user.
-- Agents in the architecture workspaces are deterministic functions today, so the router governs what they are *bound* to and what the trace and Trust view report. It does not call a model for them.
+- Agents in the architecture workspaces are deterministic functions today, so the router governs what they are *bound* to and what the trace and Trust view report. It does not call a model for them. *(Superseded by ADR-010: the agents now run on the models the router binds.)*
 
 ## Consequences
 

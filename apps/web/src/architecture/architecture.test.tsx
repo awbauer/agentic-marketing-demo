@@ -215,78 +215,136 @@ describe("agent forms follow the brand", () => {
 
 describe("sample flows", () => {
   const calls: Array<{ url: string; persona: string; body: Record<string, unknown> }> = [];
-  const chain = [{ hop: "user", label: "User", identity: "u", detail: "", verified: true }];
-  const envelope = (result: unknown) => Response.json({ result, chain, decision: {} });
+  const ndjson = (events: unknown[]) =>
+    new Response(events.map((event) => JSON.stringify(event)).join("\n"), {
+      headers: { "content-type": "application/x-ndjson" },
+    });
+  const moduleUrn = "urn:northstar:module:m1";
+  let moduleState = "submitted";
+  const allow = { decision: "allow", policyId: "agent-module-authoring", reason: "granted" };
   beforeEach(() => {
     calls.length = 0;
+    moduleState = "submitted";
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
         const headers = (init?.headers ?? {}) as Record<string, string>;
         const body = init?.body ? JSON.parse(String(init.body)) : {};
         calls.push({ url, persona: headers["x-persona"] ?? "", body });
-        if (url.includes("/transition"))
-          return Response.json({ card: { state: body.to, title: "Cardivance outcomes" } });
-        if (url.includes("/optimizations")) return envelope([]);
-        switch (body.action) {
-          case "draft_brief":
-            return envelope({ brief: { urn: "urn:northstar:brief:b1", title: "Brief one" } });
-          case "author_module":
-            return envelope({
-              module: {
-                urn: "urn:northstar:module:m1",
-                title: "Cardivance outcomes",
-                attributes: { blocks: [{ claimUrn: "c1" }, { disclosureUrn: "d1" }] },
-              },
-              refused: [{ topic: "cardivance-superior", reason: "The claim is rejected." }],
-              gaps: [{ urn: "urn:northstar:gap:g1", title: "Gap: cardivance-superior" }],
-            });
-          case "run_farm":
-            return envelope([]);
-          case "assemble_evidence":
-            return envelope({
-              claims: [{ text: "Reduced risk", status: "substantiated", evidence: [], issues: [] }],
-            });
-          case "propose_transition":
-            return envelope({ proposed: true, reason: "Submitted for review.", blockers: [] });
-          default:
-            return Response.json({}, { status: 404 });
-        }
+        if (url === "/api/arch/orchestrations")
+          return ndjson([
+            {
+              type: "start",
+              id: "flow-1",
+              flowId: "lumera-congress",
+              model: "@cf/openai/gpt-oss-20b",
+              modelReason: "Champion for orchestrate.",
+            },
+            { type: "note", text: "Write the email from approved claims." },
+            {
+              type: "delegate",
+              callId: "c1",
+              agent: "module-authoring",
+              name: "Module authoring agent",
+              persona: "content-lab",
+              task: "Write the email",
+              refs: {},
+            },
+            {
+              type: "tool",
+              callId: "c1",
+              agent: "module-authoring",
+              step: { tool: "author_module", input: {}, ok: true, decision: allow },
+            },
+            {
+              type: "delegated",
+              callId: "c1",
+              agent: "module-authoring",
+              ok: true,
+              summary: "Wrote it and refused the superiority claim.",
+              model: "@cf/openai/gpt-oss-20b",
+              latencyMs: 4200,
+              tokens: 3000,
+              created: [
+                { ref: "module-1", urn: moduleUrn, title: "Cardivance outcomes", kind: "module" },
+              ],
+            },
+            {
+              type: "await-human",
+              moduleUrn,
+              title: "Cardivance outcomes",
+              why: "It is ready for review.",
+              persona: "reviewer",
+            },
+          ]);
+        if (url === "/api/arch/orchestrations/flow-1/continue")
+          return ndjson([
+            { type: "decided", moduleUrn, state: "approved", persona: "MLR-style reviewer" },
+            {
+              type: "done",
+              summary: "Approved by the reviewer; the superiority claim was refused.",
+            },
+          ]);
+        if (url.includes("/transition")) return Response.json({ card: {} });
+        if (url.startsWith("/api/arch/objects/"))
+          return Response.json({ object: { approvalState: moduleState } });
+        return Response.json({}, { status: 404 });
       }),
     );
   });
+  afterEach(cleanup);
 
-  it("runs each step as its own role and hands what it made to the next step", async () => {
+  it("shows the orchestrator delegating, waits for the person, then carries on", async () => {
     render(
       <SampleFlows
         scope={{ persona: "marketer", brand: "Lumera Therapeutics" }}
         onOpen={() => {}}
-        onGo={() => {}}
         onChanged={() => {}}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Run the whole flow" }));
-    expect(await screen.findByRole("button", { name: "Flow complete" })).toBeTruthy();
-    expect(calls.map((call) => call.persona)).toEqual([
-      "marketer",
-      "content-lab",
-      "content-lab",
-      "compliance",
-      "content-lab",
-      "reviewer",
-      "reviewer",
-      "brand-lead",
+    fireEvent.click(screen.getByRole("button", { name: "Start the orchestrator" }));
+    expect(await screen.findByText("Your decision, as MLR-style reviewer")).toBeTruthy();
+    expect(screen.getByText("Write the email from approved claims.")).toBeTruthy();
+    expect(screen.getByText("Content Lab")).toBeTruthy();
+    expect(screen.getByText(/allowed by agent-module-authoring/)).toBeTruthy();
+    expect(screen.getByText("Wrote it and refused the superiority claim.")).toBeTruthy();
+    // The orchestrator was started as the header's role, for the flow's brand.
+    expect(calls[0]).toMatchObject({ persona: "marketer", body: { flowId: "lumera-congress" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText("The orchestrator’s wrap-up")).toBeTruthy();
+    // The decision is the reviewer's, through the state machine, before the flow resumes.
+    const decisions = calls.filter((call) => call.url.includes("/transition"));
+    expect(decisions.map((call) => [call.persona, call.body.to])).toEqual([
+      ["reviewer", "in_review"],
+      ["reviewer", "approved"],
     ]);
-    const author = calls.find((call) => call.body.action === "author_module");
-    expect(author?.body.input).toMatchObject({ briefUrn: "urn:northstar:brief:b1" });
-    expect(
-      calls.filter((call) => call.url.includes("/transition")).map((call) => call.url),
-    ).toEqual([
-      "/api/arch/objects/urn%3Anorthstar%3Amodule%3Am1/transition",
-      "/api/arch/objects/urn%3Anorthstar%3Amodule%3Am1/transition",
-    ]);
-    expect(screen.getByText(/Refused 1 fact, and filed 1 gap record/)).toBeTruthy();
-    expect(screen.getByText(/is approved/)).toBeTruthy();
+    expect(calls.at(-1)?.url).toBe("/api/arch/orchestrations/flow-1/continue");
+  });
+
+  it("takes only the steps still needed when the module has moved on", async () => {
+    // A first attempt got as far as review, or the person decided in another tab.
+    for (const [state, expected] of [
+      ["in_review", ["approved"]],
+      ["approved", []],
+    ] as const) {
+      cleanup();
+      calls.length = 0;
+      moduleState = state;
+      render(
+        <SampleFlows
+          scope={{ persona: "marketer", brand: "Lumera Therapeutics" }}
+          onOpen={() => {}}
+          onChanged={() => {}}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Start the orchestrator" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+      expect(await screen.findByText("The orchestrator’s wrap-up")).toBeTruthy();
+      expect(
+        calls.filter((call) => call.url.includes("/transition")).map((call) => call.body.to),
+      ).toEqual(expected);
+    }
   });
 
   it("offers one flow per brand, or all three with no brand chosen", () => {
@@ -294,7 +352,6 @@ describe("sample flows", () => {
       <SampleFlows
         scope={{ persona: "marketer", brand: "all" }}
         onOpen={() => {}}
-        onGo={() => {}}
         onChanged={() => {}}
       />,
     );

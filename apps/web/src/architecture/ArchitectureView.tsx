@@ -247,9 +247,7 @@ export function ArchitectureView({ onClose }: { onClose: () => void }) {
       <div className={`arch-body ${open ? "with-inspector" : ""}`}>
         <div className="arch-main" role="tabpanel" aria-label={TAB_GUIDES[tab].label}>
           <TabGuideCard tab={tab} scope={scope} />
-          {tab === "flows" && (
-            <SampleFlows scope={scope} onOpen={setOpen} onGo={setTab} onChanged={changed} />
-          )}
+          {tab === "flows" && <SampleFlows scope={scope} onOpen={setOpen} onChanged={changed} />}
           {tab === "command-center" &&
             workspace(
               "command-center",

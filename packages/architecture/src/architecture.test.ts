@@ -902,6 +902,55 @@ describe("trust matrix", () => {
   });
 });
 
+describe("an agent's own words", () => {
+  const LT_BRIEF = "urn:northstar:brief:lt-brief-w1";
+  const author = (framing: string[], headline?: string) =>
+    authorModule(world(), {
+      briefUrn: LT_BRIEF,
+      topics: ["cardivance-mortality"],
+      channel: "email",
+      framing,
+      ...(headline ? { headline } : {}),
+    });
+
+  it("accepts a greeting and a call to action, and nothing else", () => {
+    const result = author([
+      "Hello cardiology colleagues,",
+      "See the full prescribing information below.",
+    ]);
+    expect(must(result.module).title).toBeTruthy();
+    const blocks = (
+      must(result.module).attributes as { blocks: Array<{ text: string; claimUrn?: string }> }
+    ).blocks;
+    expect(
+      blocks
+        .filter((block) => !block.claimUrn)
+        .slice(0, 2)
+        .map((block) => block.text),
+    ).toEqual(["Hello cardiology colleagues,", "See the full prescribing information below."]);
+  });
+
+  it("refuses an unsupported assertion that no keyword list would catch", () => {
+    for (const sentence of [
+      "Cardivance prevents strokes.",
+      "Many patients feel better on it.",
+      "Learn how it works to protect the heart.",
+      "Hello, and see why prescribers trust it.",
+    ])
+      expect(() => author([sentence]), sentence).toThrow();
+  });
+
+  it("limits a headline to the wave's own words, the product and plain connectors", () => {
+    expect(must(author([], "Cardivance outcomes at the heart failure meeting").module).title).toBe(
+      "Cardivance outcomes at the heart failure meeting",
+    );
+    expect(() => author([], "Cardivance prevents strokes")).toThrow(/could assert something/);
+    expect(() => author([], "Cardivance Shows Meaningful Benefit in Heart Failure")).toThrow(
+      /meaningful, benefit/,
+    );
+  });
+});
+
 describe("Lumera Therapeutics (pharmaceutical)", () => {
   const LT_BRIEF = "urn:northstar:brief:lt-brief-w1";
 

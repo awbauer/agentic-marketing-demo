@@ -10,7 +10,12 @@ export default defineConfig({
     agents(),
     react(),
     cloudflare({
-      configPath: process.env.NORTHSTAR_E2E ? "../../wrangler.e2e.jsonc" : "../../wrangler.jsonc",
+      // NORTHSTAR_LOCAL: local D1 and R2 with real Workers AI. NORTHSTAR_E2E: fully offline.
+      configPath: process.env.NORTHSTAR_LOCAL
+        ? "../../wrangler.local.jsonc"
+        : process.env.NORTHSTAR_E2E
+          ? "../../wrangler.e2e.jsonc"
+          : "../../wrangler.jsonc",
     }),
   ],
   resolve: {
