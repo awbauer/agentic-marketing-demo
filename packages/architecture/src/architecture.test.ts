@@ -597,7 +597,10 @@ describe("prompt catalog", () => {
 
 describe("model routing", () => {
   it("binds a task class to its champion, and shadows a challenger on a share of turns only", () => {
-    expect(routeModel("orchestrate").model).toBe("@cf/openai/gpt-oss-20b");
+    expect(routeModel("orchestrate").model).toBe("@cf/openai/gpt-oss-120b");
+    expect(routeModel("draft").model).toBe("@cf/openai/gpt-oss-120b");
+    expect(routeModel("classify").model).toBe("@cf/openai/gpt-oss-20b");
+    expect(routeModel("score").model).toBe("@cf/cloudflare/clef");
     const shadowed = Array.from({ length: 400 }, (_, index) =>
       routeModel("orchestrate", { turnKey: `t${index}` }),
     ).filter((route) => route.shadow);
@@ -605,6 +608,10 @@ describe("model routing", () => {
     expect(shadowed.length).toBeLessThan(80);
     expect(routeModel("orchestrate", { turnKey: "t1", shadowSpentUsd: 5 }).shadow).toBeUndefined();
     expect(routeModel("embed", { turnKey: "t1" }).shadow).toBeUndefined();
+    // The former champion is the challenger the new one is measured against.
+    expect(new Set(shadowed.map((route) => route.shadow))).toEqual(
+      new Set(["@cf/openai/gpt-oss-20b"]),
+    );
   });
 
   it("promotes a challenger only by beating the champion on the same evaluations", () => {

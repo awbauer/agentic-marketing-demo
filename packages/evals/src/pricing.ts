@@ -17,6 +17,7 @@ export type ModelPrice = {
 export const WORKERS_AI_PRICING: Readonly<Record<string, ModelPrice>> = {
   "@cf/openai/gpt-oss-120b": { input: 0.35, output: 0.75 },
   "@cf/openai/gpt-oss-20b": { input: 0.2, output: 0.3 },
+  // No longer run (ADR-011), but the committed report holds their turns and rescoring prices them.
   "@cf/zai-org/glm-4.7-flash": { input: 0.06, output: 0.4 },
   "@cf/meta/llama-4-scout-17b-16e-instruct": { input: 0.27, output: 0.85 },
   "@cf/moonshotai/kimi-k2.6": { input: 0.95, cachedInput: 0.16, output: 4 },

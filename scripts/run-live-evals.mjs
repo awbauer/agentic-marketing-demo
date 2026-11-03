@@ -92,25 +92,11 @@ const CALIBRATION_PATH = "artifacts/reports/eval-calibration.json";
 
 // Inexpensive models run by default. The frontier tier is opt-in (--tier frontier) because Kimi K2.6
 // alone was about 60% of an earlier five-model run, and GLM-5.3 and DeepSeek V4 Pro are priced alike.
-// `excluded` marks a low performer that stays listed (and in the report as not included) but is
-// skipped unless named in --models. Evidence: docs/work-units/WU-051-exclude-low-performers.md.
+// `excluded` marks a low performer that is skipped unless named in --models. GLM-4.7-Flash and
+// Llama 4 Scout, excluded in WU-051, are no longer listed (ADR-011); add them back here to rerun.
 const MODELS = [
   { id: "@cf/openai/gpt-oss-120b", label: "gpt-oss-120b", family: "openai", tier: "default" },
   { id: "@cf/openai/gpt-oss-20b", label: "gpt-oss-20b", family: "openai", tier: "default" },
-  {
-    id: "@cf/zai-org/glm-4.7-flash",
-    label: "GLM-4.7-Flash",
-    family: "zai",
-    tier: "default",
-    excluded: true,
-  },
-  {
-    id: "@cf/meta/llama-4-scout-17b-16e-instruct",
-    label: "Llama 4 Scout 17B",
-    family: "meta",
-    tier: "frontier",
-    excluded: true,
-  },
   { id: "@cf/moonshotai/kimi-k2.6", label: "Kimi K2.6", family: "moonshot", tier: "frontier" },
   { id: "@cf/zai-org/glm-5.3", label: "GLM-5.3", family: "zai", tier: "frontier" },
   {

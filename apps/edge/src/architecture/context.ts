@@ -27,7 +27,7 @@ export type ArchEnv = {
   /** "scripted" only in the hermetic worker tests; see scripted-model.ts. */
   AGENT_MODEL?: string;
   /**
-   * Champions by task class, as JSON (for example {"orchestrate": "@cf/moonshotai/kimi-k2.6"}), to
+   * Champions by task class, as JSON (for example {"orchestrate": "@cf/openai/gpt-oss-20b"}), to
    * run a catalog model in place of the ADR-009 champion. A model outside the catalog is ignored.
    */
   AGENT_CHAMPIONS?: string;
