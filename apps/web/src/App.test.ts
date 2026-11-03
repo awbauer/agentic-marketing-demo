@@ -60,6 +60,36 @@ describe("technical trace hardening", () => {
     ]);
   });
 
+  it("names the system behind a failed tool, and tells a failure from an empty result", () => {
+    const row = (toolName: string, output: unknown) =>
+      executionTrace({
+        id: toolName,
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          {
+            type: "dynamic-tool",
+            toolName,
+            toolCallId: "c",
+            state: "output-available",
+            input: {},
+            output,
+          },
+        ],
+      } as UIMessage).find((item) => item.label.startsWith("Tool output"))?.detail;
+    expect(row("ls_aprimo_search_approved_assets", { semanticStatus: "error" })).toBe(
+      "Aprimo reported that the call failed",
+    );
+    expect(row("graph_check_clinical_claims", { semanticStatus: "unavailable" })).toBe(
+      "The knowledge graph returned no usable business result",
+    );
+    expect(
+      row("tool_salesforce_northstar-marketing-salesforce_draft_campaign_brief", {
+        semanticStatus: "error",
+      }),
+    ).toBe("Salesforce reported that the call failed");
+  });
+
   it("renders every server lifecycle event in order with timings and payloads", () => {
     const trace: TurnTrace = {
       startedAt: 1_000,

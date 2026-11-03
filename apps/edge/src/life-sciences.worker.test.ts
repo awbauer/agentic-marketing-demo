@@ -46,6 +46,14 @@ describe("life-sciences MCP (mocked systems of record)", () => {
     const assets = (await call("aprimo_search_approved_assets", { drug: "drug-cardivance" })).body;
     expect(assets.assets).toHaveLength(5);
     expect(assets.usableNow).toBe(3);
+    // A model that names the drug, or writes the channel in another case, still gets an answer.
+    const named = await call("aprimo_search_approved_assets", {
+      drug: "Cardivance",
+      channel: "Email",
+    });
+    expect(named.isError).toBe(false);
+    expect(named.body.drug).toBe("drug-cardivance");
+    expect((await call("aprimo_search_approved_assets", { drug: "aspirin" })).isError).toBe(true);
     const pending = (
       await call("aprimo_search_approved_assets", { drug: "drug-cardivance", status: "Pending" })
     ).body;

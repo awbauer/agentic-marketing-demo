@@ -81,6 +81,19 @@ export const DRUG_KEYS = Object.keys(DRUGS) as [DrugKey, ...DrugKey[]];
 export const drugId = (key: DrugKey) => `drug-${key}`;
 export const DRUG_IDS = DRUG_KEYS.map(drugId) as [string, ...string[]];
 
+/**
+ * A drug as a model may name it ("Cardivance", "cardivance", "drug-cardivance"), as its ID. A
+ * model naming the drug instead of its ID would otherwise fail the call on a technicality.
+ */
+export const normalizeDrugId = (value: unknown) => {
+  if (typeof value !== "string") return value;
+  const key = value
+    .trim()
+    .toLowerCase()
+    .replace(/^drug-/, "");
+  return (DRUG_KEYS as readonly string[]).includes(key) ? `drug-${key}` : value;
+};
+
 export const INDICATIONS = {
   hfref: "Heart failure with reduced ejection fraction",
   hfpef: "Heart failure with preserved ejection fraction",

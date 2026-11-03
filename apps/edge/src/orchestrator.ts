@@ -28,6 +28,7 @@ import {
   type SuggestedAction,
   type TurnRecord,
   TurnRecordSchema,
+  toolSystem,
   WRITE_TOOL_BY_ACTION,
 } from "@northstar/contracts";
 import {
@@ -400,13 +401,27 @@ function guardToolResults(
                   semanticStatus,
                   message:
                     semanticStatus === "error"
-                      ? "Salesforce reported that the tool call failed. Do not infer missing facts."
-                      : "Salesforce returned no usable business result. Do not infer missing facts.",
+                      ? `${toolSystem(name)} reported that the tool call failed. Do not infer missing facts.`
+                      : `${toolSystem(name)} returned no usable business result. Do not infer missing facts.`,
                   upstream,
                 };
           },
         },
       ];
+    }),
+  );
+}
+
+/** The tools the finished steps called, and whether each worked, for the plan's position. */
+export function stepOutcomes(steps: ReadonlyArray<{ content: ReadonlyArray<unknown> }>) {
+  return steps.flatMap((step) =>
+    step.content.flatMap((part) => {
+      const item = part as { type?: string; toolName?: string; output?: unknown };
+      if (item.type !== "tool-result" && item.type !== "tool-error") return [];
+      const failed =
+        item.type === "tool-error" ||
+        (item.output as { semanticStatus?: unknown } | undefined)?.semanticStatus === "error";
+      return [{ tool: item.toolName ?? "", ok: !failed }];
     }),
   );
 }
@@ -939,10 +954,21 @@ export class MarketingOrchestrator extends AIChatAgent<
             tools: pinnedTools,
             // A revision with no agent to ask rewrites the draft in focus without tools; a brief's
             // revision goes back to the Marketing Cloud agent through its plan.
-            prepareStep: ({ stepNumber }: { stepNumber: number }) => {
+            prepareStep: ({
+              stepNumber,
+              steps,
+            }: {
+              stepNumber: number;
+              steps: ReadonlyArray<{ content: ReadonlyArray<unknown> }>;
+            }) => {
               if (drafting?.mode === "revise" && !toolPlan)
                 return { toolChoice: "none" as const, activeTools: [] as string[] };
-              const choice = stepToolChoice(toolPlan, stepNumber);
+              const choice = stepToolChoice(
+                toolPlan,
+                stepNumber,
+                MAX_TURN_STEPS,
+                stepOutcomes(steps),
+              );
               // The inventory check is computed by code after the plan's tools run, so the answer
               // step sees the workspace as it is now, including exactly which items are low.
               return inventoryPlan && stepNumber >= (toolPlan?.length ?? 0)

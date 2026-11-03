@@ -627,6 +627,29 @@ export function requiredToolChoice(requiredTool: string | undefined, stepNumber:
     : { toolChoice: "none" as const };
 }
 
+/** A tool a finished step called, and whether it worked. */
+export type StepOutcome = { tool: string; ok: boolean };
+
+/**
+ * Where a plan stands after these calls. A planned tool that failed, such as one given an argument
+ * it rejected, is offered once more before the plan moves on, so the model's retry is the forced
+ * call rather than a call to a tool the step doesn't offer, which would fail the whole turn.
+ */
+export function planPosition(plan: readonly string[], outcomes: readonly StepOutcome[]) {
+  let position = 0;
+  let failures = 0;
+  for (const outcome of outcomes) {
+    if (position >= plan.length) break;
+    if (outcome.tool === plan[position] && !outcome.ok && failures === 0) {
+      failures = 1;
+      continue;
+    }
+    position += 1;
+    failures = 0;
+  }
+  return position;
+}
+
 /**
  * Per-step tool settings. Step N of a plan forces its Nth tool and only sees that tool; steps after
  * the plan, and the last allowed step, receive no tools at all: Workers AI does not enforce
@@ -636,9 +659,11 @@ export function stepToolChoice(
   plan: string | readonly string[] | undefined,
   stepNumber: number,
   maxSteps = MAX_TURN_STEPS,
+  /** What the steps so far called and whether each worked; without it, one tool per step. */
+  outcomes?: readonly StepOutcome[],
 ) {
   const steps = plan === undefined ? [] : typeof plan === "string" ? [plan] : plan;
-  const forced = steps[stepNumber];
+  const forced = steps[outcomes ? planPosition(steps, outcomes) : stepNumber];
   if (forced && stepNumber < maxSteps - 1)
     return { toolChoice: { type: "tool" as const, toolName: forced }, activeTools: [forced] };
   if (steps.length > 0 || stepNumber >= maxSteps - 1)

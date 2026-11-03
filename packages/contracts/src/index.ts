@@ -465,6 +465,39 @@ export const KNOWLEDGE_GRAPH_TOOLS = Object.freeze([
   "plan_hospital_engagement",
 ] as const);
 
+const LIFE_SCIENCES_SYSTEMS: Record<string, string> = {
+  aprimo: "Aprimo",
+  reltio: "Reltio",
+  vault: "Veeva Vault",
+  screendragon: "Screendragon",
+  iqvia: "IQVIA",
+  lsc: "Life Sciences Cloud",
+  drupal: "Drupal",
+};
+const EXTERNAL_SYSTEMS: Record<string, string> = {
+  get_public_holidays: "Nager.Date",
+  get_weather_alerts: "The National Weather Service",
+  get_fed_announcements: "The Federal Reserve feed",
+};
+
+/**
+ * The system that answered a tool call, for messages about its result: an Aprimo failure is
+ * Aprimo's, not Salesforce's. Tool names may carry their server's prefix.
+ */
+export function toolSystem(name: string): string {
+  const bare = name.replace(/^(?:tool_salesforce_[^_]+_|ls_|graph_|ext_|context_)/, "");
+  if (name.startsWith("ls_") || (LIFE_SCIENCES_TOOLS as readonly string[]).includes(bare))
+    return LIFE_SCIENCES_SYSTEMS[bare.split("_")[0] ?? ""] ?? "The life-sciences system";
+  if (EXTERNAL_SYSTEMS[bare]) return EXTERNAL_SYSTEMS[bare];
+  if (
+    name.startsWith("graph_") ||
+    ([...KNOWLEDGE_GRAPH_TOOLS, ...MEMORY_TOOLS] as readonly string[]).includes(bare)
+  )
+    return "The knowledge graph";
+  if (name.startsWith("context_")) return "Campaign context";
+  return "Salesforce";
+}
+
 /** Read-only recall tools over the workspace's long-term memory in the graph. See ADR-007. */
 export const MEMORY_TOOLS = Object.freeze([
   "recall_decisions",

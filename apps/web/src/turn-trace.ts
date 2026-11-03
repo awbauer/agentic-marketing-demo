@@ -5,6 +5,7 @@ import {
   TURN_TRACE_PART_TYPE,
   type TurnTrace,
   TurnTraceSchema,
+  toolSystem,
 } from "@northstar/contracts";
 import type { UIMessage } from "ai";
 import { turnStats } from "./turn-stats";
@@ -84,10 +85,10 @@ export function salesforceAgentLine(name: string) {
   return `Salesforce agent: ${agent.label} (${agent.kind})${detail.subagent ? ` · ${detail.subagent}` : ""} · ${actions}`;
 }
 
-function semanticToolFailure(value: unknown): boolean {
-  if (!value || typeof value !== "object") return false;
+function semanticToolFailure(value: unknown): "unavailable" | "error" | null {
+  if (!value || typeof value !== "object") return null;
   const status = (value as { semanticStatus?: unknown }).semanticStatus;
-  return status === "unavailable" || status === "error";
+  return status === "unavailable" || status === "error" ? status : null;
 }
 
 type ToolPartView = {
@@ -152,15 +153,19 @@ function seconds(ms: number) {
 }
 
 function toolOutputRow(key: string, tool: ToolPartView, elapsed?: string): TraceRow {
-  const unavailable = semanticToolFailure(tool.output);
+  const status = semanticToolFailure(tool.output);
+  const system = toolSystem(tool.toolName);
   return {
     key,
     kind: "tool",
     label: `Tool output · ${readableToolName(tool.toolName)}`,
-    detail: unavailable
-      ? "Salesforce returned no usable business result"
-      : "Result returned to the orchestrator",
-    state: unavailable ? "error" : "complete",
+    detail:
+      status === "error"
+        ? `${system} reported that the call failed`
+        : status === "unavailable"
+          ? `${system} returned no usable business result`
+          : "Result returned to the orchestrator",
+    state: status ? "error" : "complete",
     elapsed,
     payloadLabel: "Sanitized tool output",
     payload: json({ output: tool.output }),
