@@ -963,7 +963,26 @@ describe("an agent's own words", () => {
       "See the latest outcomes.",
       "Review the safety information below.",
       "See the latest data.",
+      "See the full prescribing information below.",
+      "Review the full study details.",
+      "Visit the app.",
+      "Talk to your doctor.",
+      // The wave's theme may be named: this brief's wave is about the heart failure meeting.
+      "Join us at the heart failure meeting.",
     ])
+      expect(must(author([sentence]).module).title, sentence).toBeTruthy();
+    // Calls to action the journeys produced that persuade instead of pointing.
+    for (const sentence of [
+      "Visit to transfer idle cash.",
+      "Visit for warm comfort.",
+      "See your warm bowl waiting.",
+      "Read the upcoming congress details.",
+    ])
+      expect(() => author([sentence]), sentence).toThrow(/says more than what to do/);
+    // A greeting greets; a call to action hidden in it would skip the checks above.
+    for (const sentence of ["Hello, consider moving idle cash.", "Hello, see your options."])
+      expect(() => author([sentence]), sentence).toThrow(/adds to the greeting/);
+    for (const sentence of ["Hello cardiology prescribers,", "Hello!", "Dear colleague,"])
       expect(must(author([sentence]).module).title, sentence).toBeTruthy();
     for (const sentence of ["See", "Review the", "Please see"])
       expect(() => author([sentence]), sentence).toThrow(/not a complete call to action/);

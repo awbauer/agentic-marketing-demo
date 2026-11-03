@@ -34,7 +34,11 @@ const CATALOG: Record<string, { use: string; needs: string }> = {
     needs: "planUrn and change {type: move-send, waveId, days (negative is earlier)}",
   },
   brief: { use: "a brief for one wave of an approved plan", needs: "planUrn and waveId" },
-  reuse: { use: "finding existing modules to reuse", needs: "briefUrn or query" },
+  // Not a search tool: given lookups, it searches and never ranks, and its drift watch flags that.
+  reuse: {
+    use: "finding existing approved modules a brief could reuse instead of writing a new one (not for looking up claims or other objects: the module authoring agent finds claims itself)",
+    needs: "briefUrn",
+  },
   "module-authoring": {
     use: "writing a new module from approved claims (it refuses unsupported ones and records gaps)",
     needs: "briefUrn, topics (claim topics, as given in the goal) and channel",

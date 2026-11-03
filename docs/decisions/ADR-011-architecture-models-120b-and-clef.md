@@ -39,6 +39,8 @@ On 20b, two of six journeys never produced an email: one had all 7 authoring att
 
 - Journey runs cost more per step (about 1.75 times input and 2.5 times output on planning and drafting) and each step is somewhat slower; the latency evaluator's 20-second budget (#115) allows for it.
 - Each agent run makes one Clef call (input tokens only, a few thousand per run). A failed call leaves answer quality unscored and never fails the run.
+- On 120b the orchestrator used the reuse agent as a general search ("Find existing claim"), so reuse never ranked modules and its drift watch constrained it within five runs; Clef rated those runs about 0.4 against about 0.75 for other agents. The orchestrator's catalog now says reuse is for modules a brief could reuse, not for lookups, and needs a brief; in six journeys after the change it was not misused.
+- Tighter framing checks (same pull request): a call to action names only plain words, places and the wave's theme, and a greeting only greets. Over six journeys all reached review, with 1.7 rejected authoring attempts a run.
 - The chat orchestrator is unchanged: it runs `gpt-oss-20b` under ADR-005 and the contracts package.
 - The promotion is consistent with ADR-009's gate: the new champion beats the old one on the same evaluations. 20b as challenger keeps the comparison available once shadow execution is built.
 
