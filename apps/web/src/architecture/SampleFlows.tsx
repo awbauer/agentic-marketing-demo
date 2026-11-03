@@ -7,7 +7,9 @@ import {
   type SampleGoal,
 } from "@northstar/architecture";
 import { type ReactNode, useEffect, useState } from "react";
+import { AssetPreview } from "./AssetPreview";
 import { ArchApiError, archFetch, archStream, type Scope } from "./api";
+import { assetOf } from "./asset";
 import { ErrorNote, Json } from "./Shared";
 
 type Status = "idle" | "running" | "waiting" | "deciding" | "done";
@@ -216,11 +218,14 @@ function FlowRunner({
   scope,
   onOpen,
   onChanged,
+  inspector,
 }: {
   goal: SampleGoal;
   scope: Scope;
   onOpen: (urn: string) => void;
   onChanged: () => void;
+  /** An object opened from the flow; it takes the preview's place until it is closed. */
+  inspector?: ReactNode;
 }) {
   const [run, setRun] = useState<Run>({ status: "idle", events: [] });
   // The orchestrator starts as you, for the flow's brand; each subagent acts for its step's owner.
@@ -298,6 +303,7 @@ function FlowRunner({
 
   const started = run.events.find((event) => event.type === "start");
   const items = itemsOf(run.events);
+  const asset = assetOf(run.events);
   const busy = run.status === "running" || run.status === "deciding";
   const lastHuman = items.reduce(
     (found, item, index) =>
@@ -339,56 +345,61 @@ function FlowRunner({
         </p>
       )}
       {run.error && <ErrorNote error={run.error} />}
-      <ol className="arch-flow-steps" aria-live="polite">
-        {items.map((item, index): ReactNode => {
-          if (item.kind === "delegation")
-            return <DelegationCard key={item.callId} item={item} onOpen={onOpen} />;
-          const { event } = item;
-          if (event.type === "note")
-            return (
-              <li key={`note-${index}`} className="arch-flow-note">
-                <span>Orchestrator</span> {event.text}
-              </li>
-            );
-          if (event.type === "await-human")
-            return (
-              <DecisionCard
-                key={`human-${event.moduleUrn}`}
-                event={event}
-                goal={goal}
-                status={index === lastHuman ? run.status : "done"}
-                onDecide={decide}
-                onOpen={onOpen}
-              />
-            );
-          if (event.type === "decided")
-            return (
-              <li key={`decided-${index}`} className="arch-flow-note decided">
-                <span>{event.persona}</span> {event.state.replace("_", " ")} it, and the
-                orchestrator carries on.
-              </li>
-            );
-          if (event.type === "done")
-            return (
-              <li key={`done-${index}`} className="arch-flow-step finished arch-flow-done">
-                <h4>The orchestrator’s wrap-up</h4>
-                <p>{event.summary}</p>
-              </li>
-            );
-          if (event.type === "error")
-            return (
-              <li key={`error-${index}`} className="arch-flow-step finished stopped">
-                <p>{event.message}</p>
-              </li>
-            );
-          return null;
-        })}
-        {busy && (
-          <li className="arch-flow-note" role="status">
-            <span>Orchestrator</span> working…
-          </li>
-        )}
-      </ol>
+      <div className="arch-flow-layout">
+        <ol className="arch-flow-steps" aria-live="polite">
+          {items.map((item, index): ReactNode => {
+            if (item.kind === "delegation")
+              return <DelegationCard key={item.callId} item={item} onOpen={onOpen} />;
+            const { event } = item;
+            if (event.type === "note")
+              return (
+                <li key={`note-${index}`} className="arch-flow-note">
+                  <span>Orchestrator</span> {event.text}
+                </li>
+              );
+            if (event.type === "await-human")
+              return (
+                <DecisionCard
+                  key={`human-${event.moduleUrn}`}
+                  event={event}
+                  goal={goal}
+                  status={index === lastHuman ? run.status : "done"}
+                  onDecide={decide}
+                  onOpen={onOpen}
+                />
+              );
+            if (event.type === "decided")
+              return (
+                <li key={`decided-${index}`} className="arch-flow-note decided">
+                  <span>{event.persona}</span> {event.state.replace("_", " ")} it, and the
+                  orchestrator carries on.
+                </li>
+              );
+            if (event.type === "done")
+              return (
+                <li key={`done-${index}`} className="arch-flow-step finished arch-flow-done">
+                  <h4>The orchestrator’s wrap-up</h4>
+                  <p>{event.summary}</p>
+                </li>
+              );
+            if (event.type === "error")
+              return (
+                <li key={`error-${index}`} className="arch-flow-step finished stopped">
+                  <p>{event.message}</p>
+                </li>
+              );
+            return null;
+          })}
+          {busy && (
+            <li className="arch-flow-note" role="status">
+              <span>Orchestrator</span> working…
+            </li>
+          )}
+        </ol>
+        <div className="arch-flow-aside">
+          {inspector ?? <AssetPreview asset={asset} brand={goal.brand} onOpen={onOpen} />}
+        </div>
+      </div>
     </section>
   );
 }
@@ -398,10 +409,12 @@ export function SampleFlows({
   scope,
   onOpen,
   onChanged,
+  inspector,
 }: {
   scope: Scope;
   onOpen: (urn: string) => void;
   onChanged: () => void;
+  inspector?: ReactNode;
 }) {
   const goals = SAMPLE_GOALS.filter((goal) => scope.brand === "all" || goal.brand === scope.brand);
   const [chosen, setChosen] = useState<string | null>(null);
@@ -429,9 +442,16 @@ export function SampleFlows({
         The orchestrator is a model: it reads the goal, decides which subagent to call and with
         what, and reads each result before the next step. Each subagent is a model too, acting for
         the person who owns its step, with only its granted tools. Nothing here is scripted, so runs
-        differ; one takes about a minute.
+        differ; one takes about a minute. The asset on the right fills in as the agents work.
       </p>
-      <FlowRunner key={goal.id} goal={goal} scope={scope} onOpen={onOpen} onChanged={onChanged} />
+      <FlowRunner
+        key={goal.id}
+        goal={goal}
+        scope={scope}
+        onOpen={onOpen}
+        onChanged={onChanged}
+        inspector={inspector}
+      />
     </div>
   );
 }

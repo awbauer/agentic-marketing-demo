@@ -5,7 +5,6 @@ import { type Brand, type Persona, STAGE_OWNERS, type Stage } from "@northstar/a
 // brand in the header. The technical panels stay as they are; this sits on top of them.
 
 export type Tab =
-  | "flows"
   | "command-center"
   | "brief-builder"
   | "module-library"
@@ -32,23 +31,6 @@ export type TabGuide = {
 };
 
 export const TAB_GUIDES: Record<Tab, TabGuide> = {
-  flows: {
-    label: "Sample flows",
-    group: "work",
-    what: "A goal for each brand that a real orchestrator plans and hands, step by step, to real subagents, pausing for a person where only a person may decide.",
-    why: "Instead of reading how the pieces fit, you watch them work: which agent the orchestrator picks, what each one writes or refuses, which of its calls the gateway allows, and the decision that is yours.",
-    tryIt: {
-      all: "Pick a flow and start the orchestrator. When it asks for your decision, open the module, then approve it or request changes.",
-      "Harborstone Wealth":
-        "Run the sweep-rate flow: watch the authoring agent get wire fees refused for lack of an approved claim, and the old fee-waiver email stopped because its evidence expired.",
-      "Coastline Kitchen":
-        "Run the cold-front flow: a what-if on the send date, a push written from two approved claims, and email and SMS versions that keep both whole.",
-      "Lumera Therapeutics":
-        "Run the congress flow: the superiority claim is refused and filed as a gap, the boxed warning is attached for you, and approval waits for you as the MLR reviewer.",
-    },
-    technical:
-      "The orchestrator and every subagent run on Workers AI models the router picks. Subagents get their catalog prompt and only their granted tools; each tool call passes the gateway as that agent, acting for the step's owner. The services behind the tools enforce cite-or-refuse.",
-  },
   "command-center": {
     label: "Command Center",
     group: "work",
@@ -200,6 +182,24 @@ export const TAB_GUIDES: Record<Tab, TabGuide> = {
     technical:
       "A default-deny gateway (forbid beats permit), per-call signed agent tokens with an act claim, and an append-only decision log.",
   },
+};
+
+/** The Journeys view's card: the same questions, for the flows the agents run end to end. */
+export const JOURNEY_GUIDE: Omit<TabGuide, "group"> = {
+  label: "Journeys",
+  what: "A goal for each brand that a real orchestrator plans and hands, step by step, to real subagents, pausing for a person where only a person may decide.",
+  why: "Instead of reading how the pieces fit, you watch them work: which agent the orchestrator picks, what each one writes or refuses, which of its calls the gateway allows, and the decision that is yours. The asset builds on the right as they go, block by block, with what the service kept out beside it.",
+  tryIt: {
+    all: "Pick a flow and start the orchestrator. Click any block in the asset to see who wrote it and what the checks found. When it asks for your decision, approve it or request changes.",
+    "Harborstone Wealth":
+      "Run the sweep-rate flow: watch the authoring agent get wire fees refused for lack of an approved claim, and the old fee-waiver email stopped because its evidence expired.",
+    "Coastline Kitchen":
+      "Run the cold-front flow: a what-if on the send date, a push written from two approved claims, and email and SMS versions that keep both whole.",
+    "Lumera Therapeutics":
+      "Run the congress flow: the superiority claim is refused and filed as a gap, the boxed warning is attached for you, and approval waits for you as the MLR reviewer.",
+  },
+  technical:
+    "The orchestrator and every subagent run on Workers AI models the router picks. Subagents get their catalog prompt and only their granted tools; each tool call passes the gateway as that agent, acting for the step's owner. The services behind the tools enforce cite-or-refuse.",
 };
 
 export const TAB_ORDER = Object.keys(TAB_GUIDES) as Tab[];

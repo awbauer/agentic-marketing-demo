@@ -1,4 +1,10 @@
-import { PERSONA_LABELS, STAGE_LABELS, STAGE_OWNERS, STAGES } from "@northstar/architecture";
+import {
+  PERSONA_LABELS,
+  STAGE_LABELS,
+  STAGE_OWNERS,
+  STAGES,
+  type Stage,
+} from "@northstar/architecture";
 import { useState } from "react";
 import type { Scope } from "./api";
 import {
@@ -9,6 +15,7 @@ import {
   stagesFor,
   TAB_GUIDES,
   type Tab,
+  type TabGuide,
 } from "./guide";
 
 const INTRO_KEY = "northstar.architecture.intro";
@@ -45,10 +52,12 @@ export function useIntro() {
 export function ArchitectureIntro({
   scope,
   onGo,
+  onJourneys,
   onClose,
 }: {
   scope: Scope;
   onGo: (tab: Tab) => void;
+  onJourneys: () => void;
   onClose: () => void;
 }) {
   const flow = PERSONA_FLOW[scope.persona];
@@ -93,8 +102,8 @@ export function ArchitectureIntro({
           </button>
           <p className="arch-note">
             Change the role in the header to see the same work from another seat, or{" "}
-            <button type="button" className="arch-link" onClick={() => onGo("flows")}>
-              watch a sample flow
+            <button type="button" className="arch-link" onClick={onJourneys}>
+              watch a journey
             </button>{" "}
             run from brief to approval.
           </p>
@@ -137,8 +146,24 @@ export function ArchitectureIntro({
 
 /** The plain-language card at the top of each workspace, above its technical panels. */
 export function TabGuideCard({ tab, scope }: { tab: Tab; scope: Scope }) {
-  const guide = TAB_GUIDES[tab];
-  const decides = STAGES.filter((stage) => STAGE_TAB[stage] === tab);
+  return (
+    <GuideCard
+      guide={TAB_GUIDES[tab]}
+      scope={scope}
+      decides={STAGES.filter((stage) => STAGE_TAB[stage] === tab)}
+    />
+  );
+}
+
+export function GuideCard({
+  guide,
+  scope,
+  decides = [],
+}: {
+  guide: Omit<TabGuide, "group">;
+  scope: Scope;
+  decides?: Stage[];
+}) {
   return (
     <aside className="arch-guide" aria-label={`About ${guide.label}`}>
       <dl>

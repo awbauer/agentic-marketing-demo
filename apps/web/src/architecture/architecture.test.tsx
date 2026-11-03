@@ -10,7 +10,7 @@ const renderView = () =>
   render(
     <ScopeProvider>
       <ScopeBar />
-      <ArchitectureView onClose={() => undefined} />
+      <ArchitectureView onClose={() => undefined} onOpenJourneys={() => undefined} />
     </ScopeProvider>,
   );
 
@@ -254,7 +254,51 @@ describe("sample flows", () => {
               type: "tool",
               callId: "c1",
               agent: "module-authoring",
-              step: { tool: "author_module", input: {}, ok: true, decision: allow },
+              step: {
+                tool: "author_module",
+                input: { headline: "Cardivance wins", framing: [] },
+                ok: false,
+                decision: allow,
+                error: '"Cardivance wins" uses words that could assert something (wins).',
+              },
+            },
+            {
+              type: "tool",
+              callId: "c1",
+              agent: "module-authoring",
+              step: {
+                tool: "author_module",
+                input: { headline: "Cardivance outcomes", framing: ["Hello, doctor."] },
+                ok: true,
+                decision: allow,
+                output: {
+                  module: {
+                    urn: moduleUrn,
+                    title: "Cardivance outcomes",
+                    state: "draft",
+                    attributes: {
+                      headline: "Cardivance outcomes",
+                      channel: "email",
+                      topics: ["cardivance-mortality"],
+                      blocks: [
+                        { text: "Hello, doctor." },
+                        {
+                          text: "Cardivance reduced mortality.",
+                          claimUrn: "urn:northstar:claim:c1",
+                        },
+                        { text: "Boxed warning.", disclosureUrn: "urn:northstar:disclosure:d1" },
+                      ],
+                    },
+                  },
+                  refused: [
+                    {
+                      topic: "cardivance-superior",
+                      reason: 'No substantiated claim for "cardivance-superior".',
+                    },
+                  ],
+                  gaps: [],
+                },
+              },
             },
             {
               type: "delegated",
@@ -306,8 +350,21 @@ describe("sample flows", () => {
     expect(await screen.findByText("Your decision, as MLR-style reviewer")).toBeTruthy();
     expect(screen.getByText("Write the email from approved claims.")).toBeTruthy();
     expect(screen.getByText("Content Lab")).toBeTruthy();
-    expect(screen.getByText(/allowed by agent-module-authoring/)).toBeTruthy();
+    expect(screen.getAllByText(/allowed by agent-module-authoring/)).toHaveLength(2);
     expect(screen.getByText("Wrote it and refused the superiority claim.")).toBeTruthy();
+    // The asset is composed beside the steps: the agent's words, the inserted claim, the
+    // disclosure it requires, and what the service kept out.
+    const preview = within(screen.getByRole("complementary", { name: "Asset preview" }));
+    expect(preview.getByText("Safety information")).toBeTruthy();
+    expect(preview.getByRole("button", { name: "Agent’s own words: Hello, doctor." })).toBeTruthy();
+    fireEvent.click(
+      preview.getByRole("button", { name: "Approved claim: Cardivance reduced mortality." }),
+    );
+    expect(preview.getByText(/Compliance approved the text/)).toBeTruthy();
+    expect(preview.getByRole("button", { name: "claim:c1" })).toBeTruthy();
+    fireEvent.click(preview.getByRole("button", { name: "Refused: cardivance-superior" }));
+    expect(preview.getByText('No substantiated claim for "cardivance-superior".')).toBeTruthy();
+    expect(preview.getByRole("button", { name: "Rejected: Cardivance wins" })).toBeTruthy();
     // The orchestrator was started as the header's role, for the flow's brand.
     expect(calls[0]).toMatchObject({ persona: "marketer", body: { flowId: "lumera-congress" } });
 

@@ -1202,3 +1202,448 @@
   margin-top: 4px;
   color: var(--muted);
 }
+
+/* Journeys: the steps on the left, the asset as it is built on the right. */
+.arch-flow-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 460px);
+  gap: 18px;
+  align-items: start;
+  margin-top: 12px;
+}
+.arch-flow-layout > .arch-flow-steps {
+  margin-top: 0;
+}
+.arch-flow-aside {
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+}
+.arch-flow-aside .arch-inspector {
+  position: static;
+  max-height: none;
+}
+@media (max-width: 1100px) {
+  .arch-flow-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .arch-flow-aside {
+    position: static;
+    max-height: none;
+  }
+}
+
+.asset-preview {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.asset-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 10px;
+}
+.asset-head h3 {
+  margin: 2px 0 0;
+  font-size: 16px;
+}
+.asset-state {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.asset-state.submitted,
+.asset-state.in_review {
+  border-color: var(--amber);
+  color: #8a5718;
+}
+.asset-state.approved {
+  border-color: var(--forest);
+  background: var(--forest);
+  color: #fff;
+}
+.asset-state.changes_requested,
+.asset-state.rejected {
+  border-color: #b4412f;
+  color: #b4412f;
+}
+
+.asset-empty {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.asset-skeleton {
+  display: grid;
+  gap: 8px;
+}
+.asset-skeleton i {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: #eef1ec;
+}
+.asset-skeleton i:first-child {
+  width: 60%;
+  height: 16px;
+}
+.asset-skeleton i:last-child {
+  width: 80%;
+}
+.asset-empty.drafting .asset-skeleton i {
+  animation: asset-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes asset-pulse {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The email wrapper. */
+.asset-email {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--forest);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+.asset-email-meta {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.asset-email-meta > div {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 6px;
+}
+.asset-email-meta dt {
+  color: var(--muted);
+}
+.asset-email-meta dd {
+  margin: 0;
+}
+.asset-email-body {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+.asset-brandmark {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.asset-email-footer {
+  display: grid;
+  gap: 4px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--line);
+  background: #f7f8f5;
+  font-size: 11px;
+}
+.asset-email-footer > strong {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Blocks: each one clickable, marked by where its words come from. */
+.asset-block {
+  position: relative;
+  display: block;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 1.45;
+  animation: asset-arrive 0.35s ease-out;
+}
+@keyframes asset-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.asset-block:hover,
+.asset-block:focus-visible {
+  border-color: var(--line);
+  background: #f6f8f3;
+  outline: none;
+}
+.asset-block.selected {
+  border-color: var(--forest);
+  box-shadow: 0 0 0 2px rgb(23 61 49 / 15%);
+}
+.asset-block.role-framing {
+  border-left-color: #8fa3c4;
+}
+.asset-block.role-claim {
+  border-left-color: var(--forest);
+}
+.asset-block.role-disclosure {
+  border-left-color: var(--amber);
+  font-size: 11px;
+  color: #3d4741;
+}
+.asset-block.role-headline {
+  font-weight: 650;
+}
+.asset-block.flagged {
+  background: #fff6ec;
+}
+.asset-block-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.asset-block-text {
+  display: block;
+}
+span.asset-block {
+  display: inline;
+  padding: 1px 2px;
+  border-width: 0 0 2px;
+  border-radius: 2px;
+  animation: none;
+}
+span.asset-block .asset-block-text {
+  display: inline;
+}
+span.asset-block.role-framing {
+  border-bottom-color: #8fa3c4;
+}
+span.asset-block.role-claim {
+  border-bottom-color: var(--forest);
+}
+span.asset-block.role-disclosure {
+  border-bottom-color: var(--amber);
+  font-size: inherit;
+}
+span.asset-block + span.asset-block {
+  margin-left: 4px;
+}
+.asset-flag {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.asset-flag.block {
+  background: #b4412f;
+  color: #fff;
+}
+.asset-flag.warn {
+  background: #f3d9b4;
+  color: #6b4310;
+}
+
+/* Kept out: refused topics and rejected wording, shown struck, with the reason one click away. */
+.asset-kept-out {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px dashed #d8a497;
+  border-radius: 10px;
+  background: #fffaf8;
+}
+.asset-kept-out h4,
+.asset-checks h4 {
+  margin: 0;
+  font-size: 12px;
+}
+.asset-block.status-refused,
+.asset-block.status-rejected {
+  border-left-color: #b4412f;
+  background: #fff;
+}
+.asset-block.status-refused .asset-block-text,
+.asset-block.status-rejected .asset-block-text {
+  color: #7a3a2f;
+  text-decoration: line-through;
+  text-decoration-color: rgb(180 65 47 / 55%);
+}
+.asset-block.status-refused .asset-block-tag,
+.asset-block.status-rejected .asset-block-tag {
+  color: #b4412f;
+}
+
+/* Push and SMS on a phone. */
+.asset-phone {
+  display: grid;
+  gap: 6px;
+  padding: 18px 14px;
+  border-radius: 22px;
+  background: linear-gradient(160deg, #24312b, #3b4a43);
+}
+.asset-phone-card {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 94%);
+  font-size: 13px;
+}
+.asset-phone.sms .asset-phone-card {
+  border-bottom-left-radius: 4px;
+}
+.asset-phone-app {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.asset-phone-app i {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+.asset-phone-app small {
+  margin-left: auto;
+}
+.asset-phone-title,
+.asset-phone-body {
+  margin: 0;
+  line-height: 1.5;
+}
+.asset-phone-title {
+  font-weight: 650;
+}
+.asset-meter {
+  margin: 0;
+  color: #dfe6e1;
+  font-size: 11px;
+  text-align: right;
+}
+.asset-meter.over {
+  color: #ffb4a6;
+}
+
+/* The block details and the checks. */
+.asset-detail {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--forest);
+  border-radius: 10px;
+  background: #fff;
+}
+.asset-detail.status-refused,
+.asset-detail.status-rejected {
+  border-color: #b4412f;
+}
+.asset-detail > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.asset-detail-text {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.asset-detail dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+}
+.asset-detail dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.asset-detail dd {
+  margin: 0;
+  line-height: 1.45;
+}
+.asset-checks {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+.asset-checks > p {
+  margin: 0;
+}
+.asset-checks .ok {
+  color: var(--forest);
+  font-weight: 600;
+}
+.asset-checks .blocked {
+  color: #b4412f;
+  font-weight: 600;
+}
+.asset-findings {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.asset-findings li {
+  padding: 4px 8px;
+  border-left: 3px solid #f3d9b4;
+  background: #fff;
+  font-size: 12px;
+}
+.asset-findings li.block {
+  border-left-color: #b4412f;
+}
+.asset-findings strong {
+  margin-right: 4px;
+}
+.asset-phone-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0 0 4px;
+  color: #dfe6e1;
+  font-size: 11px;
+}
+.asset-phone-meta > div {
+  display: flex;
+  gap: 4px;
+}
+.asset-phone-meta dt {
+  opacity: 0.7;
+}
+.asset-phone-meta dd {
+  margin: 0;
+}
