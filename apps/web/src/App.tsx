@@ -26,12 +26,13 @@ import { ArchitectureView } from "./architecture/ArchitectureView";
 import { JourneysView } from "./architecture/JourneysView";
 import { MarketingWriteDetails, PermissionDetails } from "./ConfirmationDetails";
 import { EvaluationView } from "./EvaluationView";
-import { GraphEvidencePanel } from "./GraphEvidence";
+import { GraphEvidencePanel, latestGraphEvidence } from "./GraphEvidence";
 import { GraphView } from "./graph/GraphView";
 import { HistoryView } from "./HistoryView";
 import { LearnView } from "./learn/LearnView";
 import { Markdown } from "./Markdown";
 import { SalesforceAgentsPanel } from "./SalesforceAgents";
+import { ToolActivity } from "./ToolActivity";
 import { ScopeBar } from "./ScopeBar";
 import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
 import { executionTrace } from "./turn-trace";
@@ -925,6 +926,12 @@ export function App() {
                 <div className="message-author">
                   {message.role === "user" ? "You" : "Northstar orchestrator"}
                 </div>
+                {message.role === "assistant" && (
+                  <ToolActivity
+                    message={message}
+                    live={busy && message.id === messages.at(-1)?.id}
+                  />
+                )}
                 {message.role === "assistant" ? (
                   <Markdown text={unwrapAssistantText(rawMessageText(message))} />
                 ) : (
@@ -1272,7 +1279,7 @@ export function App() {
               can be saved, created, or attached until writes are resumed.
             </div>
           )}
-          <WorkspacePanel workingSet={state.workingSet} />
+          <WorkspacePanel workingSet={state.workingSet} graph={latestGraphEvidence(messages)} />
           <details className="image-workflow-toggle">
             <summary>
               <span className="kicker">External creative workflow</span>

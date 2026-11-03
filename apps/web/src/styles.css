@@ -504,6 +504,86 @@ select:disabled,
   border-radius: 50%;
   background: var(--lime);
   box-shadow: 0 0 0 5px #d9ef7040;
+  animation: trace-pulse 1.4s ease-in-out infinite;
+}
+@keyframes trace-pulse {
+  50% {
+    box-shadow: 0 0 0 9px #d9ef7010;
+  }
+}
+
+/* Each tool call while the answer streams: a spinner until its result is back. */
+.tool-activity {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.tool-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid #dfe5dd;
+  border-radius: 8px;
+  background: #fbfcf9;
+  font-size: 13px;
+}
+.tool-activity-item.running {
+  border-color: #c9d98a;
+  background: #f8fbe9;
+}
+.tool-activity-item.failed {
+  border-color: #e8c4bb;
+  background: #fff6f3;
+}
+.tool-activity-mark {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--forest);
+}
+.tool-activity-item.failed .tool-activity-mark {
+  color: #b4412f;
+}
+.tool-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #d6e2b0;
+  border-top-color: var(--forest);
+  border-radius: 50%;
+  animation: tool-spin 0.8s linear infinite;
+}
+@keyframes tool-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.tool-activity-system {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5b6a62;
+}
+.tool-activity-tool {
+  font-weight: 600;
+  color: #1d2a24;
+}
+.tool-activity-wait {
+  margin-left: auto;
+  color: #5b6a62;
+  font-size: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-spinner,
+  .trace-pulse {
+    animation: none;
+  }
 }
 .recovery,
 .error-banner,
@@ -800,6 +880,80 @@ select:disabled,
   padding-left: 18px;
   font-size: 12px;
   color: #48564d;
+}
+/* What a tool found, one row each: a status label, the item, its ID and the date that matters. */
+.insight-card ul.tile-items {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.tile-item {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid #e3e8e1;
+  border-left: 3px solid #a8b3ab;
+  border-radius: 6px;
+  background: #fbfcfa;
+}
+.tile-item.status-ok {
+  border-left-color: #2f7d57;
+}
+.tile-item.status-warn {
+  border-left-color: #c78436;
+}
+.tile-item.status-blocked {
+  border-left-color: #b4412f;
+}
+.tile-item-status {
+  justify-self: start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #4b5a51;
+  background: #edf1ec;
+}
+.tile-item.status-ok .tile-item-status {
+  color: #1f6043;
+  background: #e1f1e7;
+}
+.tile-item.status-warn .tile-item-status {
+  color: #8a5317;
+  background: #fbefdc;
+}
+.tile-item.status-blocked .tile-item-status {
+  color: #8f3020;
+  background: #fbe5df;
+}
+.tile-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d2a24;
+  line-height: 1.35;
+}
+.tile-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 11px;
+  color: #5b6a62;
+}
+.tile-item-meta code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: #eef2ed;
+  color: #2b3a33;
+}
+.tile-item-note {
+  font-size: 11px;
+  color: #6b4a3f;
 }
 .metric {
   display: flex;
@@ -2372,5 +2526,99 @@ select:disabled,
   .scope-bar select {
     min-width: 0;
     max-width: 130px;
+  }
+}
+
+/* How the agents used the knowledge graph: the tools, then a map of the nodes they walked. */
+.graph-usage-lede {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #5b6a62;
+}
+.graph-usage-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.graph-usage-tools li {
+  padding: 3px 9px;
+  border: 1px solid #d9e2d6;
+  border-radius: 999px;
+  background: #f4f7f1;
+  font-size: 11px;
+  color: #3e4c44;
+}
+.graph-usage-tools strong {
+  text-transform: capitalize;
+}
+.graph-usage-map {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #e3e8e1;
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 0%, #f7faf2, #fdfefc 70%);
+}
+.graph-usage-edge path {
+  fill: none;
+  stroke: #b9c4bc;
+  stroke-width: 1.4;
+}
+.graph-usage-edge:hover path {
+  stroke: var(--forest);
+  stroke-width: 2.2;
+}
+.graph-usage-node circle {
+  stroke: #fff;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 1px 1.5px rgb(23 61 49 / 25%));
+  animation: graph-usage-arrive 0.4s ease-out both;
+}
+.graph-usage-node text {
+  font-size: 10px;
+  font-weight: 600;
+  fill: #2b3a33;
+  paint-order: stroke;
+  stroke: #fdfefc;
+  stroke-width: 3px;
+}
+.graph-usage-node:hover circle {
+  stroke: var(--forest);
+}
+@keyframes graph-usage-arrive {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+.graph-usage-more {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #5b6a62;
+}
+.graph-usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  color: #4b5a51;
+}
+.graph-usage-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .graph-usage-node circle {
+    animation: none;
   }
 }

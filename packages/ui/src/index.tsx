@@ -125,6 +125,45 @@ export function resolveTileRenderMode(
   return "native" as const;
 }
 
+/** "2027-06-12" as "Jun 12, 2027"; anything else as it is. */
+export function shortDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** What a tool found, one row each: a status label, the item, its ID and the date that matters. */
+function TileItems({ items }: { items: NonNullable<InsightTile["items"]> }) {
+  return (
+    <ul className="tile-items">
+      {items.map((item) => (
+        <li key={`${item.title}-${item.id ?? ""}`} className={`tile-item status-${item.status}`}>
+          <span className="tile-item-status">{item.label}</span>
+          <span className="tile-item-title">{item.title}</span>
+          {(item.id || item.date) && (
+            <span className="tile-item-meta">
+              {item.id && <code>{item.id}</code>}
+              {item.date && (
+                <span>
+                  {item.date.label}{" "}
+                  <time dateTime={item.date.value}>{shortDate(item.date.value)}</time>
+                </span>
+              )}
+            </span>
+          )}
+          {item.note && <span className="tile-item-note">{item.note}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function InsightCard({
   tile,
   availableResources = [],
@@ -158,11 +197,14 @@ export function InsightCard({
         </div>
       )}
       <p>{tile.summary}</p>
-      <ul>
-        {tile.details.map((detail) => (
-          <li key={detail}>{detail}</li>
-        ))}
-      </ul>
+      {tile.items && tile.items.length > 0 && <TileItems items={tile.items} />}
+      {tile.details.length > 0 && (
+        <ul>
+          {tile.details.map((detail) => (
+            <li key={detail}>{detail}</li>
+          ))}
+        </ul>
+      )}
       <footer>
         <span>{tile.source.label}</span>
         {tile.updatedAt ? (

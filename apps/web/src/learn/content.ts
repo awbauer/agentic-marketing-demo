@@ -408,7 +408,9 @@ GraphRAG's advantages are **multi-hop reasoning** and **explainability**. Every 
 
 **A third brand: Lumera Therapeutics.** Seven more node types (Drug, Indication, ClinicalTrial, ClinicalClaim, Hospital, Specialty, PrescriberGroup) and twelve relationship types model pharmaceutical promotion in the same graph. It reuses ContentAsset, Approval, Disclosure, BrandRule and ConsentScope, so the approval and consent checks you saw for Harborstone work the same way. The Graph view has a Lumera group and two guided tours. The Cypher for these tools has not been run against a live Neo4j database here; the fixture backend returns the rows the tests check.
 
-The Graph's brand filter and the header's brand are the same setting: choosing Lumera in either shows only Lumera's nodes and what sits close to it.`,
+The Graph's brand filter and the header's brand are the same setting: choosing Lumera in either shows only Lumera's nodes and what sits close to it.
+
+Every evidence path an answer used is shown twice: in words under the answer, and as a map in the workspace that merges the paths, so you can see which drug, claim, trial or asset several paths ran through.`,
         inDemo: [
           "Use cases: Buyer-group recommendation, and Buyer-group outreach around local holidays",
           "Graph evidence panel under answers; “Knowledge graph · Neo4j” in Sources",
@@ -464,7 +466,9 @@ Four properties make it trustworthy:
 
 **Life-sciences cards.** The three Lumera tools add working-set cards: a target list, a claims check and a hospital plan, each with the summary line the card shows.
 
-The life-sciences systems add a card per answer, named for the system, so what came from Aprimo, Reltio or Drupal stays visible beside the graph's evidence. A card lists what was found, one line each: every Aprimo asset as usable (with its MLR ID and approval date) or not and why (pending review, expired, failed a check), each claim in the Vault library with its status, each Screendragon job with its stage and due date, and each HCP page as compliant or not.`,
+The life-sciences systems add a card per answer, named for the system, so what came from Aprimo, Reltio or Drupal stays visible beside the graph's evidence. A card lists what was found, one row each, with a status label, its ID and the date that matters: every Aprimo asset as usable (with its MLR ID and approval date) or not and why (pending review, expired, failed a check), each claim in the Vault library with its status, each Screendragon job with its stage and due date, and each HCP page as compliant or not.
+
+**The knowledge graph, as a map.** When an answer queries the graph, the workspace draws the nodes and relationships its tools walked: one row per hop from where a path starts, a node several paths share drawn once, colored by type as in the Graph view, with the tools that used the graph and how many paths each returned. Hover a node or a link for what it is. The answer's own *Graph evidence* lists every path in words.`,
         inDemo: [
           "Workspace panel: Focus, Records, and Context",
           "apps/edge/src/working-set.ts, apps/edge/src/focus.ts",
@@ -693,7 +697,8 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
         body: `- **Markdown answers.** The model may use concise Markdown. The UI renders it with \`react-markdown\`, which never renders raw HTML, so model output can't inject markup.
 - **HXL cards.** Salesforce's HXL widgets (MCP Apps) let an agent action return a typed, interactive card, such as campaign readiness. When a host can't render HXL, the workbench shows an equivalent accessible **native fallback** built from the same contract.
 - **Salesforce agents panel.** Under each answer that called Salesforce, a panel lists each call's agent, its type and template, the subagent, and the actions (with their flow or Apex targets) behind it. The confirmation card shows the same for the write it prepares.
-- **Graph evidence panel.** Knowledge-graph paths render as directional chains, each with a text alternative for screen readers.
+- **Graph evidence panel.** Knowledge-graph paths render as directional chains, each with a text alternative for screen readers. The workspace also draws them as a map; see *The workspace*.
+- **Item rows on native cards.** A card whose tool returned a list shows one row per item: a colored status label (usable, waiting, blocked), the item, a monospaced ID and a readable date, so an MLR ID and its expiry stand out.
 - **Live write progress.** Accepting an action card switches its button to **Preparing…** and shows the preparation's steps until the confirmation card appears. Clicking **Confirm** disables the buttons and shows the write's steps in the card as the Worker reports them, kept in view while they run. Afterwards a collapsible **Behind the scenes** record keeps each step and how long it took; it opens by itself when a write fails.
 - **Inventory case confirmation.** The card lists the store manager, the forecast, and a table of each low item: on hand, needed, and the dishes it goes into. After you confirm, a banner links to the Case.
 - **Use-case library.** A page of every scenario the demo runs, filterable by team, with its prompts, systems, and data flow. **Try it** puts a prompt in the chat box without sending it.
@@ -712,7 +717,8 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
         id: "observability",
         title: "Observability: technical trace, turn history, and audit export",
         summary: "See exactly what happened in every turn.",
-        body: `- **Technical trace** under each answer: every lifecycle event in order, with timing.
+        body: `- **Live tool calls** above an answer while it streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
+- **Technical trace** under each answer: every lifecycle event in order, with timing.
   - turn start, step start and finish (finish reason, token counts)
   - reasoning start and end, with the model's reasoning, redacted
   - text start and end
