@@ -20,7 +20,13 @@ import {
   marketEventId,
 } from "./harborstone.ts";
 import type { MemoryStore } from "./memory.ts";
-import { DRUG_IDS, FORMULARY_ACCESS, type FormularyStatus, HOSPITAL_NAMES } from "./pharma.ts";
+import {
+  DRUG_IDS,
+  FORMULARY_ACCESS,
+  type FormularyStatus,
+  HOSPITAL_NAMES,
+  normalizeDrugId,
+} from "./pharma.ts";
 
 export type Row = Record<string, unknown>;
 export type PathNode = { id: string; label: string; name: string };
@@ -2154,7 +2160,9 @@ const buildHcpTargetList = define({
   description:
     "For a Lumera Therapeutics drug (drug-cardivance for heart failure, drug-glucora for type 2 diabetes, drug-neurelva for chronic migraine), rank the hospitals and prescriber groups worth engaging first: patients with the drug's labeled indication, formulary status (and days to the next Pharmacy and Therapeutics review), Lumera's current share, the group's decile, how many prescribers opted in to promotional contact on each channel, and what to do first. Groups are prescriber segments at a hospital, never individual people. Each with its evidence path. Read-only.",
   input: z.object({
-    drug: z.enum(DRUG_IDS).describe("Lumera drug ID, such as drug-cardivance"),
+    drug: z
+      .preprocess(normalizeDrugId, z.enum(DRUG_IDS))
+      .describe("Lumera drug ID, such as drug-cardivance"),
     limit: z.number().int().min(1).max(16).default(8).describe("How many targets to return"),
   }),
   run: async (backend, { drug, limit }) => {
@@ -2322,7 +2330,9 @@ const checkClinicalClaims = define({
   description:
     "For a Lumera Therapeutics drug (drug-cardivance, drug-glucora or drug-neurelva), check each clinical claim: is it supported by a completed trial, is it for an indication on the approved label (not an investigational one), and which approved content carries it, with each asset's MLR approval and expiry, the safety information it must ship with (including a boxed warning), and anything that blocks it. Optionally limit to one channel (email, portal or rep). Each with its evidence path. Read-only: it approves nothing.",
   input: z.object({
-    drug: z.enum(DRUG_IDS).describe("Lumera drug ID, such as drug-cardivance"),
+    drug: z
+      .preprocess(normalizeDrugId, z.enum(DRUG_IDS))
+      .describe("Lumera drug ID, such as drug-cardivance"),
     channel: z
       .enum(["email", "portal", "rep"])
       .optional()

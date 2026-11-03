@@ -133,6 +133,30 @@ describe("campaign-context MCP", () => {
     for (const [step, name] of names.entries())
       expect(stepToolChoice(plan, step)).toMatchObject({ activeTools: [name] });
     expect(stepToolChoice(plan, 4)).toEqual({ toolChoice: "none", activeTools: [] });
+    // A planned tool that failed is offered once more, then the plan moves on.
+    const [first, second, third] = names as [string, string, string];
+    const at = (outcomes: Array<{ tool: string; ok: boolean }>) =>
+      stepToolChoice(plan, outcomes.length, 6, outcomes)?.activeTools;
+    expect(
+      at([
+        { tool: first, ok: true },
+        { tool: second, ok: false },
+      ]),
+    ).toEqual([second]);
+    expect(
+      at([
+        { tool: first, ok: true },
+        { tool: second, ok: false },
+        { tool: second, ok: true },
+      ]),
+    ).toEqual([third]);
+    expect(
+      at([
+        { tool: first, ok: true },
+        { tool: second, ok: false },
+        { tool: second, ok: false },
+      ]),
+    ).toEqual([third]);
     expect(
       selectToolPlan(
         "Draft an email campaign for Coastline Kitchen, our fast casual restaurant in California, tailored to the current weather, time of day, and our menu",

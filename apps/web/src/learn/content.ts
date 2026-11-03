@@ -503,6 +503,8 @@ The demo uses four MCP servers:
 | **External services** | Public holidays (Nager.Date) and weather alerts (National Weather Service), both free public APIs | In-process |
 | **Knowledge graph** | Nine curated Neo4j queries, plus three memory recall tools in chat | In-process; also at \`/mcp/knowledge-graph\` |
 
+A tool's inputs are typed, and a model doesn't always type them exactly: the life-sciences tools take a drug's name ("Cardivance") as well as its ID, and a channel or status in any case. The model still sees the strict list of values; only an input that matches nothing is rejected.
+
 The local servers are called **in-process** through an in-memory MCP transport. The orchestrator uses the real protocol without a network hop, and external MCP clients can still reach the same servers over HTTP, behind Cloudflare Access.
 
 **Life-sciences systems (mocked).** A pharmaceutical company's marketing runs on more than Salesforce, so a fourth in-process MCP server, \`northstar-life-sciences\`, answers for the systems around it. Each tool is read-only, and each answers from the same fictional drugs, claims, MLR approvals and hospitals as the knowledge graph, so one system can be checked against another. None is a live connection:
@@ -614,7 +616,7 @@ Its **Campaign Refinement** subagent runs **Refine Campaign Preview** to change 
    - A change to other drafts → no tools; the model rewrites the draft, which is saved as the next version
    - The rules need specific signals and **defer to the model** when unsure, because a wrongly forced tool can't be undone within the turn.
 
-After a plan finishes, the model gets **no tools** and must write the answer.
+If a planned tool fails, for example because it rejected an argument, the plan offers that same tool once more before moving on. Without that, the model's retry would be a call to a tool the next step doesn't offer, which fails the whole turn. After a plan finishes, the model gets **no tools** and must write the answer.
 
 **Life-sciences routes.** A request about a target list or prescriber groups goes to \`build_hcp_target_list\`; clinical claims, off-label use, a boxed warning or a Lumera drug beside \`claims\` go to \`check_clinical_claims\`; a named hospital with formulary, P&T, access or a plan goes to \`plan_hospital_engagement\`. The model is told that only supported, on-label, MLR-approved claims can be used and that groups are never people.
 
@@ -715,6 +717,7 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
   - reasoning start and end, with the model's reasoning, redacted
   - text start and end
   - tool input and output, with the Salesforce agent, subagent, and actions behind each Salesforce tool; errors; recovery messages; and the outcome, including when the answer was written from a tool's result because the model wrote none
+  - a failed or empty tool result names the system that answered (Aprimo, the knowledge graph, Salesforce), and says whether the call failed or returned nothing usable
   - the closing line gives the turn's total time with its **tokens** (input plus output, summed over the steps) and **tool calls**
 - **Workers Logs** for operators: a Salesforce or agent call that failed is logged with its error and stack, even when the user sees a friendly message. A write or confirmation that failed logs the step where it stopped. Request content is never logged.
 - **Turn history** (Chat → History → Turns): each utterance with the orchestrator's interpretation, the tool calls with inputs and results, and the outcome. Each row shows the turn's seconds beside its tokens and tool calls. Filterable, and kept 24 hours per user.

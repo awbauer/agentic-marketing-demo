@@ -1,6 +1,10 @@
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server";
-import { DRUG_IDS, HOSPITAL_NAMES } from "../../../../packages/knowledge-graph/src/index.ts";
+import {
+  DRUG_IDS,
+  HOSPITAL_NAMES,
+  normalizeDrugId,
+} from "../../../../packages/knowledge-graph/src/index.ts";
 import { jsonSchema, type ToolSet, tool } from "ai";
 import { z } from "zod";
 import {
@@ -35,8 +39,17 @@ const success = (system: string, output: Record<string, unknown>) => {
 };
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
 const drug = z
-  .enum(DRUG_IDS)
+  .preprocess(normalizeDrugId, z.enum(DRUG_IDS))
   .describe("Lumera drug ID: drug-cardivance, drug-glucora or drug-neurelva");
+/** An enum a model may write in any case ("Email" for "email"). */
+const anyCase = <T extends [string, ...string[]]>(values: T) =>
+  z.preprocess(
+    (value) =>
+      typeof value === "string"
+        ? (values.find((item) => item.toLowerCase() === value.trim().toLowerCase()) ?? value)
+        : value,
+    z.enum(values),
+  );
 
 /**
  * Builds the life-sciences MCP server: mocked read-only views of the systems a pharmaceutical
@@ -59,8 +72,8 @@ export function createLifeSciencesMcpServer(dependencies: LifeSciencesDependenci
         "Aprimo (digital asset management and MLR workflow, mocked): a Lumera drug's promotional assets with their MLR approval ID, status (Approved, Pending or Expired), approval and expiry dates, whether each is usable now, the claims it carries, the safety information it must ship with, its renditions and usage rights. Optionally filter by channel (email, portal or rep) or status.",
       inputSchema: z.object({
         drug,
-        channel: z.enum(["email", "portal", "rep"]).optional(),
-        status: z.enum(["Approved", "Pending", "Expired"]).optional(),
+        channel: anyCase(["email", "portal", "rep"]).optional(),
+        status: anyCase(["Approved", "Pending", "Expired"]).optional(),
       }),
       annotations: READ_ONLY,
     },
