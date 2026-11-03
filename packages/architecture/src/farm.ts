@@ -1,6 +1,7 @@
 // The adversarial farm and the data readiness agent. Both only report; neither changes an object.
 
 import { type Blocker, claimPacket } from "./agents.ts";
+import { ABSOLUTE, FACT, PHARMA_OVERREACH } from "./language.ts";
 import { STAGE_LABELS, STAGES, type Stage } from "./registry.ts";
 import type { CHANNEL_BASELINE } from "./seed.ts";
 import {
@@ -20,13 +21,8 @@ export type Finding = {
   urn: string;
 };
 
-const FACT = /\d|%|\$|\bapy\b|\bfdic\b|\bwaived?\b|\bfree\b|\bno fees?\b|\bguarantee/i;
-const ABSOLUTE = /\b(guaranteed?|risk[- ]free|can'?t lose|best returns?)\b/i;
 const INJECTION =
   /\b(ignore|disregard|forget)\b.{0,30}\b(previous|prior|above|all|earlier)\b|\bsystem prompt\b|\byou are now\b|\bact as\b|\breveal\b.{0,30}\b(prompt|secret|key)\b|\bBEGIN (SYSTEM|INSTRUCTIONS?)\b/i;
-/** Promotional language a pharmaceutical reviewer would reject without head-to-head or label support. */
-const PHARMA_OVERREACH =
-  /\b(?:superior|best[- ]in[- ]class|breakthrough|cures?|completely safe|no side effects|better than)\b/i;
 const EMBARGO = /\b(acquisition|acquires?|acquiring|merger)\b/i;
 
 /** Fictional consent coverage by segment and channel: the share of the audience that opted in. */

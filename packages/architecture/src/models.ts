@@ -102,7 +102,13 @@ export function routeModel(
   const challengers = CHALLENGERS[taskClass];
   const overCap = (options.shadowSpentUsd ?? 0) >= SHADOW_DAILY_COST_CAP_USD;
   const sampled = options.turnKey !== undefined && share(options.turnKey) < SHADOW_SHARE;
-  const route: Route = { taskClass, model, reason: `Champion for ${taskClass}.` };
+  const route: Route = {
+    taskClass,
+    model,
+    reason: options.champions?.[taskClass]
+      ? `Set as the ${taskClass} champion for this environment.`
+      : `Champion for ${taskClass}.`,
+  };
   if (sampled && !overCap && challengers.length) {
     const shadow = challengers[Math.floor(share(`${options.turnKey}:pick`) * challengers.length)];
     if (shadow) route.shadow = shadow;

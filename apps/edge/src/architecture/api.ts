@@ -30,6 +30,12 @@ import {
   transitionOp,
 } from "./ops";
 import {
+  continueOrchestration,
+  orchestrationOp,
+  startOrchestration,
+  streamFlow,
+} from "./orchestration";
+import {
   a2aCard,
   evaluationsView,
   modelsView,
@@ -86,6 +92,7 @@ async function body(request: Request): Promise<Record<string, unknown>> {
 const OBJECT = /^\/api\/arch\/objects\/([^/]+)(?:\/(history|transition|card|supersede))?$/;
 const AGENT_RUN = /^\/api\/arch\/agents\/([^/]+)\/run$/;
 const WORKSPACE = /^\/api\/arch\/workspaces\/([^/]+)$/;
+const ORCHESTRATION = /^\/api\/arch\/orchestrations\/([^/]+)(?:\/(continue))?$/;
 const A2A = /^\/api\/arch\/a2a\/([^/]+)\/agent-card$/;
 
 /** Routes under /api/arch/. Returns null for a path it does not own. */
@@ -162,6 +169,15 @@ export async function handleArchitecture(
         ),
       );
     }
+    if (path === "/api/arch/orchestrations" && method === "POST") {
+      const input = await body(request);
+      return streamFlow(startOrchestration(ctx, String(input.flowId ?? "")));
+    }
+    const flow = ORCHESTRATION.exec(path);
+    if (flow?.[1] && flow[2] === "continue" && method === "POST")
+      return streamFlow(await continueOrchestration(ctx, decodeURIComponent(flow[1])));
+    if (flow?.[1] && !flow[2] && method === "GET")
+      return json(await orchestrationOp(ctx, decodeURIComponent(flow[1])));
     if (path === "/api/arch/optimizations" && method === "GET") {
       const brand = url.searchParams.get("brand") ?? undefined;
       return json(await optimizationsOp(ctx, brand as Brand | undefined));

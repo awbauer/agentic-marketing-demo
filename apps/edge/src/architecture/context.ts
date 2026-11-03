@@ -1,18 +1,18 @@
 import {
-  DEFAULT_SCOPE,
-  toolBrand,
-  type WorkbenchScope,
   type AgentOverrides,
   type Brand,
   buildPolicies,
   type ChainHop,
+  DEFAULT_SCOPE,
   type Decision,
   evaluate,
   type GatewayRequest,
   identityChain,
   mintAgentToken,
   type Persona,
+  toolBrand,
   verifyAgentToken,
+  type WorkbenchScope,
 } from "@northstar/architecture";
 import { ArchitectureStore } from "./store";
 
@@ -21,6 +21,16 @@ export type ArchEnv = {
   ASSETS?: Fetcher;
   DISABLED_AGENTS?: string;
   ARCH_TOKEN_SECRET?: string;
+  /** Workers AI, which the agents run on. */
+  AI?: Ai;
+  AI_GATEWAY_ID?: string;
+  /** "scripted" only in the hermetic worker tests; see scripted-model.ts. */
+  AGENT_MODEL?: string;
+  /**
+   * Champions by task class, as JSON (for example {"orchestrate": "@cf/moonshotai/kimi-k2.6"}), to
+   * run a catalog model in place of the ADR-009 champion. A model outside the catalog is ignored.
+   */
+  AGENT_CHAMPIONS?: string;
 };
 
 export class ArchError extends Error {

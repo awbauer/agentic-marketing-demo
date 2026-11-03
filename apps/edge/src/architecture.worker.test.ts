@@ -287,9 +287,11 @@ describe("architecture API", () => {
       persona: "reviewer",
       json: { to: "approved" },
     });
+    // The agent is told, through its tool, that the module exists with other content; nothing is saved.
     const regenerated = await run("module-authoring", "author_module", input);
-    expect(regenerated.status).toBe(409);
-    expect(regenerated.body.error).toMatchObject({ code: "CONFLICT", urn: moduleUrn });
+    const attempt = regenerated.body.steps.find((step: Json) => step.tool === "author_module");
+    expect(attempt).toMatchObject({ ok: false });
+    expect(attempt.error).toMatch(/already exists with different content/);
     const kept = await call(`/api/arch/objects/${urn(moduleUrn)}`);
     expect(kept.body.object.attributes.blocks[0].text).toContain("4.35%");
     expect(kept.body.object.approvalState).toBe("draft");
@@ -552,7 +554,7 @@ describe("sample flows", () => {
 
   it("runs a flow from brief to approval, and again with a new run tag", async () => {
     const first = await flow("run-a");
-    expect(first.briefUrn).toBe("urn:northstar:brief:lt-q4-hcp-w1-run-a");
+    expect(first.briefUrn).toMatch(/^urn:northstar:brief:lt-q4-hcp-w1-run-a-/);
     expect(first.refused.map((item: Json) => item.topic)).toEqual(["cardivance-superior"]);
     expect(first.proposed.body.result.proposed).toBe(true);
     const second = await flow("run-b");
@@ -568,7 +570,11 @@ describe("sample flows", () => {
         { moduleUrn: "urn:northstar:module:hs-mod-fee-waiver-email" },
         "content-lab",
       );
-      expect(refused.body.result.proposed).toBe(false);
+      // The readiness agent checks first, and does not submit a module that readiness blocks.
+      expect(refused.status).toBe(200);
+      expect(refused.body.result?.proposed ?? false).toBe(false);
+      const check = refused.body.steps.find((step: Json) => step.tool === "check_readiness");
+      expect(check.output.ready).toBe(false);
     }
     const registry = await call("/api/arch/registry");
     const readiness = registry.body.agents.find((item: Json) => item.id === "readiness");
@@ -579,5 +585,65 @@ describe("sample flows", () => {
     const proposals = await call("/api/arch/optimizations", { persona: "brand-lead", brand: LT });
     expect(proposals.status).toBe(200);
     expect(proposals.body.result.every((item: Json) => item.brand === LT)).toBe(true);
+  });
+});
+
+describe("orchestration", () => {
+  const events = async (response: Response) =>
+    (await response.text())
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Json);
+  const post = (path: string, json: unknown, persona = "marketer") =>
+    SELF.fetch(`http://example.com${path}`, {
+      method: "POST",
+      headers: { "x-persona": persona, "content-type": "application/json" },
+      body: JSON.stringify(json),
+    });
+
+  it("delegates each step to its subagent, waits for a person, then finishes", async () => {
+    const started = await events(
+      await post("/api/arch/orchestrations", { flowId: "lumera-congress" }),
+    );
+    expect(started[0]).toMatchObject({ type: "start", flowId: "lumera-congress" });
+    expect(
+      started.filter((event) => event.type === "delegate").map((event) => event.agent),
+    ).toEqual(["brief", "module-authoring", "adversarial-farm", "substantiation", "readiness"]);
+    // Each subagent acts for the person who owns its step.
+    expect(
+      started.find((event) => event.type === "delegate" && event.agent === "substantiation")
+        .persona,
+    ).toBe("compliance");
+    const authored = started.find(
+      (event) => event.type === "delegated" && event.agent === "module-authoring",
+    );
+    expect(authored.result.refused.map((item: Json) => item.topic)).toEqual([
+      "cardivance-superior",
+    ]);
+    // Every tool call a subagent made went through the gateway.
+    expect(started.some((event) => event.type === "tool" && event.step.decision)).toBe(true);
+    const waiting = started.at(-1);
+    expect(waiting).toMatchObject({ type: "await-human", persona: "reviewer" });
+    const id = started[0].id as string;
+
+    // The flow can't go on until a person decides.
+    expect((await post(`/api/arch/orchestrations/${id}/continue`, {})).status).toBe(409);
+    for (const to of ["in_review", "approved"])
+      expect(
+        (await post(`/api/arch/objects/${urn(waiting.moduleUrn)}/transition`, { to }, "reviewer"))
+          .status,
+      ).toBe(200);
+    const resumed = await events(await post(`/api/arch/orchestrations/${id}/continue`, {}));
+    expect(resumed[0]).toMatchObject({ type: "decided", state: "approved" });
+    expect(
+      resumed.some((event) => event.type === "delegate" && event.agent === "optimization"),
+    ).toBe(true);
+    expect(resumed.at(-1)).toMatchObject({ type: "done" });
+    const saved = await call(`/api/arch/orchestrations/${id}`);
+    expect(saved.body.status).toBe("done");
+  });
+
+  it("rejects a flow that does not exist", async () => {
+    expect((await post("/api/arch/orchestrations", { flowId: "nope" })).status).toBe(404);
   });
 });

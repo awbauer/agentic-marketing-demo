@@ -25,6 +25,8 @@ export default defineConfig({
         bindings: {
           ENVIRONMENT: "local",
           AUTH_MODE: "development",
+          // The architecture agents run on a scripted model here; everywhere else on Workers AI.
+          AGENT_MODEL: "scripted",
           NEO4J_QUERY_URL: "",
           NEO4J_USERNAME: "",
           NEO4J_PASSWORD: "",

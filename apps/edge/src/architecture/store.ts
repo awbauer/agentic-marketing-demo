@@ -244,6 +244,51 @@ export class ArchitectureStore {
     return { total, withSpan: Math.min(total, Number(allowed?.n ?? 0)) };
   }
 
+  async saveOrchestration(row: {
+    id: string;
+    flowId: string;
+    brand: string;
+    status: string;
+    waitingOn: string | null;
+    messages: unknown[];
+    events: unknown[];
+    at: string;
+  }) {
+    await this.db
+      .prepare(
+        "INSERT INTO arch_orchestrations (subject, id, flow_id, brand, status, waiting_on, messages, events, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (subject, id) DO UPDATE SET status = excluded.status, waiting_on = excluded.waiting_on, messages = excluded.messages, events = excluded.events, updated_at = excluded.updated_at",
+      )
+      .bind(
+        this.subject,
+        row.id,
+        row.flowId,
+        row.brand,
+        row.status,
+        row.waitingOn,
+        JSON.stringify(row.messages),
+        JSON.stringify(row.events),
+        row.at,
+      )
+      .run();
+  }
+
+  async orchestration(id: string) {
+    const row = await this.db
+      .prepare("SELECT * FROM arch_orchestrations WHERE subject = ? AND id = ?")
+      .bind(this.subject, id)
+      .first<Row>();
+    if (!row) return null;
+    return {
+      id: String(row.id),
+      flowId: String(row.flow_id),
+      brand: String(row.brand),
+      status: String(row.status),
+      waitingOn: row.waiting_on ? String(row.waiting_on) : null,
+      messages: JSON.parse(String(row.messages)) as unknown[],
+      events: JSON.parse(String(row.events)) as unknown[],
+    };
+  }
+
   async saveEvalSample(agentId: string, at: string, scores: Record<string, number>) {
     await this.db
       .prepare(
@@ -316,5 +361,6 @@ export async function pruneArchitecture(db: D1Database, olderThan: Date) {
     db.prepare("DELETE FROM arch_objects WHERE created_at < ?").bind(cutoff),
     db.prepare("DELETE FROM arch_state WHERE updated_at < ?").bind(cutoff),
     db.prepare("DELETE FROM arch_agent_state WHERE at < ?").bind(cutoff),
+    db.prepare("DELETE FROM arch_orchestrations WHERE updated_at < ?").bind(cutoff),
   ]);
 }

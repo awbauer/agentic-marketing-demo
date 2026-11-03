@@ -98,3 +98,47 @@ export const relative = (iso: string) => {
   if (minutes < 1440) return `${Math.round(minutes / 60)} h ago`;
   return `${Math.round(minutes / 1440)} d ago`;
 };
+
+/** Posts to an endpoint that streams newline-delimited JSON events, handing each one over as it arrives. */
+export async function archStream<E>(
+  path: string,
+  scope: Scope,
+  body: unknown,
+  onEvent: (event: E) => void,
+): Promise<void> {
+  const response = await fetch(`/api/arch${path}`, {
+    method: "POST",
+    headers: {
+      "x-persona": scope.persona,
+      ...(scope.brand === "all" ? {} : { "x-brand": scope.brand }),
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok || !response.body) {
+    const parsed = (await response.json().catch(() => ({}))) as {
+      error?: { code?: string; message?: string } & Record<string, unknown>;
+    };
+    const { code, message, ...extra } = parsed.error ?? {};
+    throw new ArchApiError(
+      response.status,
+      code ?? "ERROR",
+      message ?? `The request failed (${response.status}).`,
+      extra,
+    );
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    for (let at = buffer.indexOf("\n"); at >= 0; at = buffer.indexOf("\n")) {
+      const line = buffer.slice(0, at).trim();
+      buffer = buffer.slice(at + 1);
+      if (line) onEvent(JSON.parse(line) as E);
+    }
+  }
+  if (buffer.trim()) onEvent(JSON.parse(buffer) as E);
+}

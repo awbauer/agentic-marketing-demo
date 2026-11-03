@@ -6,22 +6,16 @@ import {
   agentById,
   allowedTransitions,
   approvalBlockers,
-  atomizeModule,
-  attributeResult,
   attributesOf,
-  authorModule,
   BRANDS,
   type Brand,
   buildApprovalCard,
-  type Channel,
-  checkReadiness,
   checkTransition,
   claimPacket,
-  dataReadiness,
   detectDrift,
-  draftBriefFromPlan,
   type EvalTurn,
   evidencePacket,
+  FACT,
   farmBlockers,
   type GovernedObject,
   getObject,
@@ -29,53 +23,20 @@ import {
   listObjects,
   type ModuleAttributes,
   type OptimizationProposal,
-  planContent,
   proposeOptimizations,
-  rankModules,
   resolveBrief,
   runFarm,
-  runScenario,
-  type ScenarioChange,
   scoreTurn,
   searchObjects,
   supersedeClaim,
   versionChain,
   type World,
 } from "@northstar/architecture";
+import { PRIMARY_ACTION, runModelAgent } from "./agent-runtime";
+
+import { newRunState, type ToolStep, targetOf } from "./agent-tools";
 import { ArchError, type Ctx, invoke, overridesFor } from "./context";
-
-const ISO = (ctx: Ctx) => ctx.now().toISOString();
-
-async function worldFor(ctx: Ctx) {
-  return ctx.store.loadWorld(ctx.now());
-}
-
-function need(world: World, urn: unknown, kind?: GovernedObject["kind"]): GovernedObject {
-  if (typeof urn !== "string") throw new ArchError(400, "BAD_REQUEST", "A urn is required.");
-  const object = getObject(world, urn);
-  if (!object) throw new ArchError(404, "NOT_FOUND", `${urn} is not a governed object.`);
-  if (kind && object.kind !== kind)
-    throw new ArchError(400, "BAD_REQUEST", `${urn} is a ${object.kind}, not a ${kind}.`);
-  return object;
-}
-
-/**
- * Saves new objects. An object that already exists is never overwritten: the same content is a
- * no-op, and different content is a conflict, so approved text can't change without a new review.
- */
-async function persist(ctx: Ctx, world: World, objects: readonly GovernedObject[]) {
-  for (const object of objects) {
-    const existing = getObject(world, object.urn);
-    if (existing && JSON.stringify(existing.attributes) !== JSON.stringify(object.attributes))
-      throw new ArchError(
-        409,
-        "CONFLICT",
-        `${object.urn} already exists with different content. Supersede it as a new version instead of regenerating it.`,
-        { urn: object.urn, state: existing.approvalState },
-      );
-  }
-  await ctx.store.saveObjects(objects.filter((object) => !getObject(world, object.urn)));
-}
+import { ISO, need, worldFor } from "./objects";
 
 const asPersona = (ctx: Ctx) => ({ type: "persona", id: ctx.user.persona }) as const;
 
@@ -244,11 +205,14 @@ function evalTurnFor(
   world: World,
   module: GovernedObject | undefined,
   latencyMs: number,
+  steps: readonly ToolStep[] = [],
 ): EvalTurn {
   const attributes = module ? attributesOf<ModuleAttributes>(module) : undefined;
   const findings = module ? runFarm(world, module.urn) : [];
+  // Factual statements only: a cited claim, or uncited text that states a fact. An agent's own
+  // framing is checked to state none when it is saved, so it is not counted against it.
   const statements = (attributes?.blocks ?? [])
-    .filter((block) => !block.disclosureUrn)
+    .filter((block) => !block.disclosureUrn && (block.claimUrn || FACT.test(block.text)))
     .map((block) => {
       const claim = block.claimUrn ? getObject(world, block.claimUrn) : undefined;
       return {
@@ -262,7 +226,10 @@ function evalTurnFor(
   );
   return {
     agentId,
-    calls: [{ action, decision: "allow" }],
+    calls: steps.map((step) => ({
+      action: step.tool,
+      decision: step.ok ? ("allow" as const) : ("deny" as const),
+    })),
     expectedAction: action,
     statements,
     requiredDisclosures: attributes?.requiredDisclosures.length ?? 0,
@@ -274,7 +241,8 @@ function evalTurnFor(
     inputs: JSON.stringify(input),
     output: JSON.stringify(output ?? null).slice(0, 4000),
     injectionPresent: findings.some((finding) => finding.probe === "injection-prober"),
-    // Agents here are deterministic functions: none can obey text found in an object.
+    // Sampled runs are not judged for this; the injection probe flags the text, and an obeyed
+    // instruction could still only reach the tools the agent's grants name.
     injectionObeyed: false,
     latencyMs,
     costUsd: 0,
@@ -297,180 +265,77 @@ export async function checkDrift(ctx: Ctx, agentId: string) {
   return report;
 }
 
-export async function runAgentOp(ctx: Ctx, agentId: string, action: string, input: AgentInput) {
+/** The brand a run is for: its object's, or the one asked for, or the one in the header. */
+function brandFor(ctx: Ctx, target: GovernedObject | undefined, input: AgentInput): Brand {
+  if (target) return target.brand;
+  if (typeof input.brand === "string") return brandOf(input);
+  if (ctx.user.brands !== "all" && ctx.user.brands[0]) return ctx.user.brands[0];
+  throw new ArchError(400, "BAD_REQUEST", "Choose a brand for this agent to work on.");
+}
+
+/**
+ * Runs an agent on its model. The gateway first checks the action the run centres on; then the
+ * agent works through its granted tools, each checked again. The run is sampled for the evaluators.
+ */
+export async function runAgentOp(
+  ctx: Ctx,
+  agentId: string,
+  action: string,
+  input: AgentInput,
+  options: { task?: string; runTag?: string; onStep?: (step: ToolStep) => void } = {},
+) {
   const agent = agentById(agentId);
-  if (agent?.status !== "live")
-    throw new ArchError(404, "NOT_FOUND", `${agentId} is not a live agent.`);
+  if (agent?.status !== "live" || !PRIMARY_ACTION[agentId])
+    throw new ArchError(404, "NOT_FOUND", `${agentId} is not a live agent you can run.`);
   const world = await worldFor(ctx);
-  const started = Date.now();
-  const objectUrn = ["moduleUrn", "briefUrn", "planUrn", "resultUrn", "claimUrn"]
-    .map((key) => input[key])
-    .find((value) => typeof value === "string") as string | undefined;
-  const target = objectUrn ? need(world, objectUrn) : undefined;
-  const brand =
-    target?.brand ?? (typeof input.brand === "string" ? (input.brand as Brand) : undefined);
-  // The resource is the kind of object the agent is scoped to, not whatever it was handed to read.
+  const target = targetOf(world, input);
+  if (Object.keys(input).some((key) => key.endsWith("Urn")) && !target)
+    throw new ArchError(404, "NOT_FOUND", "That object does not exist.");
+  const brand = brandFor(ctx, target, input);
   const kind = agent.scope === "any" ? undefined : agent.scope;
-  const resource = {
-    ...(objectUrn ? { urn: objectUrn } : {}),
-    ...(kind ? { kind } : {}),
-    ...(brand ? { brand } : {}),
-  };
-  let moduleForEval: GovernedObject | undefined;
+  const run = newRunState();
+  if (options.onStep) run.onStep = options.onStep;
+  const runTag = options.runTag ?? (typeof input.runTag === "string" ? input.runTag : undefined);
   const { value, decision, chain } = await invoke(
     ctx,
-    { principal: { type: "agent", id: agentId }, action, resource },
-    async () => {
-      const actor = `agent:${agentId}`;
-      switch (action) {
-        case "plan_content": {
-          const result = planContent(world, brandOf(input), actor);
-          await persist(ctx, world, [result.plan]);
-          return result;
-        }
-        case "run_scenario":
-          return runScenario(world, str(input, "planUrn"), input.change as ScenarioChange);
-        case "draft_brief": {
-          const result = draftBriefFromPlan(
-            world,
-            str(input, "planUrn"),
-            str(input, "waveId"),
-            actor,
-            typeof input.runTag === "string" ? input.runTag : undefined,
-          );
-          await persist(ctx, world, [result.brief]);
-          return {
-            ...result,
-            resolved: resolveBrief(buildWorldWith(world, [result.brief]), result.brief.urn),
-          };
-        }
-        case "reuse_modules": {
-          const brief =
-            typeof input.briefUrn === "string" ? need(world, input.briefUrn, "brief") : undefined;
-          return rankModules(world, {
-            brand: brief?.brand ?? brandOf(input),
-            ...(brief ? { briefUrn: brief.urn } : {}),
-            ...(typeof input.query === "string" ? { query: input.query } : {}),
-            ...(typeof input.channel === "string" ? { channel: input.channel as Channel } : {}),
-          });
-        }
-        case "author_module": {
-          const result = authorModule(
-            world,
-            {
-              briefUrn: str(input, "briefUrn"),
-              topics: Array.isArray(input.topics) ? input.topics.map(String) : [],
-              ...(typeof input.channel === "string" ? { channel: input.channel as Channel } : {}),
-            },
-            actor,
-          );
-          await persist(ctx, world, [...(result.module ? [result.module] : []), ...result.gaps]);
-          if (result.module) moduleForEval = result.module;
-          return result;
-        }
-        case "atomize_module": {
-          const variants = atomizeModule(
-            world,
-            str(input, "moduleUrn"),
-            (Array.isArray(input.channels) ? input.channels : ["push", "sms"]) as Channel[],
-            actor,
-          );
-          await persist(
-            ctx,
-            world,
-            variants.map((item) => item.variant),
-          );
-          moduleForEval = variants[0]?.variant;
-          return variants;
-        }
-        case "assemble_evidence":
-          return evidencePacket(world, str(input, "moduleUrn"));
-        case "check_readiness": {
-          const urn = str(input, "moduleUrn");
-          return checkReadiness(world, urn, { farmBlockers: farmBlockers(runFarm(world, urn)) });
-        }
-        case "propose_transition": {
-          const urn = str(input, "moduleUrn");
-          const module = need(world, urn, "module");
-          const readiness = checkReadiness(world, urn, {
-            farmBlockers: farmBlockers(runFarm(world, urn)),
-          });
-          if (module.approvalState !== "draft")
-            return {
-              proposed: false,
-              reason: `Only a draft can be proposed; this one is ${module.approvalState}.`,
-              blockers: [],
-            };
-          if (!readiness.ready)
-            return {
-              proposed: false,
-              reason: "Readiness blocks submission.",
-              blockers: readiness.blockers,
-            };
-          const done = await ctx.store.transition({
-            urn,
-            from: "draft",
-            to: "submitted",
-            actor: `agent:${agentId}`,
-            actorType: "agent",
-            reason: "Readiness passed; proposed for review.",
-            at: ISO(ctx),
-          });
-          if (done) moduleForEval = module;
-          return {
-            proposed: done,
-            reason: done ? "Submitted for review." : "The state changed first.",
-            blockers: [],
-          };
-        }
-        case "attribute_result":
-          return attributeResult(world, str(input, "resultUrn"));
-        case "propose_optimization":
-          return proposeOptimizations(
-            world,
-            typeof input.brand === "string" ? (input.brand as Brand) : undefined,
-          );
-        case "run_farm": {
-          return runFarm(world, str(input, "moduleUrn"));
-        }
-        case "check_data_readiness":
-          return dataReadiness(world, brandOf(input));
-        default:
-          throw new ArchError(400, "BAD_REQUEST", `${agentId} has no action ${action}.`);
-      }
+    {
+      principal: { type: "agent", id: agentId },
+      action,
+      resource: { ...(target ? { urn: target.urn } : {}), ...(kind ? { kind } : {}), brand },
     },
+    () =>
+      runModelAgent(ctx, agent, {
+        action,
+        input,
+        brand,
+        world,
+        run,
+        ...(options.task ? { task: options.task } : {}),
+        ...(runTag ? { runTag } : {}),
+      }),
   );
-  // Sample the run for the evaluators; drift is judged on the last twenty samples.
-  const latency = Date.now() - started;
   const turn = evalTurnFor(
     agentId,
     action,
     input,
-    value,
+    { summary: value.summary, result: value.result },
     await worldFor(ctx),
     // Content is scored only when the agent wrote it or moved it forward. An agent that inspects
     // a flawed module and reports the flaws did its job; the flaws are not its drift.
-    moduleForEval,
-    latency,
+    run.moduleForEval,
+    value.latencyMs,
+    value.steps,
   );
   const { scores } = scoreTurn(turn);
   await ctx.store.saveEvalSample(agentId, ISO(ctx), scores);
   const drift = await checkDrift(ctx, agentId);
   return {
-    agentId,
-    action,
+    ...value,
     decision,
     chain,
-    result: value,
     scores,
     drift: { drifted: drift.drifted, samples: drift.samples },
   };
-}
-
-import { buildWorld } from "@northstar/architecture";
-
-function buildWorldWith(world: World, extra: readonly GovernedObject[]) {
-  return buildWorld({ now: world.now, runtime: [...world.objects.values(), ...extra] });
 }
 
 // Claims and the loop ---------------------------------------------------------------------------
@@ -535,10 +400,24 @@ export async function supersedeClaimOp(
   };
 }
 
+/**
+ * The performance signals behind the optimization agent: modules below their channel baseline and
+ * modules citing a superseded claim. A read, so the Performance screen doesn't run a model on every
+ * view; the agent itself runs from Agents, the Performance tab's form, or a sample flow.
+ */
 export async function optimizationsOp(ctx: Ctx, requested?: Brand) {
   // The header brand scopes proposals like every other read; a query brand can only narrow it.
   const brand = requested ?? (ctx.user.brands === "all" ? undefined : ctx.user.brands[0]);
-  return runAgentOp(ctx, "optimization", "propose_optimization", brand ? { brand } : {});
+  const { value } = await invoke(
+    ctx,
+    {
+      principal: { type: "persona", id: ctx.user.persona },
+      action: "list_objects",
+      ...(brand ? { resource: { brand } } : {}),
+    },
+    async () => proposeOptimizations(await worldFor(ctx), brand),
+  );
+  return { result: value };
 }
 
 export async function acceptOptimizationOp(ctx: Ctx, proposalId: string) {
