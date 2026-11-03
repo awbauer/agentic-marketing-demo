@@ -1,4 +1,15 @@
-export const TASK_CLASSES = ["orchestrate", "draft", "classify", "judge", "embed"] as const;
+/**
+ * What a model is bound to do. "score" answers typed questions with probabilities (no tools, no
+ * free text); the answer-quality evaluator uses it to judge sampled runs.
+ */
+export const TASK_CLASSES = [
+  "orchestrate",
+  "draft",
+  "classify",
+  "judge",
+  "embed",
+  "score",
+] as const;
 export type TaskClass = (typeof TASK_CLASSES)[number];
 
 export type ModelEntry = {
@@ -10,16 +21,8 @@ export type ModelEntry = {
   tasks: readonly TaskClass[];
 };
 
-/** The Workers AI models the evaluations already compare, plus the embedder. */
+/** The Workers AI models the agents and evaluators run on. */
 export const MODEL_CATALOG: readonly ModelEntry[] = [
-  {
-    id: "@cf/openai/gpt-oss-20b",
-    label: "gpt-oss-20b",
-    provider: "Workers AI",
-    toolCalling: true,
-    contextTokens: 128000,
-    tasks: ["orchestrate", "draft", "classify"],
-  },
   {
     id: "@cf/openai/gpt-oss-120b",
     label: "gpt-oss-120b",
@@ -29,20 +32,20 @@ export const MODEL_CATALOG: readonly ModelEntry[] = [
     tasks: ["orchestrate", "draft", "classify", "judge"],
   },
   {
-    id: "@cf/moonshotai/kimi-k2.6",
-    label: "Kimi K2.6",
+    id: "@cf/openai/gpt-oss-20b",
+    label: "gpt-oss-20b",
     provider: "Workers AI",
     toolCalling: true,
-    contextTokens: 262144,
-    tasks: ["orchestrate", "draft", "classify", "judge"],
+    contextTokens: 128000,
+    tasks: ["orchestrate", "draft", "classify"],
   },
   {
-    id: "@cf/zai-org/glm-4.7-flash",
-    label: "GLM-4.7-Flash",
+    id: "@cf/cloudflare/clef",
+    label: "Clef",
     provider: "Workers AI",
-    toolCalling: true,
-    contextTokens: 131072,
-    tasks: ["draft", "classify"],
+    toolCalling: false,
+    contextTokens: 65536,
+    tasks: ["score"],
   },
   {
     id: "@cf/baai/bge-base-en-v1.5",
@@ -54,22 +57,30 @@ export const MODEL_CATALOG: readonly ModelEntry[] = [
   },
 ];
 
-/** The incumbent for each task. ADR-009 keeps gpt-oss-20b as the orchestrate champion. */
+/**
+ * The incumbent for each task. ADR-011 moves planning and drafting to gpt-oss-120b: on 20b the
+ * orchestrator repeated a failing step instead of changing course, and the authoring agent cut its
+ * own words down to a fragment to pass the checks. Classifying agents call deterministic services,
+ * so they stay on 20b.
+ */
 export const CHAMPIONS: Record<TaskClass, string> = {
-  orchestrate: "@cf/openai/gpt-oss-20b",
-  draft: "@cf/openai/gpt-oss-20b",
+  orchestrate: "@cf/openai/gpt-oss-120b",
+  draft: "@cf/openai/gpt-oss-120b",
   classify: "@cf/openai/gpt-oss-20b",
   judge: "@cf/openai/gpt-oss-120b",
   embed: "@cf/baai/bge-base-en-v1.5",
+  score: "@cf/cloudflare/clef",
 };
 
 /** Challengers run beside the champion on a share of turns, never in front of a user. */
 export const CHALLENGERS: Record<TaskClass, readonly string[]> = {
-  orchestrate: ["@cf/moonshotai/kimi-k2.6", "@cf/openai/gpt-oss-120b"],
-  draft: ["@cf/openai/gpt-oss-120b"],
-  classify: ["@cf/zai-org/glm-4.7-flash"],
-  judge: ["@cf/moonshotai/kimi-k2.6"],
+  // The former champion is the challenger, so it is what the new champion is measured against.
+  orchestrate: ["@cf/openai/gpt-oss-20b"],
+  draft: ["@cf/openai/gpt-oss-20b"],
+  classify: [],
+  judge: [],
   embed: [],
+  score: [],
 };
 
 export const SHADOW_SHARE = 0.1;

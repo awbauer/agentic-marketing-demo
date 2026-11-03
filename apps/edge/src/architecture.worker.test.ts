@@ -5,6 +5,7 @@ import { AGENT_REGISTRY, AGENT_TOOL_NAMES } from "@northstar/architecture";
 import { beforeAll, describe, expect, it } from "vitest";
 import { newRunState, toolsFor } from "./architecture/agent-tools";
 import { authorizeTool, makeCtx } from "./architecture/context";
+import { judgeScoreFrom } from "./architecture/judge";
 import { createWorkbenchMcpServer } from "./architecture/mcp";
 import { ArchitectureStore, pruneArchitecture } from "./architecture/store";
 import { createArchitectureTables } from "./worker.test-helpers";
@@ -435,7 +436,7 @@ describe("architecture API", () => {
     const models = await call("/api/arch/models");
     expect(
       models.body.taskClasses.find((item: Json) => item.taskClass === "orchestrate").champion,
-    ).toBe("@cf/openai/gpt-oss-20b");
+    ).toBe("@cf/openai/gpt-oss-120b");
     const channels = await call(
       `/api/arch/channels?urn=${urn("urn:northstar:module:hs-mod-fee-waiver-email")}`,
       { persona: "reviewer" },
@@ -606,6 +607,27 @@ describe("sample flows", () => {
     const proposals = await call("/api/arch/optimizations", { persona: "brand-lead", brand: LT });
     expect(proposals.status).toBe(200);
     expect(proposals.body.result.every((item: Json) => item.brand === LT)).toBe(true);
+  });
+});
+
+describe("answer-quality judge", () => {
+  const verdict = (task: number, grounded: number, clear: number) => ({
+    answers: {
+      task: { type: "score" as const, score: task },
+      grounded: { type: "score" as const, score: grounded },
+      clear: { type: "score" as const, score: clear },
+    },
+  });
+
+  it("averages Clef's three scores onto 0 to 1", () => {
+    expect(judgeScoreFrom(verdict(3, 3, 3))).toBe(1);
+    expect(judgeScoreFrom(verdict(0, 0, 0))).toBe(0);
+    expect(judgeScoreFrom(verdict(3, 1.5, 0))).toBe(0.5);
+  });
+
+  it("leaves a run unscored when an answer is missing", () => {
+    expect(judgeScoreFrom({ answers: { task: { type: "score", score: 2 } } })).toBeUndefined();
+    expect(judgeScoreFrom({})).toBeUndefined();
   });
 });
 

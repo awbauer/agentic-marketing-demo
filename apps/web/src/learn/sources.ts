@@ -153,6 +153,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   ],
   "agent-operations": [
     "apps/edge/src/architecture/agent-runtime.ts",
+    "apps/edge/src/architecture/judge.ts",
     "apps/edge/src/architecture/agent-tools.ts",
     "apps/edge/src/architecture/orchestration.ts",
     "apps/edge/src/architecture/scripted-model.ts",

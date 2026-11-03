@@ -632,7 +632,7 @@ export function authorModule(
   const wording = [
     ...framing.flatMap((text) => [
       ...framingProblems(text, brief.brand),
-      ...framingShape(text, product),
+      ...framingShape(text, product, theme),
     ]),
     ...(request.headline
       ? [

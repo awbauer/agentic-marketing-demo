@@ -28,8 +28,41 @@ const GREETING = /^(?:hello|hi|hey|dear|greetings|good (?:morning|afternoon|even
 const CALL_TO_ACTION =
   /^(?:please\s+)?(?:see|read|review|visit|explore|download|register|join|talk|speak|contact|ask|reply|call|schedule|request|check|watch|reach out|find out more)\b/i;
 const MAX_FRAMING_WORDS = 14;
+/**
+ * What a call to action may name besides plain words, what to look at and the wave's theme: where
+ * to go and who to talk to. "Visit to transfer idle cash" and "Visit for warm comfort" persuade;
+ * "See the details below" does not.
+ */
+const ACTION_WORDS = new Set(
+  "details detail information info overview summary offer offers deal menu account app site page website link email options option prescribing full latest current complete below above here more us it them team store location locations advisor representative rep doctor pharmacist session webinar meeting event booth call appointment consultation question questions label guide faq terms conditions policy statement program resources materials slides poster abstract presentation s".split(
+    " ",
+  ),
+);
 
 const wordsOf = (text: string) => text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+/** Words in a call to action's object that are neither plain, nor a place, nor the wave's theme. */
+const actionExtras = (text: string, theme: ReadonlySet<string>) => [
+  ...new Set(
+    wordsOf(text.replace(CALL_TO_ACTION, "")).filter(
+      (word) =>
+        !PLAIN_WORDS.has(word) &&
+        !ACTION_WORDS.has(word) &&
+        !theme.has(word) &&
+        !POINTS_AT.test(word),
+    ),
+  ),
+];
+/** Verbs that turn a greeting into a request ("Hello, consider ...", "Hi, try ..."). */
+const REQUEST_VERBS =
+  /^(?:consider|move|try|switch|start|get|save|earn|enjoy|discover|grab|order|buy|shop|transfer|open|sign|apply|act|take|make|keep|don|do|let|come)\b/i;
+/** A greeting that says more than whom it greets: an audience is at most three words, not a request. */
+const greetingClause = (text: string) => {
+  const rest = text
+    .replace(GREETING, "")
+    .replace(/^[\s,!.:;—-]+/, "")
+    .replace(/[\s,!.:;—-]+$/, "");
+  return wordsOf(rest).length > 3 || CALL_TO_ACTION.test(rest) || REQUEST_VERBS.test(rest);
+};
 /** A call to action that never says what to act on: "See", "Please see", "Review the". */
 const isFragment = (text: string) => {
   const object = wordsOf(text.replace(CALL_TO_ACTION, ""));
@@ -42,7 +75,11 @@ const isFragment = (text: string) => {
  * hunting for known bad words: the sentence must be one of those two kinds, short, free of
  * clauses, outcome words and comparisons, and must not name the product or brand.
  */
-export function framingShape(text: string, avoid: ReadonlySet<string>): string[] {
+export function framingShape(
+  text: string,
+  avoid: ReadonlySet<string>,
+  theme: ReadonlySet<string> = new Set(),
+): string[] {
   const problems: string[] = [];
   for (const sentence of text.split(/(?<=[.!?])\s+/).filter((part) => part.trim())) {
     const trimmed = sentence.trim();
@@ -56,6 +93,11 @@ export function framingShape(text: string, avoid: ReadonlySet<string>): string[]
       );
     else if (words.length > MAX_FRAMING_WORDS)
       problems.push(`"${trimmed}" is too long: keep each sentence to ${MAX_FRAMING_WORDS} words.`);
+    else if (!action && greetingClause(trimmed))
+      // "Hello, consider moving idle cash." hides a call to action in the greeting, out of its checks.
+      problems.push(
+        `"${trimmed}" adds to the greeting. Greet the audience only ("Hello cardiology prescribers,") and put anything else in its own sentence.`,
+      );
     else if (action && isFragment(trimmed))
       // A bare verb ("See") or a dangling phrase ("Review the") would read as a broken sentence.
       problems.push(
@@ -64,6 +106,10 @@ export function framingShape(text: string, avoid: ReadonlySet<string>): string[]
     else if (IMPLIES_A_CLAIM.test(trimmed) || (!action && POINTS_AT.test(trimmed)))
       problems.push(
         `"${trimmed}" has wording that could assert something (an outcome, benefit, comparison or reason). Keep greetings and calls to action plain.`,
+      );
+    else if (action && actionExtras(trimmed, theme).length)
+      problems.push(
+        `"${trimmed}" says more than what to do (${actionExtras(trimmed, theme).join(", ")}). A call to action may only name what to look at or where to go, as in "See the details below." or "Visit the app."`,
       );
     else if (named.length)
       problems.push(

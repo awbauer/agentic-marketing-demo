@@ -90,8 +90,8 @@ export async function evaluationsView(ctx: Ctx) {
     })),
     agents,
     notes: [
-      "Deterministic evaluators score every agent run from its trace. The judge evaluator needs a judge run, so sampled production turns carry no judge score.",
-      "Baselines are what a healthy deterministic agent scores: 1 on every evaluator its prompt names.",
+      "Deterministic evaluators score every agent run from its trace. Answer quality is judged by Clef, which scores each run on three typed questions; it gives no reasons, so its score is shown but not yet part of drift.",
+      "Baselines are what a healthy agent scores: 1 on every deterministic evaluator its prompt names, and the threshold on latency and cost.",
       "Raising an agent's autonomy is a pull request; the evidence above only shows what it would support.",
     ],
   };

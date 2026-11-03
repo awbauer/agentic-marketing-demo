@@ -36,6 +36,7 @@ import { PRIMARY_ACTION, runModelAgent } from "./agent-runtime";
 
 import { newRunState, type ToolStep, targetOf } from "./agent-tools";
 import { ArchError, type Ctx, invoke, overridesFor } from "./context";
+import { judgeRun } from "./judge";
 import { ISO, need, worldFor } from "./objects";
 
 const asPersona = (ctx: Ctx) => ({ type: "persona", id: ctx.user.persona }) as const;
@@ -328,6 +329,14 @@ export async function runAgentOp(
     value.latencyMs,
     value.steps,
   );
+  const judged = await judgeRun(ctx.env, {
+    agent: agent.name,
+    task: options.task ?? action,
+    input,
+    summary: value.summary,
+    result: value.result,
+  });
+  if (judged !== undefined) turn.judgeScore = judged;
   const { scores } = scoreTurn(turn);
   await ctx.store.saveEvalSample(agentId, ISO(ctx), scores);
   const drift = await checkDrift(ctx, agentId);
