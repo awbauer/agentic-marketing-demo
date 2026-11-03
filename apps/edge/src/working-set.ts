@@ -5,6 +5,7 @@ import {
   type FocusItem,
   FocusKindSchema,
   type InsightTile,
+  type TileItem,
   type InventoryRisk,
   KNOWLEDGE_GRAPH_TOOLS,
   MEMORY_TOOLS,
@@ -287,41 +288,66 @@ const LIFE_SCIENCES_LABELS: Record<string, string> = {
   drupal_list_hcp_site_content: "Drupal: HCP site",
 };
 
-/** Why an asset can't be used now, in the marketer's words. */
-function notUsable(asset: Record<string, unknown>) {
+/** An asset's standing: usable, waiting on review, or blocked, with the reason in words. */
+function assetItem(asset: Record<string, unknown>): TileItem {
   const status = str(asset.status);
-  if (status === "Pending") return "pending MLR review";
+  const expiresOn = str(asset.expiresOn);
+  const base = {
+    title: str(asset.title) ?? "Asset",
+    ...(str(asset.mlrApprovalId) ? { id: str(asset.mlrApprovalId) as string } : {}),
+  };
+  if (asset.usableNow)
+    return {
+      ...base,
+      status: "ok",
+      label: "Usable",
+      ...(expiresOn ? { date: { label: "Approved until", value: expiresOn } } : {}),
+    };
+  if (status === "Pending") return { ...base, status: "warn", label: "Pending MLR review" };
   if (status === "Expired")
-    return `MLR approval expired${str(asset.expiresOn) ? ` ${str(asset.expiresOn)}` : ""}`;
-  return "failed a compliance check";
+    return {
+      ...base,
+      status: "blocked",
+      label: "Approval expired",
+      ...(expiresOn ? { date: { label: "Expired", value: expiresOn } } : {}),
+    };
+  return { ...base, status: "blocked", label: "Failed a compliance check" };
 }
 
-/** One line per item the system returned: each asset, claim, job or page, and its standing. */
-const LIFE_SCIENCES_DETAILS: Record<string, (data: Record<string, unknown>) => string[]> = {
+/** One row per item the system returned: each asset, claim, job or page, and its standing. */
+const LIFE_SCIENCES_ITEMS: Record<string, (data: Record<string, unknown>) => TileItem[]> = {
   aprimo_search_approved_assets: (data) =>
     (list(data.assets) as Array<Record<string, unknown>>)
-      .sort((a, b) => Number(Boolean(b.usableNow)) - Number(Boolean(a.usableNow)))
-      .map((asset) => {
-        const name = `${str(asset.title) ?? "Asset"} (${str(asset.mlrApprovalId) ?? str(asset.aprimoAssetId) ?? "no ID"})`;
-        return asset.usableNow
-          ? `Usable: ${name}${str(asset.expiresOn) ? `, approved until ${str(asset.expiresOn)}` : ""}`
-          : `Not usable: ${name}, ${notUsable(asset)}`;
-      }),
+      .map(assetItem)
+      .sort((a, b) => ITEM_ORDER[a.status] - ITEM_ORDER[b.status]),
   vault_list_approved_claims: (data) =>
-    (list(data.claims) as Array<Record<string, unknown>>).map(
-      (claim) =>
-        `${str(claim.status) ?? "Unknown"}: ${clip(str(claim.text) ?? "Claim", 110)}${str(claim.reason) ? ` (${str(claim.reason)})` : ""}`,
-    ),
+    (list(data.claims) as Array<Record<string, unknown>>).map((claim) => ({
+      status: str(claim.status) === "Approved" ? "ok" : "blocked",
+      label: str(claim.status) ?? "Unknown",
+      title: clip(str(claim.text) ?? "Claim", 110),
+      ...(str(claim.vaultClaimId) ? { id: str(claim.vaultClaimId) as string } : {}),
+      ...(str(claim.reason) ? { note: str(claim.reason) as string } : {}),
+    })),
   screendragon_list_jobs: (data) =>
-    (list(data.jobs) as Array<Record<string, unknown>>).map(
-      (job) =>
-        `${str(job.title) ?? "Job"} (${str(job.jobId) ?? "no ID"}): ${str(job.stage) ?? "unknown stage"}, due ${str(job.dueOn) ?? "unscheduled"}${job.atRisk ? ", at risk" : ""}`,
-    ),
+    (list(data.jobs) as Array<Record<string, unknown>>).map((job) => ({
+      status: job.atRisk ? "warn" : "info",
+      label: job.atRisk
+        ? `${str(job.stage) ?? "In progress"} · at risk`
+        : (str(job.stage) ?? "In progress"),
+      title: str(job.title) ?? "Job",
+      ...(str(job.jobId) ? { id: str(job.jobId) as string } : {}),
+      ...(str(job.dueOn) ? { date: { label: "Due", value: str(job.dueOn) as string } } : {}),
+    })),
   drupal_list_hcp_site_content: (data) =>
-    (list(data.pages) as Array<Record<string, unknown>>).map(
-      (page) => `${str(page.title) ?? "Page"}: ${page.compliant ? "compliant" : "not compliant"}`,
-    ),
+    (list(data.pages) as Array<Record<string, unknown>>).map((page) => ({
+      status: page.compliant ? "ok" : "blocked",
+      label: page.compliant ? "Compliant" : "Not compliant",
+      title: str(page.title) ?? "Page",
+      ...(str(page.mlrApprovalId) ? { id: str(page.mlrApprovalId) as string } : {}),
+    })),
 };
+/** Usable first, then waiting, then blocked. */
+const ITEM_ORDER: Record<TileItem["status"], number> = { ok: 0, info: 1, warn: 2, blocked: 3 };
 
 function lifeSciencesCard(data: Record<string, unknown>, tool: string, at: Date): Ingested {
   const system = str(data.system) ?? "Life sciences system";
@@ -370,7 +396,8 @@ function lifeSciencesCard(data: Record<string, unknown>, tool: string, at: Date)
           freshness: "just now",
           status: "ready",
         },
-        details: (LIFE_SCIENCES_DETAILS[tool]?.(data) ?? []).slice(0, 8),
+        details: [],
+        items: (LIFE_SCIENCES_ITEMS[tool]?.(data) ?? []).slice(0, 8),
         updatedAt: at.toISOString(),
         toolName: tool,
       },

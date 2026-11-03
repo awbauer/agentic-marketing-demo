@@ -525,6 +525,21 @@ export type RecordRef = z.infer<typeof RecordRefSchema>;
 
 export const recordKey = (ref: RecordRef) => `${ref.system}:${ref.objectType}:${ref.recordId}`;
 
+/** One thing a tool found, shown as a row: its standing, what it is, its ID and a date. */
+export const TileItemSchema = z.object({
+  /** ok: usable or compliant; warn: waiting on something; blocked: can't be used; info: neither. */
+  status: z.enum(["ok", "warn", "blocked", "info"]),
+  /** The standing in words, such as "Usable" or "Pending MLR review". */
+  label: z.string(),
+  title: z.string(),
+  /** An identifier people quote, such as an MLR approval ID. */
+  id: z.string().optional(),
+  /** A date that matters for the standing, such as when an approval expires (YYYY-MM-DD). */
+  date: z.object({ label: z.string(), value: z.string() }).optional(),
+  note: z.string().optional(),
+});
+export type TileItem = z.infer<typeof TileItemSchema>;
+
 export const InsightTileSchema = z.object({
   id: z.string(),
   kind: z.enum([
@@ -547,6 +562,8 @@ export const InsightTileSchema = z.object({
   state: z.enum(["ready", "loading", "empty", "error", "stale", "permission-denied"]),
   source: SourceSchema,
   details: z.array(z.string()),
+  /** What the tool found, item by item, when it found a list. */
+  items: z.array(TileItemSchema).optional(),
   recordRef: RecordRefSchema.optional(),
   presentation: PortableTilePresentationSchema.optional(),
   /** When the data was fetched (ISO time); the UI shows it relative to now. */

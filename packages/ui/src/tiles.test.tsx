@@ -8,6 +8,7 @@ import {
   relativeTime,
   resolveTileRenderMode,
   salesforceRecordUrl,
+  shortDate,
   shouldShowChatError,
   toolFreeTraceDetail,
 } from "./index";
@@ -153,4 +154,37 @@ describe("InsightBoard", () => {
       expect(screen.getByTestId("tile-campaign-summary")).toHaveClass(`state-${state}`);
     },
   );
+});
+
+describe("tile items", () => {
+  it("shows each item with its status label, ID and a readable date", () => {
+    render(
+      <InsightBoard
+        tiles={[
+          {
+            ...campaignCard,
+            id: "aprimo",
+            details: [],
+            items: [
+              {
+                status: "ok",
+                label: "Usable",
+                title: "Cardivance HFrEF outcomes email",
+                id: "MLR-2026-0412",
+                date: { label: "Approved until", value: "2027-06-12" },
+              },
+              { status: "warn", label: "Pending MLR review", title: "Superiority email" },
+            ],
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("Usable").closest("li")?.className).toContain("status-ok");
+    expect(screen.getByText("MLR-2026-0412").tagName).toBe("CODE");
+    expect(screen.getByText("Jun 12, 2027").getAttribute("dateTime")).toBe("2027-06-12");
+    expect(screen.getByText("Pending MLR review").closest("li")?.className).toContain(
+      "status-warn",
+    );
+    expect(shortDate("not a date")).toBe("not a date");
+  });
 });

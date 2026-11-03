@@ -32,6 +32,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "apps/edge/src/working-set.ts",
     "apps/edge/src/focus.ts",
     "apps/web/src/WorkspacePanel.tsx",
+    "apps/web/src/GraphUsage.tsx",
     "apps/web/src/ActionCards.tsx",
   ],
   model: [],
@@ -74,6 +75,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   ],
   observability: [
     "apps/web/src/HistoryView.tsx",
+    "apps/web/src/ToolActivity.tsx",
     "apps/web/src/turn-trace.ts",
     "apps/web/src/turn-stats.ts",
   ],

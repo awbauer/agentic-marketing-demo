@@ -172,7 +172,7 @@ describe("working set", () => {
     expect(failed).toEqual(emptyWorkingSet());
   });
 
-  it("lists each Aprimo asset on its card, usable ones first, with why the rest can't be used", () => {
+  it("lists each Aprimo asset on its card as a row, usable first, with why the rest can't be used", () => {
     const assets = aprimoSearch("drug-cardivance", { today: "2026-11-03", channel: "email" });
     const body = { system: "Aprimo", mock: true, drug: "drug-cardivance", assets, usableNow: 1 };
     const set = ingestToolResult(emptyWorkingSet(), {
@@ -183,10 +183,22 @@ describe("working set", () => {
     });
     const card = set.cards[0];
     expect(card?.summary).toBe("2 assets, 1 usable now.");
-    expect(card?.details).toEqual([
-      "Usable: Cardivance HFrEF outcomes email (MLR-2026-0412), approved until 2027-06-12",
-      "Not usable: Cardivance “superior to ARBs” email (MLR-2026-0577), pending MLR review",
+    expect(card?.items).toEqual([
+      {
+        status: "ok",
+        label: "Usable",
+        title: "Cardivance HFrEF outcomes email",
+        id: "MLR-2026-0412",
+        date: { label: "Approved until", value: "2027-06-12" },
+      },
+      {
+        status: "warn",
+        label: "Pending MLR review",
+        title: "Cardivance “superior to ARBs” email",
+        id: "MLR-2026-0577",
+      },
     ]);
+    expect(card?.details).toEqual([]);
     // The card names the system, not that its data is mocked.
     expect(card?.source.label).toBe("Aprimo");
     expect(JSON.stringify(card)).not.toMatch(/mocked/i);

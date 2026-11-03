@@ -1,9 +1,9 @@
 import type { UIMessage } from "ai";
 
-type PathNode = { id: string; label: string; name: string };
-type PathRelationship = { type: string; from: string; to: string };
-type EvidencePath = { nodes: PathNode[]; relationships: PathRelationship[] };
-type GraphEvidence = { tool: string; source: "neo4j" | "fixture"; paths: EvidencePath[] };
+export type PathNode = { id: string; label: string; name: string };
+export type PathRelationship = { type: string; from: string; to: string };
+export type EvidencePath = { nodes: PathNode[]; relationships: PathRelationship[] };
+export type GraphEvidence = { tool: string; source: "neo4j" | "fixture"; paths: EvidencePath[] };
 
 const MAX_PATHS = 8;
 
@@ -30,6 +30,17 @@ export function graphEvidence(message: UIMessage): GraphEvidence[] {
       },
     ];
   });
+}
+
+/** The graph evidence of the latest answer that queried the graph, for the workspace's map. */
+export function latestGraphEvidence(messages: readonly UIMessage[]): GraphEvidence[] {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index] as UIMessage;
+    if (message.role !== "assistant") continue;
+    const evidence = graphEvidence(message);
+    if (evidence.length) return evidence;
+  }
+  return [];
 }
 
 function link(path: EvidencePath, a: PathNode, b: PathNode) {
