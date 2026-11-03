@@ -161,6 +161,44 @@ describe("campaign-context MCP", () => {
     expect(requestedToolPlan("Create a new campaign for the spring menu in Salesforce")).toEqual([
       "draft_campaign_brief",
     ]);
+    // A Lumera campaign checks its claims and finds its approved assets before Marketing Cloud.
+    const lumeraCampaign =
+      "Draft an email campaign for Cardivance using approved claims. Share other language you considered but ruled out due to lack of supporting evidence. Create the campaign in Salesforce Marketing Cloud";
+    expect(requestedToolPlan(lumeraCampaign)).toEqual([
+      "check_clinical_claims",
+      "aprimo_search_approved_assets",
+      "draft_campaign_brief",
+    ]);
+    expect(draftIntent(lumeraCampaign)).toEqual({ mode: "draft", kind: "brief" });
+    // Every new draft starts with its brand's checks and ends in Marketing Cloud, whatever the
+    // prompt says: the header's brand decides the checks when the prompt names no product.
+    expect(
+      requestedToolPlan("Create a campaign in Marketing Cloud for the congress", {
+        brand: "Lumera Therapeutics",
+      }),
+    ).toEqual(["check_clinical_claims", "aprimo_search_approved_assets", "draft_campaign_brief"]);
+    expect(
+      requestedToolPlan("Draft an email campaign for Harborstone and create it in Marketing Cloud"),
+    ).toEqual(["get_fed_announcements", "match_news_to_approved_content", "draft_campaign_brief"]);
+    expect(
+      requestedToolPlan("Draft email content for the congress", { brand: "Lumera Therapeutics" }),
+    ).toEqual(["check_clinical_claims", "aprimo_search_approved_assets", "draft_campaign_content"]);
+    // Coastline has no claims library in chat; its plan still ends in Marketing Cloud.
+    expect(requestedToolPlan(PUSH_PROMPT, { brand: "Coastline Kitchen" })?.at(-1)).toBe(
+      "draft_campaign_brief",
+    );
+    // A revision of a brief in focus goes straight back to the agent: its checks already ran.
+    expect(
+      requestedToolPlan("Make it warmer", {
+        brand: "Lumera Therapeutics",
+        hasFocus: true,
+        focusKind: "brief",
+      }),
+    ).toEqual(["draft_campaign_brief"]);
+    // Asking only about the claims stays a claims check.
+    expect(requestedToolPlan("Can we still use the Cardivance superiority claim?")).toEqual([
+      "check_clinical_claims",
+    ]);
     // A brief's revision goes back to the agent: a re-draft before saving, a refinement after.
     const brief = { hasFocus: true, focusKind: "brief" as const };
     expect(requestedToolPlan("Make it warmer", brief)).toEqual(["draft_campaign_brief"]);

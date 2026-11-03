@@ -134,6 +134,12 @@ export const routingCases = [
     expected: "check_clinical_claims",
   },
   {
+    id: "routing-30b",
+    prompt:
+      "Draft an email campaign for Cardivance using approved claims and create it in Salesforce Marketing Cloud.",
+    expected: "check_clinical_claims",
+  },
+  {
     id: "routing-31",
     prompt: "How should we engage Mesa Verde Regional Hospital on formulary access?",
     expected: "plan_hospital_engagement",

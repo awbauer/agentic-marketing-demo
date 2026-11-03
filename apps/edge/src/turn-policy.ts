@@ -1,4 +1,5 @@
 import { scopePrompt, type WorkbenchScope } from "../../../packages/architecture/src/scope.ts";
+import type { Brand } from "../../../packages/architecture/src/types.ts";
 import type { FocusKind } from "../../../packages/contracts/src/index.ts";
 
 /**
@@ -112,6 +113,16 @@ export function orchestratorSystemPrompt(
     ...(targetPlan
       ? [
           "For this target list, read it from the knowledge graph and present the ranked hospitals and prescriber groups: the patients with the labeled indication, formulary status and days to the next P&T review, Lumera's share, the decile, the opted-in channels, and the play for each. Say that a drug that is not on formulary needs the approved value dossier before detailing. State the scoring formula the tool returns. Offer to plan engagement with the top hospital. Never say anything was sent or scheduled.",
+        ]
+      : []),
+    ...(claimPlan && briefPlan
+      ? [
+          "For this Lumera campaign, work in order and finish in Marketing Cloud. First check the drug's claims: keep only those a trial supports, on the approved label and carried by content with a current MLR approval. Then find the approved assets in Aprimo for the channel. Then write the email draft yourself from the supported claims, word for word, with the safety information they require (including any boxed warning) and the approved assets by their Aprimo and MLR IDs. Only then ask the Marketing Cloud Campaign Creation agent for the brief: its objective must name the drug, the channel, the prescriber audience, each claim used exactly as approved with its MLR approval ID, the required safety information, and the approved assets, and must say no new claims are made. In your answer, give the draft, then a section **Ruled out** listing each claim or wording you considered but left out and why (no supporting trial, off label, expired or pending approval, or a comparison without head-to-head evidence), then the brief the agent returned.",
+        ]
+      : []),
+    ...(newsPlan && briefPlan
+      ? [
+          "For this Harborstone campaign, work in order and finish in Marketing Cloud. First read the latest rate news and find the pre-approved content for it. Use only content the check says is releasable now, exactly as approved, with its approval ID and required disclosures. Then write the email draft yourself from that content. Only then ask the Marketing Cloud Campaign Creation agent for the brief, naming the approved assets with their approval IDs, their disclosures and the audience with the consent it relies on, and saying approved copy is used as approved with no new claims. In your answer, give the draft, then a section **Ruled out** listing content that is blocked (expired, pending, or failed a compliance check) and why, then the brief the agent returned.",
         ]
       : []),
     ...(claimPlan
@@ -236,6 +247,15 @@ const LUMERA_HOSPITALS =
   /\b(?:st\.? brigid|lakeshore health|mesa verde|cascade university|pinecrest|gulf coast heart|heartland medical|harbor view)\b/i;
 
 const TOOL_PLANS: ReadonlyArray<readonly [readonly string[], (prompt: string) => boolean]> = [
+  // Life sciences: a campaign for a Lumera drug. The claims are checked and the approved assets
+  // found first, so Marketing Cloud's brief is built from them, last.
+  [
+    ["check_clinical_claims", "aprimo_search_approved_assets", "draft_campaign_brief"],
+    (p) =>
+      LUMERA_DRUGS.test(p) &&
+      /\b(?:draft|write|create|build|plan|set up|launch)\b/i.test(p) &&
+      /\b(?:campaign|e-?mail|newsletter)\b/i.test(p),
+  ],
   // Life sciences: one drug's materials checked across Aprimo, the claims library and the HCP site.
   [
     ["aprimo_search_approved_assets", "vault_list_approved_claims", "drupal_list_hcp_site_content"],
@@ -398,6 +418,8 @@ const DRAFTING_TOOLS = new Set([
 ]);
 
 export type PlanContext = {
+  /** The brand chosen in the header, which decides the claims checks a new draft starts with. */
+  brand?: Brand | "all";
   hasFocus?: boolean;
   focusKind?: FocusKind;
   /** The focus is a brief saved in Marketing Cloud, so changes refine its campaign preview. */
@@ -482,6 +504,49 @@ export function draftIntent(
   return null;
 }
 
+/** Tools that hand work to Marketing Cloud's agents. They come last, after the checks. */
+const MARKETING_CLOUD_TOOLS = new Set([
+  "draft_campaign_brief",
+  "refine_campaign_preview",
+  "draft_campaign_content",
+  "create_content_section",
+]);
+
+/**
+ * What each brand checks before anything is drafted: Lumera's clinical claims and its approved
+ * assets in Aprimo; Harborstone's approved, releasable content for the current rate news.
+ * Coastline has no claims library in chat, so its drafts start from its restaurant context.
+ */
+export const CLAIMS_CHECKS: Record<Brand, readonly string[]> = {
+  "Lumera Therapeutics": ["check_clinical_claims", "aprimo_search_approved_assets"],
+  "Harborstone Wealth": ["get_fed_announcements", "match_news_to_approved_content"],
+  "Coastline Kitchen": [],
+};
+
+/** The brand a request is for: the header's choice, or the one the request names. */
+function planBrand(prompt: string, context: PlanContext): Brand | undefined {
+  if (context.brand && context.brand !== "all") return context.brand;
+  if (LUMERA_DRUGS.test(prompt)) return "Lumera Therapeutics";
+  if (/\b(?:harborstone|sweep account|wealth)\b/i.test(prompt)) return "Harborstone Wealth";
+  if (/\b(?:coastline|chowder|restaurant)\b/i.test(prompt)) return "Coastline Kitchen";
+  return undefined;
+}
+
+/**
+ * A new draft starts with its brand's claims checks and ends in Marketing Cloud: the checks are
+ * put first if the plan lacks them, and Marketing Cloud's agents are moved to the end.
+ */
+function checksFirst(plan: readonly string[], prompt: string, context: PlanContext) {
+  if (!plan.some((name) => DRAFTING_TOOLS.has(name))) return plan;
+  const brand = planBrand(prompt, context);
+  const checks = (brand ? CLAIMS_CHECKS[brand] : []).filter((name) => !plan.includes(name));
+  return [
+    ...checks,
+    ...plan.filter((name) => !MARKETING_CLOUD_TOOLS.has(name)),
+    ...plan.filter((name) => MARKETING_CLOUD_TOOLS.has(name)),
+  ];
+}
+
 /** The ordered tools a prompt requires, or null to let the model choose. */
 export function requestedToolPlan(
   prompt: string,
@@ -497,20 +562,27 @@ export function requestedToolPlan(
     isRevisionRequest(prompt)
   )
     return ["refine_campaign_preview"];
-  // A new campaign "in Salesforce" or "in Marketing Cloud" starts with the agent's brief.
+  const planned = TOOL_PLANS.find(([, matches]) => matches(prompt))?.[0];
+  // A new campaign "in Salesforce" or "in Marketing Cloud" ends with the agent's brief. A plan
+  // that gathers its context first (claims, assets, past results) keeps Marketing Cloud last;
+  // otherwise the brief is the whole plan.
   if (
     (wantsSalesforceRecord(prompt) || /\bmarketing cloud\b/i.test(prompt)) &&
     /\bcampaign\b/i.test(prompt) &&
     /\b(?:create|set up|start|make|build|plan)\b/i.test(prompt)
   )
-    return ["draft_campaign_brief"];
+    return checksFirst(
+      planned?.includes("draft_campaign_brief") ? planned : ["draft_campaign_brief"],
+      prompt,
+      context,
+    );
   const plan =
-    TOOL_PLANS.find(([, matches]) => matches(prompt))?.[0] ??
+    planned ??
     (() => {
       const single = INTENT_RULES.find(([, matches]) => matches(prompt))?.[0];
       return single ? [single] : null;
     })();
-  return plan;
+  return plan ? checksFirst(plan, prompt, context) : null;
 }
 
 export function requestedToolName(prompt: string, context: PlanContext = {}) {

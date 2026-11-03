@@ -86,11 +86,31 @@ export const PERSONA_FOCUS: Record<Persona, string> = {
   admin: "operations: access, controls and audit",
 };
 
+/**
+ * What each brand sells, so a request that names a product is read as that brand's: "Cardivance"
+ * is Lumera's, not a brand of its own.
+ */
+export const BRAND_PRODUCTS: Record<Brand, readonly string[]> = {
+  "Harborstone Wealth": ["the Sweep Account", "wealth management and advisory services"],
+  "Coastline Kitchen": ["clam chowder", "the soup of the day", "its restaurants"],
+  "Lumera Therapeutics": ["Cardivance", "Glucora", "Neurelva"],
+};
+
+const listed = (items: readonly string[]) =>
+  items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}` : (items[0] ?? "");
+
 /** What the model is told about the chosen scope. It narrows the answer; it grants nothing. */
 export function scopePrompt(scope: WorkbenchScope): string {
+  const selected = scope.brand;
   const brand =
-    scope.brand === "all"
-      ? "No single brand is selected, so any brand's data may be used when the request names it."
-      : `The user is working on ${scope.brand}. Use only ${scope.brand}'s data and tools. If the request is about another brand, say it is outside the selected brand and ask the user to switch the brand in the header; do not answer it from memory.`;
+    selected === "all"
+      ? `No single brand is selected, so any brand's data may be used when the request names it. ${BRANDS.map((name) => `${name} sells ${listed(BRAND_PRODUCTS[name])}`).join("; ")}.`
+      : `The user is working on ${selected}, which sells ${listed(BRAND_PRODUCTS[selected])}; a request that names any of these is about ${selected}. Use only ${selected}'s data and tools. If the request is about another brand (${BRANDS.filter(
+          (name) => name !== selected,
+        )
+          .map((name) => `${name}, which sells ${listed(BRAND_PRODUCTS[name])}`)
+          .join(
+            "; or ",
+          )}), say it is outside the selected brand and ask the user to switch the brand in the header; do not answer it from memory.`;
   return `${brand} The user is running as ${scope.persona.replace("-", " ")}, so lead with ${PERSONA_FOCUS[scope.persona]}. The role changes emphasis only: it does not change what Salesforce allows or what needs confirmation.`;
 }

@@ -439,7 +439,7 @@ Around the loop, the orchestrator also handles the events the model must not: it
 
 **Every tool call passes the gateway.** Before a tool the model chose actually runs, the Worker asks the agentic gateway whether the orchestrator may call `tool:<name>`. The decision, its policy and the caller are recorded, and a denial comes back to the model as a tool error instead of a result. See *The agentic gateway*.
 
-**The header's brand and role.** Each chat message carries the brand and role chosen in the header. The server withholds other brands' tools, answers a request about another brand with a note to switch rather than answering from memory, and tells the model the role so it leads with what that person decides. The role changes emphasis only; it never changes what Salesforce allows or what needs confirmation.
+**The header's brand and role.** Each chat message carries the brand and role chosen in the header. The server withholds other brands' tools, answers a request about another brand with a note to switch rather than answering from memory, and tells the model the role so it leads with what that person decides. The model is told what each brand sells (Lumera's Cardivance, Glucora and Neurelva; Harborstone's Sweep Account; Coastline's chowder), so a request that names a product is read as its brand's, not as another brand. The brand also decides which claims checks a new draft starts with. The role changes emphasis only; it never changes what Salesforce allows or what needs confirmation.
 
 **In this demo**
 
@@ -833,6 +833,7 @@ Not every decision should be left to the model. Each turn passes through two det
    - An account plan, AUM, or a Harborstone client's plays → `build_aum_account_plan`
    - A Coastline Kitchen email or push campaign → profile → weather → past sends on that channel → the Campaign Creation agent's brief, which becomes the focus
    - "Create a campaign … in Salesforce" or "in Marketing Cloud" → the Campaign Creation agent's brief, then the save is prepared for confirmation
+   - **Checks first, Marketing Cloud last.** Every new draft starts with its brand's claims checks and ends with Marketing Cloud's agents, whatever order the prompt implies: a Lumera campaign runs `check_clinical_claims` → `aprimo_search_approved_assets` → the brief, and a Harborstone one `get_fed_announcements` → `match_news_to_approved_content` → the brief. The model drafts from what the checks allow, lists what it ruled out and why, and only then asks Marketing Cloud for the brief. The header's brand decides the checks; with all brands, the brand the request names does. Coastline has no claims library in chat, so its campaigns start from the restaurant's context. A revision of a brief already in focus goes straight back to the agent
    - A change to a brief ("make it warmer") → back to the agent: a re-drafted brief before it's saved, or **Refine Campaign Preview** after
    - A change to other drafts → no tools; the model rewrites the draft, which is saved as the next version
    - The rules need specific signals and **defer to the model** when unsure, because a wrongly forced tool can't be undone within the turn.
@@ -1483,7 +1484,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **What it does not do yet.** Confirmed Salesforce writes keep their own signed-confirmation audit and do not pass the gateway log. The call to the Salesforce MCP portal is authorized as the orchestrator calling that tool, not as a separate hop.
 
-**Brand scope reaches tools.** When a brand is chosen in the header, each tool that belongs to another brand is denied with the `forbid-out-of-scope-brand` rule, and the model is not given those tools in the first place. Tools that every brand uses, such as the graph overview, stay available.
+**Brand scope reaches tools.** When a brand is chosen in the header, each tool that belongs to another brand is denied with the `forbid-out-of-scope-brand` rule, and the model is not given those tools in the first place. Tools that every brand uses, such as the graph overview, stay available. The model is also told what each brand sells, so "Cardivance" with Lumera selected is in scope, and "the Sweep Account" is named as Harborstone's when it is not.
 
 **Try it**
 
