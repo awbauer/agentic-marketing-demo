@@ -18,13 +18,23 @@ const PLAIN_WORDS = new Set(
 
 /** Wording that makes or implies a claim; no short framing sentence may use it. */
 const IMPLIES_A_CLAIM =
-  /\b(?:how|why|that|which|because|prevent\w*|reduc\w*|lower\w*|improv\w*|treat\w*|cure\w*|protect\w*|reliev\w*|effective|safe\w*|proven|better|best|more|less|fewer|faster|only|first|leading|trusted|results?|outcomes?|benefits?|evidence|data|studies|study|trial)\b/i;
+  /\b(?:how|why|that|which|because|prevent\w*|reduc\w*|lower\w*|improv\w*|treat\w*|cure\w*|protect\w*|reliev\w*|effective|safe|safer|safest|safely|proven|better|best|more|less|fewer|faster|only|first|leading|trusted|benefits?|meaningful|significant\w*|positive|strong\w*|promising)\b/i;
+/**
+ * What a call to action may point at without saying anything about it ("See the latest outcomes.",
+ * "Review the safety information."). A greeting may not name them.
+ */
+const POINTS_AT = /\b(?:results?|outcomes?|evidence|data|studies|study|trials?|safety|findings)\b/i;
 const GREETING = /^(?:hello|hi|hey|dear|greetings|good (?:morning|afternoon|evening))\b/i;
 const CALL_TO_ACTION =
   /^(?:please\s+)?(?:see|read|review|visit|explore|download|register|join|talk|speak|contact|ask|reply|call|schedule|request|check|watch|reach out|find out more)\b/i;
 const MAX_FRAMING_WORDS = 14;
 
 const wordsOf = (text: string) => text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+/** A call to action that never says what to act on: "See", "Please see", "Review the". */
+const isFragment = (text: string) => {
+  const object = wordsOf(text.replace(CALL_TO_ACTION, ""));
+  return object.length === 0 || PLAIN_WORDS.has(object.at(-1) ?? "");
+};
 
 /**
  * What an agent may put in its own words next to cited claims: a greeting or a short call to
@@ -37,14 +47,21 @@ export function framingShape(text: string, avoid: ReadonlySet<string>): string[]
   for (const sentence of text.split(/(?<=[.!?])\s+/).filter((part) => part.trim())) {
     const trimmed = sentence.trim();
     const words = wordsOf(trimmed);
-    const named = words.filter((word) => avoid.has(word));
-    if (!GREETING.test(trimmed) && !CALL_TO_ACTION.test(trimmed))
+    // Claim topics are slugs such as "cardivance-safety"; their generic words are not names.
+    const named = words.filter((word) => avoid.has(word) && !POINTS_AT.test(word));
+    const action = CALL_TO_ACTION.test(trimmed);
+    if (!GREETING.test(trimmed) && !action)
       problems.push(
         `"${trimmed}" is neither a greeting ("Hello ...") nor a call to action ("See the full prescribing information below."). Your own words may only be one of those; the cited claims say everything else.`,
       );
     else if (words.length > MAX_FRAMING_WORDS)
       problems.push(`"${trimmed}" is too long: keep each sentence to ${MAX_FRAMING_WORDS} words.`);
-    else if (IMPLIES_A_CLAIM.test(trimmed))
+    else if (action && isFragment(trimmed))
+      // A bare verb ("See") or a dangling phrase ("Review the") would read as a broken sentence.
+      problems.push(
+        `"${trimmed}" is not a complete call to action. Say what to look at, as in "See the full prescribing information below."`,
+      );
+    else if (IMPLIES_A_CLAIM.test(trimmed) || (!action && POINTS_AT.test(trimmed)))
       problems.push(
         `"${trimmed}" has wording that could assert something (an outcome, benefit, comparison or reason). Keep greetings and calls to action plain.`,
       );

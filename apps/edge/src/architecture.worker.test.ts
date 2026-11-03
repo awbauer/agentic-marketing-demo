@@ -682,6 +682,34 @@ describe("orchestration", () => {
     await restored.text();
   });
 
+  it("reports a subagent the gateway refuses as policy, not a failure to retry", async () => {
+    const store = new ArchitectureStore(env.APP_DB, "local-evaluator");
+    await store.setLifecycle(
+      "module-authoring",
+      "constrain",
+      "For the test.",
+      new Date().toISOString(),
+    );
+    try {
+      const run = await events(
+        await post("/api/arch/orchestrations", { flowId: "lumera-congress" }),
+      );
+      const authoring = run.filter(
+        (event) => event.type === "delegated" && event.agent === "module-authoring",
+      );
+      expect(authoring).toHaveLength(1);
+      expect(authoring[0]).toMatchObject({ ok: false });
+      expect(authoring[0].error).toMatch(/No policy grants agent module-authoring/);
+    } finally {
+      await store.setLifecycle(
+        "module-authoring",
+        "monitor",
+        "Restored.",
+        new Date().toISOString(),
+      );
+    }
+  });
+
   it("rejects a flow that does not exist", async () => {
     expect((await post("/api/arch/orchestrations", { flowId: "nope" })).status).toBe(404);
   });

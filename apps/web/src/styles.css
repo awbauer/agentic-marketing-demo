@@ -26,6 +26,22 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+/* Everything that acts on a click shows the pointer; anything disabled says it can't. */
+button,
+a[href],
+summary,
+select,
+label:has(> input[type="checkbox"], > input[type="radio"]),
+[role="button"],
+[role="tab"],
+[role="link"] {
+  cursor: pointer;
+}
+button:disabled,
+select:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
 .topbar {
   height: 72px;
   background: #101b17;
