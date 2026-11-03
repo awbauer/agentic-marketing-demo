@@ -212,9 +212,23 @@ function collectResultText(value: unknown, output: string[] = []): string[] {
   return output;
 }
 
-export function classifyToolResult(value: unknown): "success" | "unavailable" | "error" {
+/**
+ * Whether a tool result is usable. A Salesforce agent answers in words, so its reply is read for
+ * phrases such as "no business units" or "cannot access". The workbench's own tools (the knowledge
+ * graph, the life-sciences systems, campaign context, external services) return data, and data
+ * can quote those words while being a full answer, such as a claim that "is not on the approved
+ * label": theirs counts as unusable only when it says so, as an error or `found: false`.
+ */
+export function classifyToolResult(
+  value: unknown,
+  toolName?: string,
+): "success" | "unavailable" | "error" {
   if (value && typeof value === "object" && (value as { isError?: unknown }).isError === true)
     return "error";
+  if (toolName && toolSystem(toolName) !== "Salesforce") {
+    const data = (value as { structuredContent?: { found?: unknown } } | null)?.structuredContent;
+    return data?.found === false ? "unavailable" : "success";
+  }
   return SEMANTIC_FAILURE_PATTERN.test(collectResultText(value).join(" "))
     ? "unavailable"
     : "success";
@@ -387,7 +401,7 @@ function guardToolResults(
                 upstream: null,
               };
             const upstream = await resolveToolResult(execute(...args));
-            const semanticStatus = classifyToolResult(upstream);
+            const semanticStatus = classifyToolResult(upstream, name);
             // Successful results feed the chat's working set; a listener error never fails the tool.
             if (semanticStatus === "success")
               try {
