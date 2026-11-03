@@ -168,6 +168,30 @@ describe("edge runtime", () => {
     expect(
       classifyToolResult({ isError: false, result: [{ campaignId: "701jV000004GglIQAS" }] }),
     ).toBe("success");
+    // The workbench's own tools return data that may quote failure words while being a full
+    // answer: a claims check saying a claim "is not on the approved label" is evidence, not empty.
+    const claims = {
+      structuredContent: {
+        drug: "Cardivance",
+        found: true,
+        claims: [{ verdict: "Blocked", issues: ["The indication is not found on the label."] }],
+      },
+    };
+    expect(classifyToolResult(claims, "graph_check_clinical_claims")).toBe("success");
+    expect(classifyToolResult(claims)).toBe("unavailable");
+    expect(
+      classifyToolResult({ structuredContent: { found: false } }, "graph_check_clinical_claims"),
+    ).toBe("unavailable");
+    expect(
+      classifyToolResult({ isError: true, content: [] }, "ls_aprimo_search_approved_assets"),
+    ).toBe("error");
+    // A Salesforce agent's reply is still read for its words.
+    expect(
+      classifyToolResult(
+        { structuredContent: { messages: [{ message: "I cannot access the campaign." }] } },
+        "tool_salesforce_northstar-marketing-salesforce_summarize_campaign",
+      ),
+    ).toBe("unavailable");
   });
   it("forces explicit Salesforce campaign requests through the matching governed tool", () => {
     const names = ["salesforce_summarize_campaign", "salesforce_check_campaign_readiness"];

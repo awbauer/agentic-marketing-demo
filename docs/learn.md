@@ -441,6 +441,8 @@ Around the loop, the orchestrator also handles the events the model must not: it
 
 **Every tool call passes the gateway.** Before a tool the model chose actually runs, the Worker asks the agentic gateway whether the orchestrator may call `tool:<name>`. The decision, its policy and the caller are recorded, and a denial comes back to the model as a tool error instead of a result. See *The agentic gateway*.
 
+**Is a result usable?** A tool can answer and still have nothing to offer. A Salesforce agent answers in words, so its reply is read for phrases such as "no business units" or "cannot access"; the model is then told the result was empty and not to fill the gap. The workbench's own tools (the knowledge graph, the life-sciences systems, campaign context, external services) return data, and data can quote those words while being a full answer: a claims check that says a claim "is not on the approved label" is evidence. Theirs counts as empty only when it says so, as an error or `found: false`.
+
 **The header's brand and role.** Each chat message carries the brand and role chosen in the header. The server withholds other brands' tools, answers a request about another brand with a note to switch rather than answering from memory, and tells the model the role so it leads with what that person decides. The model is told what each brand sells (Lumera's Cardivance, Glucora and Neurelva; Harborstone's Sweep Account; Coastline's chowder), so a request that names a product is read as its brand's, not as another brand. The brand also decides which claims checks a new draft starts with. The role changes emphasis only; it never changes what Salesforce allows or what needs confirmation.
 
 **In this demo**
