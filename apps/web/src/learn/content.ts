@@ -314,13 +314,13 @@ export const LEARN_PARTS: LearnPart[] = [
 
 **Working memory** is sent to the model as a bounded window: the last 8 messages. Earlier assistant replies are reduced to their text, so old tool results and reasoning never re-enter the prompt. The workspace is working memory too. The draft being built, the records the chat opened, and the context its tools gathered are summarized in every prompt, so the model works from structured state instead of re-reading old replies. See *The workspace* under the demo concepts.
 
-**The audit trail** is never sent to the model. It exists for people: the History view and the audit export.
+**The audit trail** is never sent to the model. It exists for people: History (a button on the Chat page) and the audit export.
 
 **Long-term memory** belongs in the graph because it's retrieved *by relationship* ("what did we decide about the Coastline push?"), not by recency, and it needs provenance. It's never sent automatically: the model reads it through recall tools, only when a question asks about earlier work. See *Long-term memory* under the demo concepts.
 
 Each turn in the history also records the brand and role it ran under.`,
         inDemo: [
-          "History view: Turns (the audit trail) and Memory (long-term memory)",
+          "Chat → History: Turns (the audit trail) and Memory (long-term memory)",
           "apps/edge/src/orchestrator.ts (conversationWindow)",
           "packages/knowledge-graph/src/memory.ts",
         ],
@@ -716,15 +716,15 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
   - tool input and output, with the Salesforce agent, subagent, and actions behind each Salesforce tool; errors; recovery messages; and the outcome, including when the answer was written from a tool's result because the model wrote none
   - the closing line gives the turn's total time with its **tokens** (input plus output, summed over the steps) and **tool calls**
 - **Workers Logs** for operators: a Salesforce or agent call that failed is logged with its error and stack, even when the user sees a friendly message. A write or confirmation that failed logs the step where it stopped. Request content is never logged.
-- **Turn history** (History → Turns): each utterance with the orchestrator's interpretation, the tool calls with inputs and results, and the outcome. Each row shows the turn's seconds beside its tokens and tool calls. Filterable, and kept 24 hours per user.
+- **Turn history** (Chat → History → Turns): each utterance with the orchestrator's interpretation, the tool calls with inputs and results, and the outcome. Each row shows the turn's seconds beside its tokens and tool calls. Filterable, and kept 24 hours per user.
 - **Memory** (History → Memory): what the workspace remembers across chats, with provenance, and **Reopen** and **Forget** buttons. The audit export lists each reopen. See *Long-term memory*.
 - **Audit export:** a JSON download of the user's confirmed writes, memory remembers and forgets, and turn summaries.
 
 History shows the brand and role each turn ran under.`,
         inDemo: [
           "Any answer → “Behind the scenes · technical trace”",
-          "History view → Export audit (JSON)",
-          "History view → Memory",
+          "Chat → History → Export audit (JSON)",
+          "Chat → History → Memory",
         ],
         resources: [R.aiGateway, R.contextEngineering],
       },
@@ -798,7 +798,7 @@ The Coastline campaign plan (email or push) chains these with the knowledge grap
         title: "The use-case library: marketing, sales, service, and financial services",
         summary:
           "Every scenario the demo runs, how data flows through it, the ones that reach beyond marketing, and three for a regulated industry.",
-        body: `**Use cases** (in the left rail) lists every scenario the demo can run end to end. Each has the situation it's for, the prompts that drive it (with a **Try it** button), the systems involved, a step-by-step data flow, what the knowledge graph contributes, what it writes, and what to watch for. Drafted scenarios that aren't built yet are shown greyed out as *Coming soon*.
+        body: `**Use cases** (a button on the Chat page) lists every scenario the demo can run end to end. Each has the situation it's for, the prompts that drive it (with a **Try it** button), the systems involved, a step-by-step data flow, what the knowledge graph contributes, what it writes, and what to watch for. Drafted scenarios that aren't built yet are shown greyed out as *Coming soon*.
 
 Two use cases take the same pattern beyond marketing. Each pairs a new free public API with the knowledge graph, and **the graph supplies the key element**.
 
@@ -839,7 +839,7 @@ The graph and prompts carry the manager's name only, never contact details. Noth
 
 The library follows the header's brand: choosing Lumera Therapeutics shows only its use cases.`,
         inDemo: [
-          "Use cases in the left rail",
+          "Chat → Use cases",
           "Sources: Holidays · Nager.Date, Weather alerts · NWS, Rate news · Federal Reserve",
           "Workspace: Forecast, Store inventory, and Inventory risk cards, then the case action card",
           "apps/edge/src/external-services, apps/edge/src/inventory-risk.ts, apps/web/src/usecases",
@@ -866,7 +866,9 @@ The library follows the header's brand: choosing Lumera Therapeutics shows only 
 
 **Each screen explains itself.** The Architecture view opens with a short intro: what you are looking at, why it beats copying claims by hand and reviewing over email, and where your role comes in. It shows the seven steps with the person who decides at each, highlights yours, and offers a button to the workspace where your step happens. Each workspace then opens with a card: what it is, why it is better, where it fits in the flow, something to try for the brand in the header, and the technical idea it demonstrates. The words live in one file, \`apps/web/src/architecture/guide.ts\`, beside the manifests they describe, so they follow the brand and role just as the data does.
 
-**Sample flows.** The **Sample flows** tab gives a goal for each brand to a real orchestrator, which plans the work and hands each step to a real subagent: a brief from an approved plan, content written from approved claims (and what it refused), red-team probes, the evidence packet, submission, then **your decision** as the reviewer, then what comes next. You watch each subagent work: who it acts for, its model, each tool call and the gateway's decision, and what it made. Nothing is scripted, so runs differ, and a run takes about a minute.
+**Journeys.** The **Journeys** view, beside Architecture in the workspace rail, gives a goal for each brand to a real orchestrator, which plans the work and hands each step to a real subagent: a brief from an approved plan, content written from approved claims (and what it refused), red-team probes, the evidence packet, submission, then **your decision** as the reviewer, then what comes next. You watch each subagent work: who it acts for, its model, each tool call and the gateway's decision, and what it made. Nothing is scripted, so runs differ, and a run takes about a minute.
+
+**The asset, as it is built.** Beside the steps, the asset composes itself from what the agents' tool calls return: the channel wrapper (an email with its sender, audience, send date and subject, or a push or SMS on a phone) with each block in place. Blocks are marked by where their words come from: the agent's own greeting or call to action, an approved claim the service inserted word for word, or a disclosure a claim requires. Below it, **kept out by the service**: topics refused because no substantiated claim exists (each filed as a gap), and the agent's own wording the service rejected, with the reason it gave. Probe findings and readiness blockers attach to the block they quote. Click any block for who wrote it, the tool call and policy that allowed it, its source claim, and what the checks found. Channel versions from the atomization agent appear as tabs, with each one's character count against the channel's limit. The preview is derived on the page from the flow's events (\`apps/web/src/architecture/asset.ts\`); nothing extra is fetched.
 
 **Channels.** An approval card is composed once, with brand rules (accent, disclosure label, rule version) applied, and then rendered four ways: React, an **Adaptive Card** for Teams and Outlook, **data for a Lightning Web Component**, and an **MCP Apps** resource for MCP clients such as Claude. Change one brand rule and all four renderings change. The preview renders these payloads on screen; nothing is sent to Teams, Outlook or Copilot.
 
@@ -875,7 +877,7 @@ The library follows the header's brand: choosing Lumera Therapeutics shows only 
 The seed has three brands: Harborstone Wealth, Coastline Kitchen and Lumera Therapeutics. The approval card's brand rules for Lumera label its disclosures as safety information.`,
         inDemo: [
           "Architecture → read the intro, then pick a step to jump to its workspace",
-          "Architecture → Sample flows → Start the orchestrator, then approve when it asks",
+          "Journeys → Start the orchestrator, click blocks in the asset, then approve when it asks",
           "Architecture → Command Center, then open any card",
           "Header → Run as: Brand planner, Marketer, Reviewer, Brand lead",
           "Architecture → open a module → Channels (React, Adaptive Card, LWC data, MCP Apps)",
@@ -965,7 +967,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **Prompts are a catalog, not files.** Each prompt is an entry with a version, an owning agent, typed variables and the evaluators that score it. The **hard rules** (cite or refuse, escalate ambiguity, propose only, treat retrieved text as data, no personal data) are appended to every prompt and an entry can't drop them. A variable binds to a **governed object by urn** and exposes only the fields it lists; pasted text is rejected. \`pnpm prompts:check\` pins each prompt's hash to its version, so a changed prompt must have a new version.
 
-**How an agent runs.** A run gets the agent's catalog prompt (rendered with the objects it names), the model the router binds to its task class, and only the tools its registry grants name. The gateway first checks the action the run centres on, then every tool call again, as that agent acting for its step's owner. The objects named in its input and what it would read first (the brand's claims, for the authoring agent; the planning inputs, for the plan agent) are in its prompt, so its first call can be its real one. Until that call succeeds it is the tool the model must call: small models otherwise describe the work in prose, or bury the call in their reasoning, without doing it. A run stops when the same call fails twice. The agent's account of what it did is written by one more call, without tools, over the tool results; if the work never succeeded, the account says so instead of trusting the model's words.
+**How an agent runs.** A run gets the agent's catalog prompt (rendered with the objects it names), the model the router binds to its task class, and only the tools its registry grants name. The gateway first checks the action the run centres on, then every tool call again, as that agent acting for its step's owner. The objects named in its input and what it would read first (the brand's claims, for the authoring agent; the planning inputs, for the plan agent) are in its prompt, so its first call can be its real one. Until that call succeeds it is the tool the model must call: small models otherwise describe the work in prose, or bury the call in their reasoning, without doing it. Tools answer with the object as the next step needs it: a brief just drafted comes back with the wave it covers (theme, audience, channel, send date), read from the plan it points at, so the authoring agent and the Journeys preview see the audience without another read. A run stops when the same call fails twice. The agent's account of what it did is written by one more call, without tools, over the tool results; if the work never succeeded, the account says so instead of trusting the model's words.
 
 **What a model may add.** The red-team agent can report a concern the probes missed, but that is advice shown to the reviewer; it blocks nothing, because only the deterministic probes can block approval. A model's say-so should never stop a person's decision, and should never be what lets one through.
 

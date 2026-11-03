@@ -31,7 +31,11 @@ export type DiagramId =
 
 export type TryIt =
   | { kind: "prompt"; label: string; prompt: string }
-  | { kind: "view"; label: string; view: "graph" | "history" | "evaluations" | "architecture" };
+  | {
+      kind: "view";
+      label: string;
+      view: "graph" | "history" | "evaluations" | "journeys" | "architecture";
+    };
 
 export type SectionLesson = { diagram: DiagramId; keyIdea: string; tryIt?: TryIt[] };
 

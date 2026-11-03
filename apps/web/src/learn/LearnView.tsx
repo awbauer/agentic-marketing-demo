@@ -13,7 +13,7 @@ import { PART_LESSONS, type PartLesson, SECTION_LESSONS, type TryIt } from "./le
 import { LEARN_REFERENCE, REFERENCE_KINDS, type ReferenceKind } from "./reference";
 import "./learn.css";
 
-type View = "graph" | "history" | "evaluations" | "architecture";
+type View = "graph" | "history" | "evaluations" | "journeys" | "architecture";
 const READ_KEY = "northstar.learn.read.v1";
 
 // Reading progress is a per-viewer convenience; it must work when storage is unavailable.
