@@ -845,6 +845,7 @@ export class MarketingOrchestrator extends AIChatAgent<
       savedBrief?.objectType === "Brief" ? savedBrief.recordId : undefined,
     );
     const planContext = {
+      brand: this.scope.brand,
       hasFocus: Boolean(this.state.workingSet.focus),
       focusKind: this.state.workingSet.focus?.kind,
       briefSaved: this.state.workingSet.focus?.saved?.objectType === "Brief",

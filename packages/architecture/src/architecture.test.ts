@@ -1207,6 +1207,11 @@ describe("the brand and role chosen in the header", () => {
     const prompt = scopePrompt({ brand: "Lumera Therapeutics", persona: "compliance" });
     expect(prompt).toMatch(/working on Lumera Therapeutics/);
     expect(prompt).toMatch(/switch the brand in the header/);
+    // A product of the selected brand is that brand, not another one.
+    expect(prompt).toMatch(
+      /Lumera Therapeutics, which sells Cardivance, Glucora and Neurelva; a request that names any of these is about Lumera Therapeutics/,
+    );
+    expect(prompt).toMatch(/another brand \(Harborstone Wealth, which sells/);
     expect(prompt).toMatch(/running as compliance/);
     expect(prompt).toMatch(/does not change what Salesforce allows/);
     expect(scopePrompt({ brand: "all", persona: "marketer" })).toMatch(/No single brand/);
