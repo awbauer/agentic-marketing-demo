@@ -954,3 +954,173 @@
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Sample flows */
+.arch-flows {
+  display: grid;
+  gap: 12px;
+}
+.arch-flow-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.arch-flow-picker legend {
+  margin-bottom: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.arch-flow-picker button {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.arch-flow-picker button[aria-pressed="true"] {
+  border-color: var(--forest);
+  box-shadow: inset 0 0 0 1px var(--forest);
+}
+.arch-flow-picker small,
+.arch-flow-picker span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.arch-flow-runner {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.arch-flow-runner > header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+.arch-flow-runner h3 {
+  margin: 2px 0 4px;
+  font-size: 18px;
+}
+.arch-flow-situation {
+  max-width: 760px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.arch-flow-actions {
+  display: flex;
+  gap: 8px;
+}
+.arch-flow-steps {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.arch-flow-step {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.arch-flow-step.finished {
+  background: #fff;
+}
+.arch-flow-step p {
+  margin: 6px 0 0;
+}
+.arch-flow-step-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+.arch-flow-step-head h4 {
+  margin: 0;
+  font-size: 14px;
+}
+.arch-flow-step-number {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-weight: 600;
+  font-size: 12px;
+}
+.arch-flow-step.finished .arch-flow-step-number {
+  border-color: var(--forest);
+  background: var(--forest);
+  color: #fff;
+}
+.arch-flow-role {
+  color: var(--muted);
+  font-size: 12px;
+}
+.arch-flow-role strong {
+  color: var(--forest);
+}
+.arch-flow-why span,
+.arch-flow-where {
+  color: var(--muted);
+}
+.arch-flow-why span {
+  font-weight: 600;
+  margin-right: 4px;
+}
+.arch-flow-where {
+  font-size: 12px;
+}
+.arch-flow-outcome {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 4px solid var(--forest);
+  background: color-mix(in srgb, var(--lime) 30%, #fff);
+}
+.arch-flow-outcome.stopped {
+  border-left-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 14%, #fff);
+}
+.arch-flow-outcome p {
+  margin: 0;
+  font-weight: 500;
+}
+.arch-flow-outcome ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.arch-flow-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-weight: 400;
+}
+@media (max-width: 760px) {
+  .arch-flow-step-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .arch-flow-step-head > button {
+    grid-column: 1 / -1;
+  }
+}
+.arch-flow-step.finished.stopped .arch-flow-step-number {
+  border-color: var(--amber);
+  background: var(--amber);
+}

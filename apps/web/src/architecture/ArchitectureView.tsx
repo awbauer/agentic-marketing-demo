@@ -8,6 +8,7 @@ import { EvaluationsPanel, ModelsPanel, PromptsPanel } from "./CatalogsPanel";
 import { PERSONA_FLOW, TAB_GUIDES, TAB_ORDER, type Tab } from "./guide";
 import { ObjectInspector } from "./ObjectInspector";
 import { ArchitectureIntro, TabGuideCard, useIntro } from "./Orientation";
+import { SampleFlows } from "./SampleFlows";
 import { ErrorNote, Panel } from "./Shared";
 import { TrustPanel } from "./TrustPanel";
 import { WorkspaceRenderer } from "./WorkspaceRenderer";
@@ -246,6 +247,9 @@ export function ArchitectureView({ onClose }: { onClose: () => void }) {
       <div className={`arch-body ${open ? "with-inspector" : ""}`}>
         <div className="arch-main" role="tabpanel" aria-label={TAB_GUIDES[tab].label}>
           <TabGuideCard tab={tab} scope={scope} />
+          {tab === "flows" && (
+            <SampleFlows scope={scope} onOpen={setOpen} onGo={setTab} onChanged={changed} />
+          )}
           {tab === "command-center" &&
             workspace(
               "command-center",

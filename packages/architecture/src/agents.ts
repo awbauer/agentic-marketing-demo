@@ -201,13 +201,15 @@ export function draftBriefFromPlan(
   planUrn: string,
   waveId: string,
   actor = "agent:brief",
+  /** Makes the brief, and the modules and gaps named after it, new for each run of a sample flow. */
+  runTag?: string,
 ) {
   const plan = getObject(world, planUrn);
   if (plan?.kind !== "content-plan") throw new Error(`${planUrn} is not a content plan.`);
   const wave = attributesOf<PlanAttributes>(plan).waves.find((item) => item.id === waveId);
   if (!wave) throw new Error(`${planUrn} has no wave ${waveId}.`);
   const brief = created(world, actor, {
-    id: `${slug(planUrn.split(":").at(-1) ?? "plan")}-${waveId}`,
+    id: `${slug(planUrn.split(":").at(-1) ?? "plan")}-${waveId}${runTag ? `-${slug(runTag)}` : ""}`,
     kind: "brief",
     title: `Brief: ${wave.theme}, wave ${waveId}`,
     brand: plan.brand,

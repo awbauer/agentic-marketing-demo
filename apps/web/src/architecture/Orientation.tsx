@@ -92,7 +92,11 @@ export function ArchitectureIntro({
             Start in {TAB_GUIDES[flow.start].label}
           </button>
           <p className="arch-note">
-            Change the role in the header to see the same work from another seat.
+            Change the role in the header to see the same work from another seat, or{" "}
+            <button type="button" className="arch-link" onClick={() => onGo("flows")}>
+              watch a sample flow
+            </button>{" "}
+            run from brief to approval.
           </p>
         </div>
         <div className="arch-intro-compare">

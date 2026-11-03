@@ -5,6 +5,7 @@ import { type Brand, type Persona, STAGE_OWNERS, type Stage } from "@northstar/a
 // brand in the header. The technical panels stay as they are; this sits on top of them.
 
 export type Tab =
+  | "flows"
   | "command-center"
   | "brief-builder"
   | "module-library"
@@ -31,6 +32,23 @@ export type TabGuide = {
 };
 
 export const TAB_GUIDES: Record<Tab, TabGuide> = {
+  flows: {
+    label: "Sample flows",
+    group: "work",
+    what: "A few real pieces of work, run step by step from brief to approval, with each step played by the person or agent who would do it.",
+    why: "Instead of reading how the pieces fit, you watch them hand off: what each agent did, what it refused, what a person decided, and where you would do it day to day.",
+    tryIt: {
+      all: "Pick a flow and choose “Run the whole flow”, or run it one step at a time and open what each step creates.",
+      "Harborstone Wealth":
+        "Run the sweep-rate flow: wire fees are refused for lack of an approved claim, and the old fee-waiver email is stopped because its evidence expired.",
+      "Coastline Kitchen":
+        "Run the cold-front flow: a what-if on the send date, a push written from two approved claims, and email and SMS versions that keep both whole.",
+      "Lumera Therapeutics":
+        "Run the congress flow: the superiority claim is refused, the boxed warning and safety information are attached, and MLR approval is the one step no agent can take.",
+    },
+    technical:
+      "Each step calls the same /api/arch endpoints as the workspaces, through the gateway, with that step’s persona. A run tag keeps each run’s brief and module new, so a flow can be run again.",
+  },
   "command-center": {
     label: "Command Center",
     group: "work",
