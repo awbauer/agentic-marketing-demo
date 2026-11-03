@@ -1,40 +1,22 @@
-import { type Brand, PERSONA_LABELS, type Persona } from "@northstar/architecture";
+import { type Brand, PERSONA_LABELS } from "@northstar/architecture";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useScope } from "../scope";
 import { AgentForm, FORMS } from "./AgentConsole";
 import { AgentsPanel } from "./AgentsPanel";
 import { ArchApiError, archFetch, type Scope, shortUrn, useArch } from "./api";
 import { EvaluationsPanel, ModelsPanel, PromptsPanel } from "./CatalogsPanel";
+import { PERSONA_FLOW, TAB_GUIDES, TAB_ORDER, type Tab } from "./guide";
 import { ObjectInspector } from "./ObjectInspector";
+import { ArchitectureIntro, TabGuideCard, useIntro } from "./Orientation";
 import { ErrorNote, Panel } from "./Shared";
 import { TrustPanel } from "./TrustPanel";
 import { WorkspaceRenderer } from "./WorkspaceRenderer";
 import "./architecture.css";
 
-const TABS = [
-  { id: "command-center", label: "Command Center" },
-  { id: "brief-builder", label: "Brief Builder" },
-  { id: "module-library", label: "Module Library" },
-  { id: "approvals", label: "Approvals" },
-  { id: "performance", label: "Performance" },
-  { id: "agents", label: "Agents" },
-  { id: "catalogs", label: "Prompts & models" },
-  { id: "evaluations", label: "Evaluations" },
-  { id: "trust", label: "Trust" },
+const GROUPS = [
+  { id: "work", label: "Do the work" },
+  { id: "hood", label: "Under the hood" },
 ] as const;
-type Tab = (typeof TABS)[number]["id"];
-
-/** The workspace each role opens to. */
-const PERSONA_HOME: Record<Persona, Tab> = {
-  "brand-planner": "brief-builder",
-  marketer: "command-center",
-  "content-lab": "module-library",
-  compliance: "approvals",
-  reviewer: "approvals",
-  senior: "approvals",
-  "brand-lead": "performance",
-  admin: "agents",
-};
 
 type Proposals = {
   result: Array<{
@@ -183,7 +165,7 @@ function Search({ scope, onOpen }: { scope: Scope; onOpen: (urn: string) => void
 export function ArchitectureView({ onClose }: { onClose: () => void }) {
   // The brand and role come from the header, so this view always agrees with the rest of the app.
   const { scope } = useScope();
-  const [tab, setTab] = useState<Tab>(PERSONA_HOME[scope.persona]);
+  const [tab, setTab] = useState<Tab>(PERSONA_FLOW[scope.persona].start);
   const [open, setOpen] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   // Running as a different role opens that role's workspace.
@@ -191,8 +173,9 @@ export function ArchitectureView({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (lastPersona.current === scope.persona) return;
     lastPersona.current = scope.persona;
-    setTab(PERSONA_HOME[scope.persona]);
+    setTab(PERSONA_FLOW[scope.persona].start);
   }, [scope.persona]);
+  const intro = useIntro();
   const changed = () => setRefreshKey((value) => value + 1);
   const forms = (...names: Array<keyof typeof FORMS>): ReactNode =>
     names.map((name) => {
@@ -213,33 +196,56 @@ export function ArchitectureView({ onClose }: { onClose: () => void }) {
     <section className="evaluations-view arch-view" aria-labelledby="arch-title">
       <div className="section-header">
         <div>
-          <p className="kicker">Architecture</p>
-          <h2 id="arch-title">One model, workspaces on top</h2>
+          <p className="kicker">Architecture · one model, workspaces on top</p>
+          <h2 id="arch-title">From plan to proof</h2>
         </div>
-        <button type="button" className="text-button" onClick={onClose}>
-          Back to workspace
-        </button>
+        <div className="arch-header-actions">
+          {!intro.open && (
+            <button type="button" className="text-button" onClick={() => intro.setOpen(true)}>
+              What is this?
+            </button>
+          )}
+          <button type="button" className="text-button" onClick={onClose}>
+            Back to workspace
+          </button>
+        </div>
       </div>
+      {intro.open && (
+        <ArchitectureIntro scope={scope} onGo={setTab} onClose={() => intro.setOpen(false)} />
+      )}
       <p className="arch-scope" role="status">
         Showing <strong>{scope.brand === "all" ? "all brands" : scope.brand}</strong> as{" "}
         <strong>{PERSONA_LABELS[scope.persona]}</strong>. Change the brand or role in the header;
         the decisions you may take follow the role, and the gateway enforces both on the server.
       </p>
-      <div role="tablist" aria-label="Architecture workspaces" className="arch-tabs">
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.id}
-            onClick={() => setTab(item.id)}
+      <div className="arch-tabgroups">
+        {GROUPS.map((group) => (
+          <div
+            key={group.id}
+            role="tablist"
+            aria-label={group.label}
+            className={`arch-tabs arch-tabs-${group.id}`}
           >
-            {item.label}
-          </button>
+            <span className="arch-tabgroup-label" aria-hidden="true">
+              {group.label}
+            </span>
+            {TAB_ORDER.filter((id) => TAB_GUIDES[id].group === group.id).map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                onClick={() => setTab(id)}
+              >
+                {TAB_GUIDES[id].label}
+              </button>
+            ))}
+          </div>
         ))}
       </div>
       <div className={`arch-body ${open ? "with-inspector" : ""}`}>
-        <div className="arch-main" role="tabpanel">
+        <div className="arch-main" role="tabpanel" aria-label={TAB_GUIDES[tab].label}>
+          <TabGuideCard tab={tab} scope={scope} />
           {tab === "command-center" &&
             workspace(
               "command-center",

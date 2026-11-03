@@ -118,6 +118,44 @@ describe("architecture view", () => {
     expect(screen.getByRole("status").textContent).toContain("MLR-style reviewer");
   });
 
+  it("says what the section is, why it is better, and where the viewer's role comes in", async () => {
+    renderView();
+    await screen.findByText("The lifecycle");
+    expect(
+      screen.getByRole("heading", { name: /a brand gets content from plan to proof/ }),
+    ).toBeTruthy();
+    expect(screen.getByText(/Where you come in, as Marketer/)).toBeTruthy();
+    // The Command Center has its own brand field, so change the role first.
+    fireEvent.change(screen.getByLabelText("Run as"), { target: { value: "compliance" } });
+    fireEvent.change(screen.getByLabelText("Brand"), { target: { value: "Lumera Therapeutics" } });
+    expect(
+      await screen.findByRole("heading", { name: /Lumera Therapeutics gets content/ }),
+    ).toBeTruthy();
+    expect(screen.getByText(/You own the evidence/)).toBeTruthy();
+    expect(screen.getByText(/MLR review runs on PDFs/)).toBeTruthy();
+    // The role's step is marked, and the view opens on the workspace where that step happens.
+    const steps = screen.getByRole("list", { name: /who decides at each/ });
+    expect(
+      within(steps).getByRole("button", { name: /Substantiate.*You decide here/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Approvals" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    const guide = screen.getByRole("complementary", { name: "About Approvals" });
+    expect(guide.textContent).toContain("Cardivance versus every ARB");
+    expect(guide.textContent).toContain("Under the hood");
+  });
+
+  it("hides the intro for this viewer and brings it back on request", async () => {
+    renderView();
+    await screen.findByText("The lifecycle");
+    fireEvent.click(screen.getByRole("button", { name: "Hide intro" }));
+    expect(screen.queryByText(/What you’re looking at/)).toBeNull();
+    expect(window.localStorage.getItem("northstar.architecture.intro")).toBe("closed");
+    fireEvent.click(screen.getByRole("button", { name: "What is this?" }));
+    expect(screen.getByText(/What you’re looking at/)).toBeTruthy();
+  });
+
   it("explains a gateway denial instead of failing silently", async () => {
     renderView();
     await screen.findByText("The lifecycle");

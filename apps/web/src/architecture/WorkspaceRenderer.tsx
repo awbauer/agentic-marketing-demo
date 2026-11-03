@@ -8,6 +8,8 @@ type Resolved = {
   tiles: ResolvedTile[];
 };
 
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
 function RowButton({ row, onOpen }: { row: Row; onOpen: (urn: string) => void }) {
   return (
     <button type="button" className="arch-row" onClick={() => onOpen(row.urn)}>
@@ -127,8 +129,8 @@ export function WorkspaceRenderer({
       <p className="arch-lede">
         {data.manifest.summary}{" "}
         <small>
-          Composed from {data.manifest.agents.length} agents and {data.manifest.services.length}{" "}
-          services.
+          Composed from {plural(data.manifest.agents.length, "agent")} and{" "}
+          {plural(data.manifest.services.length, "service")}.
         </small>
       </p>
       {data.tiles.map((tile) => (
