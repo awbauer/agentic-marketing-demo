@@ -229,7 +229,7 @@ export function App() {
     disabledTools: [],
   });
   const [view, setView] = useState<
-    | "overview"
+    | "chat"
     | "history"
     | "evaluations"
     | "learn"
@@ -237,7 +237,9 @@ export function App() {
     | "usecases"
     | "journeys"
     | "architecture"
-  >("overview");
+  >("chat");
+  // History and the use-case library open from the chat page, so the rail shows them as Chat.
+  const chatViews: ReadonlyArray<typeof view> = ["chat", "history", "usecases"];
   const confirmationRef = useRef<HTMLElement>(null);
   const connectorStatusLoaded = useRef(false);
   /** The confirmation the server holds, from its latest state: a failed write may have spent it. */
@@ -651,19 +653,11 @@ export function App() {
             <p className="nav-label">Workspace</p>
             <button
               type="button"
-              className={`nav-item ${view === "overview" ? "active" : ""}`}
-              aria-current={view === "overview" ? "page" : undefined}
-              onClick={() => setView("overview")}
+              className={`nav-item ${chatViews.includes(view) ? "active" : ""}`}
+              aria-current={chatViews.includes(view) ? "page" : undefined}
+              onClick={() => setView("chat")}
             >
-              <span>◆</span>Overview
-            </button>
-            <button
-              type="button"
-              className={`nav-item ${view === "history" ? "active" : ""}`}
-              aria-current={view === "history" ? "page" : undefined}
-              onClick={() => setView("history")}
-            >
-              <span>≡</span>History
+              <span>◆</span>Chat
             </button>
             <button
               type="button"
@@ -688,14 +682,6 @@ export function App() {
               onClick={() => setView("graph")}
             >
               <span>⋈</span>Graph
-            </button>
-            <button
-              type="button"
-              className={`nav-item ${view === "usecases" ? "active" : ""}`}
-              aria-current={view === "usecases" ? "page" : undefined}
-              onClick={() => setView("usecases")}
-            >
-              <span>▤</span>Use cases
             </button>
             <button
               type="button"
@@ -836,49 +822,49 @@ export function App() {
             <small>Fictional sample data</small>
           </div>
         </nav>
-        {view === "evaluations" && <EvaluationView onClose={() => setView("overview")} />}
+        {view === "evaluations" && <EvaluationView onClose={() => setView("chat")} />}
         {view === "learn" && (
           <LearnView
-            onClose={() => setView("overview")}
+            onClose={() => setView("chat")}
             onTryPrompt={(prompt) => {
               setInput(prompt);
-              setView("overview");
+              setView("chat");
             }}
             onOpenView={setView}
           />
         )}
-        {view === "graph" && <GraphView onClose={() => setView("overview")} />}
+        {view === "graph" && <GraphView onClose={() => setView("chat")} />}
         {view === "journeys" && (
           <JourneysView
-            onClose={() => setView("overview")}
+            onClose={() => setView("chat")}
             onOpenArchitecture={() => setView("architecture")}
           />
         )}
         {view === "architecture" && (
           <ArchitectureView
-            onClose={() => setView("overview")}
+            onClose={() => setView("chat")}
             onOpenJourneys={() => setView("journeys")}
           />
         )}
         {view === "usecases" && (
           <UseCasesView
-            onClose={() => setView("overview")}
+            onClose={() => setView("chat")}
             onTryPrompt={(prompt) => {
               setInput(prompt);
-              setView("overview");
+              setView("chat");
             }}
           />
         )}
         {view === "history" && (
           <HistoryView
             refreshKey={busy ? -1 : messages.length}
-            onClose={() => setView("overview")}
+            onClose={() => setView("chat")}
             focusTitle={
               state.workingSet.focus ? currentFocusVersion(state.workingSet.focus).title : undefined
             }
           />
         )}
-        <section className="conversation" aria-labelledby="chat-title" hidden={view !== "overview"}>
+        <section className="conversation" aria-labelledby="chat-title" hidden={view !== "chat"}>
           <div className="section-header">
             <div>
               <p className="kicker">Orchestrator</p>
@@ -888,11 +874,7 @@ export function App() {
               <button type="button" className="text-button" onClick={() => startNewChat()}>
                 New chat
               </button>
-              <button
-                type="button"
-                className="text-button compact-nav"
-                onClick={() => setView("history")}
-              >
+              <button type="button" className="text-button" onClick={() => setView("history")}>
                 History
               </button>
               <button
@@ -1274,7 +1256,7 @@ export function App() {
             </div>
           </form>
         </section>
-        <aside className="insights" aria-labelledby="insights-title" hidden={view !== "overview"}>
+        <aside className="insights" aria-labelledby="insights-title" hidden={view !== "chat"}>
           <div className="section-header">
             <div>
               <p className="kicker">This chat</p>

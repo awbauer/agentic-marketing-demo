@@ -127,7 +127,7 @@ flowchart TB
 
 **Working memory** is sent to the model as a bounded window: the last 8 messages. Earlier assistant replies are reduced to their text, so old tool results and reasoning never re-enter the prompt. The workspace is working memory too. The draft being built, the records the chat opened, and the context its tools gathered are summarized in every prompt, so the model works from structured state instead of re-reading old replies. See *The workspace* under the demo concepts.
 
-**The audit trail** is never sent to the model. It exists for people: the History view and the audit export.
+**The audit trail** is never sent to the model. It exists for people: History (a button on the Chat page) and the audit export.
 
 **Long-term memory** belongs in the graph because it's retrieved *by relationship* ("what did we decide about the Coastline push?"), not by recency, and it needs provenance. It's never sent automatically: the model reads it through recall tools, only when a question asks about earlier work. See *Long-term memory* under the demo concepts.
 
@@ -139,7 +139,7 @@ Each turn in the history also records the brand and role it ran under.
 
 **In this demo**
 
-- History view: Turns (the audit trail) and Memory (long-term memory)
+- Chat → History: Turns (the audit trail) and Memory (long-term memory)
 - apps/edge/src/orchestrator.ts (conversationWindow)
 - packages/knowledge-graph/src/memory.ts
 
@@ -1053,7 +1053,7 @@ flowchart LR
   - tool input and output, with the Salesforce agent, subagent, and actions behind each Salesforce tool; errors; recovery messages; and the outcome, including when the answer was written from a tool's result because the model wrote none
   - the closing line gives the turn's total time with its **tokens** (input plus output, summed over the steps) and **tool calls**
 - **Workers Logs** for operators: a Salesforce or agent call that failed is logged with its error and stack, even when the user sees a friendly message. A write or confirmation that failed logs the step where it stopped. Request content is never logged.
-- **Turn history** (History → Turns): each utterance with the orchestrator's interpretation, the tool calls with inputs and results, and the outcome. Each row shows the turn's seconds beside its tokens and tool calls. Filterable, and kept 24 hours per user.
+- **Turn history** (Chat → History → Turns): each utterance with the orchestrator's interpretation, the tool calls with inputs and results, and the outcome. Each row shows the turn's seconds beside its tokens and tool calls. Filterable, and kept 24 hours per user.
 - **Memory** (History → Memory): what the workspace remembers across chats, with provenance, and **Reopen** and **Forget** buttons. The audit export lists each reopen. See *Long-term memory*.
 - **Audit export:** a JSON download of the user's confirmed writes, memory remembers and forgets, and turn summaries.
 
@@ -1066,8 +1066,8 @@ History shows the brand and role each turn ran under.
 **In this demo**
 
 - Any answer → “Behind the scenes · technical trace”
-- History view → Export audit (JSON)
-- History view → Memory
+- Chat → History → Export audit (JSON)
+- Chat → History → Memory
 
 **Learn more**
 
@@ -1264,7 +1264,7 @@ flowchart TB
 
 > **Key idea:** Each use case pairs a live outside service with the graph: the service says what's happening, and the graph says who or what it affects: people and how to reach them, or dishes and the stock they draw on.
 
-**Use cases** (in the left rail) lists every scenario the demo can run end to end. Each has the situation it's for, the prompts that drive it (with a **Try it** button), the systems involved, a step-by-step data flow, what the knowledge graph contributes, what it writes, and what to watch for. Drafted scenarios that aren't built yet are shown greyed out as *Coming soon*.
+**Use cases** (a button on the Chat page) lists every scenario the demo can run end to end. Each has the situation it's for, the prompts that drive it (with a **Try it** button), the systems involved, a step-by-step data flow, what the knowledge graph contributes, what it writes, and what to watch for. Drafted scenarios that aren't built yet are shown greyed out as *Coming soon*.
 
 Two use cases take the same pattern beyond marketing. Each pairs a new free public API with the knowledge graph, and **the graph supplies the key element**.
 
@@ -1313,7 +1313,7 @@ The library follows the header's brand: choosing Lumera Therapeutics shows only 
 
 **In this demo**
 
-- Use cases in the left rail
+- Chat → Use cases
 - Sources: Holidays · Nager.Date, Weather alerts · NWS, Rate news · Federal Reserve
 - Workspace: Forecast, Store inventory, and Inventory risk cards, then the case action card
 - apps/edge/src/external-services, apps/edge/src/inventory-risk.ts, apps/web/src/usecases
