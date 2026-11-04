@@ -133,8 +133,9 @@ describe("campaign-context MCP", () => {
     for (const [step, name] of names.entries())
       expect(stepToolChoice(plan, step)).toMatchObject({ activeTools: [name] });
     expect(stepToolChoice(plan, 4)).toEqual({ toolChoice: "none", activeTools: [] });
-    // A planned tool that failed is offered once more, then the plan moves on.
-    const [first, second, third] = names as [string, string, string];
+    // A planned tool that failed is offered once more, then the plan moves on. The plan's
+    // earlier read-only tools stay callable, so a second look doesn't fail the turn.
+    const [first, second, third, brief] = names as [string, string, string, string];
     const at = (outcomes: Array<{ tool: string; ok: boolean }>) =>
       stepToolChoice(plan, outcomes.length, 6, outcomes)?.activeTools;
     expect(
@@ -142,21 +143,31 @@ describe("campaign-context MCP", () => {
         { tool: first, ok: true },
         { tool: second, ok: false },
       ]),
-    ).toEqual([second]);
+    ).toEqual([second, first]);
     expect(
       at([
         { tool: first, ok: true },
         { tool: second, ok: false },
         { tool: second, ok: true },
       ]),
-    ).toEqual([third]);
+    ).toEqual([third, first, second]);
     expect(
       at([
         { tool: first, ok: true },
         { tool: second, ok: false },
         { tool: second, ok: false },
       ]),
-    ).toEqual([third]);
+    ).toEqual([third, first, second]);
+    // Another look at an earlier tool leaves the plan where it was: the brief is still next.
+    const ready = [
+      { tool: first, ok: true },
+      { tool: second, ok: true },
+      { tool: third, ok: true },
+    ];
+    expect(at(ready)).toEqual([brief, first, second, third]);
+    expect(at([...ready, { tool: second, ok: true }])).toEqual([brief, first, second, third]);
+    // Marketing Cloud's agent is never offered before its step.
+    expect(at([{ tool: first, ok: true }])?.includes(brief)).toBe(false);
     expect(
       selectToolPlan(
         "Draft an email campaign for Coastline Kitchen, our fast casual restaurant in California, tailored to the current weather, time of day, and our menu",

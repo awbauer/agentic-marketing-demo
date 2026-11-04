@@ -622,7 +622,7 @@ Its **Campaign Refinement** subagent runs **Refine Campaign Preview** to change 
    - A change to other drafts → no tools; the model rewrites the draft, which is saved as the next version
    - The rules need specific signals and **defer to the model** when unsure, because a wrongly forced tool can't be undone within the turn.
 
-If a planned tool fails, for example because it rejected an argument, the plan offers that same tool once more before moving on. Without that, the model's retry would be a call to a tool the next step doesn't offer, which fails the whole turn. After a plan finishes, the model gets **no tools** and must write the answer.
+If a planned tool fails, for example because it rejected an argument, the plan offers that same tool once more before moving on. A forced step also keeps the plan's earlier read-only tools callable, so a model taking a second look at the claims check gets an answer instead of failing the turn; the plan moves on only when the step's own tool runs, and Marketing Cloud's agents are never offered before their step. After a plan finishes, the model gets **no tools** and must write the answer.
 
 **Life-sciences routes.** A request about a target list or prescriber groups goes to \`build_hcp_target_list\`; clinical claims, off-label use, a boxed warning or a Lumera drug beside \`claims\` go to \`check_clinical_claims\`; a named hospital with formulary, P&T, access or a plan goes to \`plan_hospital_engagement\`. The model is told that only supported, on-label, MLR-approved claims can be used and that groups are never people.
 
