@@ -644,8 +644,21 @@ export const FocusVersionSchema = z.object({
   /** Context cards the draft was built from, by card id. */
   basedOn: z.array(z.string()).max(12),
   createdAt: z.string(),
+  /**
+   * The draft checked against the claims checked in this chat: the approved claims it uses word
+   * for word, and each sentence that states a fact or asserts something no approved claim says.
+   */
+  review: z
+    .object({
+      approvedUsed: z.array(z.string()).max(12),
+      issues: z
+        .array(z.object({ field: z.string(), text: z.string(), reason: z.string() }))
+        .max(20),
+    })
+    .optional(),
 });
 export type FocusVersion = z.infer<typeof FocusVersionSchema>;
+export type DraftReview = NonNullable<FocusVersion["review"]>;
 
 /**
  * The focus: the one thing the chat is building, as structured data with every version kept.

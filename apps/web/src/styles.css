@@ -1256,6 +1256,70 @@ select:disabled,
   /* A field may hold several lines, such as a body's bullets or what was ruled out. */
   white-space: pre-line;
 }
+/* The draft checked against the claims checked in this chat. */
+.focus-review {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.focus-review.ok {
+  background: rgb(217 239 112 / 12%);
+  border: 1px solid rgb(217 239 112 / 35%);
+}
+.focus-review.issues {
+  background: rgb(255 196 160 / 12%);
+  border: 1px solid rgb(255 180 140 / 45%);
+}
+.focus-review-head {
+  margin: 0;
+  font-weight: 700;
+}
+.focus-review-head span {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  border-radius: 50%;
+  font-size: 11px;
+  color: #173d31;
+  background: var(--lime);
+}
+.focus-review.issues .focus-review-head span {
+  background: #ffb48c;
+}
+.focus-review ul {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.focus-review li {
+  display: grid;
+  gap: 2px;
+}
+.focus-review-field {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.focus-review q {
+  font-style: italic;
+}
+.focus-review-reason {
+  font-size: 11px;
+  opacity: 0.85;
+}
+.focus-review-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  opacity: 0.85;
+}
 .focus-sources {
   margin: 10px 0 0;
   font-size: 11px;

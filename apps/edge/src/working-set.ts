@@ -19,6 +19,7 @@ import {
   type WorkingSet,
 } from "../../../packages/contracts/src/index.ts";
 import type { MemoryView } from "../../../packages/knowledge-graph/src/index.ts";
+import { checkedClaims } from "./draft-review.ts";
 import { focusPrompt } from "./focus.ts";
 
 /**
@@ -1063,6 +1064,21 @@ export function reopenFromMemory(
 }
 
 /** Prompt lines describing what's open in this chat and, separately, the catalog. */
+/** The claims checked in this chat, for a draft that must use them word for word. */
+function claimsPrompt(set: WorkingSet) {
+  const { approved, blocked } = checkedClaims(set);
+  if (!approved.length && !blocked.length) return "";
+  return [
+    `Approved claims (use each exactly as written, as its own sentence; a draft is checked, and any other sentence that states a fact or asserts what the product does holds its save): ${approved.map((claim) => `“${claim}”`).join(" ")}`,
+    blocked.length
+      ? `Blocked claims (never use or paraphrase): ${blocked.map((claim) => `“${claim}”`).join(" ")}`
+      : "",
+    "Your own words may greet, set the occasion and say what to do next.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function workingSetPrompt(set: WorkingSet) {
   const open = set.records.map(
     (entry) =>
@@ -1080,6 +1096,7 @@ export function workingSetPrompt(set: WorkingSet) {
       ? `Records open in this chat: ${open.join("; ")}.`
       : "No records are open in this chat yet.",
     context.length ? `Context gathered in this chat: ${context.join("; ")}.` : "",
+    claimsPrompt(set),
     catalog.length
       ? `Catalog of records available in connected systems (not open in this chat; act on one only when the user asks for it by name or id): ${catalog.join("; ")}.`
       : "",
