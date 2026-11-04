@@ -32,7 +32,6 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "apps/edge/src/working-set.ts",
     "apps/edge/src/focus.ts",
     "apps/web/src/WorkspacePanel.tsx",
-    "apps/web/src/GraphUsage.tsx",
     "apps/web/src/ActionCards.tsx",
   ],
   model: [],

@@ -537,6 +537,17 @@ export const TileItemSchema = z.object({
   /** A date that matters for the standing, such as when an approval expires (YYYY-MM-DD). */
   date: z.object({ label: z.string(), value: z.string() }).optional(),
   note: z.string().optional(),
+  /** What stands behind the item, one line each: the evidence for a claim, the assets that carry it. */
+  facts: z
+    .array(
+      z.object({
+        label: z.string(),
+        text: z.string(),
+        id: z.string().optional(),
+        status: z.enum(["ok", "warn", "blocked", "info"]).optional(),
+      }),
+    )
+    .optional(),
 });
 export type TileItem = z.infer<typeof TileItemSchema>;
 

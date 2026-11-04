@@ -347,7 +347,7 @@ flowchart TB
 
 The Graph's brand filter and the header's brand are the same setting: choosing Lumera in either shows only Lumera's nodes and what sits close to it.
 
-Every evidence path an answer used is shown twice: in words under the answer, and as a tree in the workspace that merges the paths, so you can see which drug, claim, trial or asset several paths ran through.
+Every evidence path an answer used is shown twice: in words under the answer, and, for a claims check, as a card in the workspace with each claim's evidence and the assets that carry it.
 
 **Try it**
 
@@ -495,7 +495,7 @@ flowchart TB
 
 Each chat has a **working set**, shown in the Workspace panel and summarized in every prompt. It starts empty with **New chat** and has three parts:
 
-- **Focus:** the draft being built as structured data: a title, labeled fields, a change note, and the context it was built from. A campaign's focus is the **brief** Marketing Cloud's Campaign Creation agent drafted, read field for field from the agent's reply (Key Message, Target Audience, Primary Goal, and so on). Other drafts, such as copy from the Content Builder agent, are read from the answer's labeled lines. Each revision becomes a new version, and earlier versions stay viewable. Once saved, the focus shows the brief's campaign preview and then the campaign and flow Salesforce read back.
+- **Focus:** the draft being built as structured data: a title, labeled fields, a change note, and the context it was built from. A campaign's focus is the **brief** Marketing Cloud's Campaign Creation agent drafted, read field for field from the agent's reply (Key Message, Target Audience, Primary Goal, and so on). Other drafts, such as copy from the Content Builder agent, are read from the answer's labeled parts: a label with its value on the same line ("**Headline:** …"), or a label heading the lines below it ("Body:" then bullets, "Ruled out" then a table, one line per row). If the agent returns no brief, the answer is read the same way. Each revision becomes a new version, and earlier versions stay viewable. Once saved, the focus shows the brief's campaign preview and then the campaign and flow Salesforce read back.
 - **Context:** cards for what tools returned, such as weather, forecasts, weather alerts, public holidays, the Federal Reserve's latest rate decision, store inventory, the inventory risk the workbench computed, the restaurant profile, graph evidence, remembered work recalled from memory, and Salesforce summaries, each with its source and fetch time.
 - **Records:** records the chat opened, created, or updated, in any connected system, plus any reopened from memory, which are marked *Remembered* until the chat reads them again. Salesforce is one system and restaurant data is another; any system can join through the same reference: system, object type, and id.
 
@@ -510,7 +510,7 @@ Four properties make it trustworthy:
 
 The life-sciences systems add a card per answer, named for the system, so what came from Aprimo, Reltio or Drupal stays visible beside the graph's evidence. A card lists what was found, one row each, with a status label, its ID and the date that matters: every Aprimo asset as usable (with its MLR ID and approval date) or not and why (pending review, expired, failed a check), each claim in the Vault library with its status, each Screendragon job with its stage and due date, and each HCP page as compliant or not.
 
-**The knowledge graph, as a tree.** When an answer queries the graph, the workspace shows what its tools reached and how it connects. A summary line comes first ("Cardivance → 3 claims · 2 trials · 2 content assets…"), with the tools and how many paths each returned. Then the evidence branches from where the paths start, one card per node with its type and full name, each saying how it links to the card above ("supported by", "carried in"). A node several paths share appears once, noting where else it's linked. The answer's own *Graph evidence* lists every path in words.
+**The claims check, claim by claim.** A Lumera claims check adds a card with one row per claim, usable first: a verdict label (usable, blocked, no approved content, content needs MLR), the claim, and why it's blocked. Under each claim, its supporting evidence (the trial, its enrollment and result) and every asset that carries it, with its MLR ID and whether it can be used. The answer's own *Graph evidence* lists every path in words.
 
 **Try it**
 
@@ -1017,8 +1017,8 @@ flowchart LR
 - **Markdown answers.** The model may use concise Markdown. The UI renders it with `react-markdown`, which never renders raw HTML, so model output can't inject markup.
 - **HXL cards.** Salesforce's HXL widgets (MCP Apps) let an agent action return a typed, interactive card, such as campaign readiness. When a host can't render HXL, the workbench shows an equivalent accessible **native fallback** built from the same contract.
 - **Salesforce agents panel.** Under each answer that called Salesforce, a panel lists each call's agent, its type and template, the subagent, and the actions (with their flow or Apex targets) behind it. The confirmation card shows the same for the write it prepares.
-- **Graph evidence panel.** Knowledge-graph paths render as directional chains, each with a text alternative for screen readers. The workspace also shows them as a tree; see *The workspace*.
-- **Item rows on native cards.** A card whose tool returned a list shows one row per item: a colored status label (usable, waiting, blocked), the item, a monospaced ID and a readable date, so an MLR ID and its expiry stand out.
+- **Graph evidence panel.** Knowledge-graph paths render as directional chains, each with a text alternative for screen readers. The workspace shows a claims check claim by claim; see *The workspace*.
+- **Item rows on native cards.** A card whose tool returned a list shows one row per item: a colored status label (usable, waiting, blocked), the item, a monospaced ID and a readable date, so an MLR ID and its expiry stand out. A row can list what stands behind it, such as a claim's trial evidence and the assets that carry it.
 - **Live write progress.** Accepting an action card switches its button to **Preparing…** and shows the preparation's steps until the confirmation card appears. Clicking **Confirm** disables the buttons and shows the write's steps in the card as the Worker reports them, kept in view while they run. Afterwards a collapsible **Behind the scenes** record keeps each step and how long it took; it opens by itself when a write fails.
 - **Inventory case confirmation.** The card lists the store manager, the forecast, and a table of each low item: on hand, needed, and the dishes it goes into. After you confirm, a banner links to the Case.
 - **Use-case library.** A page of every scenario the demo runs, filterable by team, with its prompts, systems, and data flow. **Try it** puts a prompt in the chat box without sending it.

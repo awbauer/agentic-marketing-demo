@@ -90,10 +90,39 @@ const stripMarkdown = (text: string) =>
     .trim();
 
 /**
+ * A label on a line of its own, whose value follows on the next lines: "Body:", "**Headline**",
+ * "### Ruled out". At most five words, so a sentence isn't mistaken for one.
+ */
+const LABEL_ONLY =
+  /^\s*(?:#{2,4}\s+)?(?:(?:\*\*|__)([A-Z][\w /&'()-]{0,40}?):?(?:\*\*|__):?|([A-Z][\w /&'()-]{0,40}?):)\s*$/;
+/** The parts of a draft a label names. A bold line or heading without a colon is a label only if
+ * it is one of these; otherwise it's the title or a section of prose. */
+const FIELD_NAMES =
+  /^(?:headline|subject(?: line)?|preheader|body|copy|cta|call to action|send time|audience|channel|campaign|brand|ruled[- ]out|disclosures?|safety information|key message|description|name|goal|primary goal|kpi|priority|guardrails|offer|images?|assets?|claims? used|evidence)$/i;
+const isLabelOnly = (line: string) => {
+  const colon = /:\s*(?:\*\*|__)?\s*$/.test(line);
+  const match =
+    LABEL_ONLY.exec(line) ?? (/^#{2,4}\s+\S/.test(line) ? [line, stripMarkdown(line)] : null);
+  const label = match ? stripMarkdown(match[1] ?? match[2] ?? "").replace(/:$/, "") : "";
+  if (!label || label.split(/\s+/).length > 5) return "";
+  return colon || FIELD_NAMES.test(label) ? label : "";
+};
+/** A Markdown table row as readable text; the header's divider row reads as nothing. */
+const tableRow = (line: string) => {
+  const cells = line
+    .replace(/^\||\|$/g, "")
+    .split("|")
+    .map((cell) => stripMarkdown(cell));
+  if (cells.every((cell) => /^:?-{2,}:?$/.test(cell) || cell === "")) return "";
+  return cells.filter(Boolean).join(" — ");
+};
+
+/**
  * The draft in a model answer as focus input: its title (a heading or a bold first line), a
- * summary (its first plain paragraph), and its labeled lines ("**Headline:** …") as fields.
- * The orchestrator saves drafts this way, so a drafting turn never depends on the model
- * producing a large structured tool call.
+ * summary (its first plain paragraph), and its labeled parts as fields. A label may carry its value
+ * on the same line ("**Headline:** …") or head the lines below it ("Body:" then bullets), and a
+ * table reads as one line per row. The orchestrator saves drafts this way, so a drafting turn never
+ * depends on the model producing a large structured tool call.
  */
 export function focusFromAnswer(
   answer: string,
@@ -105,26 +134,56 @@ export function focusFromAnswer(
     .filter(Boolean);
   if (!lines.length) return null;
   const titleLine = lines.find(
-    (line) => /^#{1,4}\s+\S/.test(line) || /^(\*\*|__)[^*_]+\1$/.test(line),
+    (line) => (/^#{1,4}\s+\S/.test(line) || /^(\*\*|__)[^*_]+\1$/.test(line)) && !isLabelOnly(line),
   );
   const title = titleLine ? stripMarkdown(titleLine).replace(/[.:]+$/, "") : options.fallbackTitle;
   const fields: FocusInput["fields"] = [];
   const seen = new Map<string, number>();
   const prose: string[] = [];
+  let open: { label: string; lines: string[] } | null = null;
+  const add = (label: string, value: string) => {
+    if (!label || !value || fields.length >= 16) return;
+    const count = (seen.get(label.toLowerCase()) ?? 0) + 1;
+    seen.set(label.toLowerCase(), count);
+    fields.push({
+      label: (count > 1 ? `${label} ${count}` : label).slice(0, 60),
+      value: value.slice(0, 1200),
+    });
+  };
+  const close = () => {
+    if (open) add(open.label, open.lines.join("\n"));
+    open = null;
+  };
   for (const line of lines) {
     if (line === titleLine) continue;
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(line)) {
+      close();
+      continue;
+    }
     const match = LABEL_LINE.exec(line);
     const label = match ? stripMarkdown(match[1] ?? match[3] ?? "") : "";
     const value = match ? stripMarkdown(match[2] ?? match[4] ?? "") : "";
-    if (label && value && fields.length < 16) {
-      const count = (seen.get(label.toLowerCase()) ?? 0) + 1;
-      seen.set(label.toLowerCase(), count);
-      fields.push({
-        label: (count > 1 ? `${label} ${count}` : label).slice(0, 60),
-        value: value.slice(0, 1200),
-      });
-    } else if (!/^[-*•|#]/.test(line) && !/^\d+[.)]/.test(line)) prose.push(stripMarkdown(line));
+    if (label && value) {
+      close();
+      add(label, value);
+      continue;
+    }
+    const heading = isLabelOnly(line);
+    if (heading) {
+      close();
+      open = { label: heading, lines: [] };
+      continue;
+    }
+    if (open) {
+      const text = line.startsWith("|")
+        ? tableRow(line)
+        : stripMarkdown(line.replace(/^(?:[-*•]|\d+[.)])\s+/, "• "));
+      if (text) open.lines.push(text);
+      continue;
+    }
+    if (!/^[-*•|#]/.test(line) && !/^\d+[.)]/.test(line)) prose.push(stripMarkdown(line));
   }
+  close();
   if (!fields.length) {
     const body = lines
       .filter((line) => line !== titleLine)

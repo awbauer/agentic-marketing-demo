@@ -945,6 +945,7 @@ select:disabled,
   color: #5b6a62;
 }
 .tile-item-meta code {
+  white-space: nowrap;
   padding: 1px 6px;
   border-radius: 4px;
   font-size: 11px;
@@ -954,6 +955,46 @@ select:disabled,
 .tile-item-note {
   font-size: 11px;
   color: #6b4a3f;
+}
+/* What stands behind an item: a claim's evidence, the assets that carry it. */
+.insight-card ul.tile-item-facts {
+  display: grid;
+  gap: 3px;
+  margin: 4px 0 0;
+  padding: 6px 0 0;
+  border-top: 1px dashed #e1e7df;
+  list-style: none;
+}
+.tile-item-facts li {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #3e4c44;
+}
+.tile-fact-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #7a877f;
+  padding-top: 1px;
+}
+.tile-item-facts li.status-ok .tile-fact-label {
+  color: #2f7d57;
+}
+.tile-item-facts li.status-blocked .tile-fact-label {
+  color: #b4412f;
+}
+.tile-fact-text code {
+  white-space: nowrap;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  background: #eef2ed;
+  color: #2b3a33;
 }
 .metric {
   display: flex;
@@ -1212,6 +1253,8 @@ select:disabled,
   margin: 3px 0 0;
   font-size: 13px;
   line-height: 1.45;
+  /* A field may hold several lines, such as a body's bullets or what was ruled out. */
+  white-space: pre-line;
 }
 .focus-sources {
   margin: 10px 0 0;
@@ -2526,114 +2569,5 @@ select:disabled,
   .scope-bar select {
     min-width: 0;
     max-width: 130px;
-  }
-}
-
-/* How the agents used the knowledge graph: a summary, then the evidence as a tree of cards. */
-.graph-usage-summary {
-  margin: 0 0 2px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: #2b3a33;
-}
-.graph-usage-lede {
-  margin: 0 0 10px;
-  font-size: 11px;
-  color: #5b6a62;
-}
-.graph-tree,
-.graph-tree-children {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.graph-tree-children {
-  margin-left: 14px;
-  padding-left: 14px;
-}
-.graph-tree-item {
-  position: relative;
-  padding-top: 6px;
-}
-/* Each card below the first level draws its rail: an elbow into the card, and a line on down
-   to its next sibling if it has one. */
-.graph-tree-children > .graph-tree-item::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -14px;
-  width: 11px;
-  height: 22px;
-  border-left: 1.5px solid #cbd5ca;
-  border-bottom: 1.5px solid #cbd5ca;
-  border-bottom-left-radius: 6px;
-}
-.graph-tree-children > .graph-tree-item:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -14px;
-  border-left: 1.5px solid #cbd5ca;
-}
-.graph-tree-card {
-  display: grid;
-  gap: 2px;
-  padding: 7px 10px;
-  border: 1px solid #e1e7df;
-  border-left: 3px solid var(--type);
-  border-radius: 7px;
-  background: #fff;
-  animation: graph-tree-arrive 0.3s ease-out both;
-}
-.graph-tree-item.root > .graph-tree-card {
-  border-color: color-mix(in srgb, var(--type) 35%, #e1e7df);
-  background: color-mix(in srgb, var(--type) 7%, #fff);
-}
-.graph-tree-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 8px;
-}
-.graph-tree-type {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--type);
-}
-.graph-tree-via {
-  font-size: 11px;
-  font-style: italic;
-  color: #6a7a71;
-}
-.graph-tree-name {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.35;
-  color: #1d2a24;
-}
-.graph-tree-item.root > .graph-tree-card .graph-tree-name {
-  font-size: 14px;
-}
-.graph-tree-also {
-  font-size: 11px;
-  color: #6a7a71;
-}
-.graph-usage-more {
-  margin: 8px 0 0;
-  font-size: 11px;
-  color: #5b6a62;
-}
-@keyframes graph-tree-arrive {
-  from {
-    opacity: 0;
-    transform: translateY(3px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .graph-tree-card {
-    animation: none;
   }
 }

@@ -105,4 +105,53 @@ describe("workspace focus", () => {
     expect(plain).toMatchObject({ title: "Content draft", fields: [{ label: "Draft" }] });
     expect(focusFromAnswer("  ", { kind: "email", fallbackTitle: "x", changeNote: "" })).toBeNull();
   });
+
+  it("reads labels on their own lines, bullet bodies, and a ruled-out table as fields", () => {
+    const answer = [
+      "**Cardivance HFrEF Outcomes**",
+      "",
+      "An outcomes email for prescribers treating HFrEF.",
+      "",
+      "**Headline**",
+      "Cardivance outcomes at the heart failure meeting",
+      "Body:",
+      "- In the pivotal CARDIO-HF trial, Cardivance reduced the composite endpoint by 20% versus enalapril.",
+      "- The most common adverse reactions were hypotension, hyperkalemia, cough, and dizziness.",
+      "**Send time:** Weekday 10:00 AM (US Eastern)",
+      "**Channel:** Email",
+      "---",
+      "### Ruled out",
+      "| Language considered | Reason for exclusion |",
+      "|---|---|",
+      "| “Improves outcomes in HFpEF.” | Not on the approved label |",
+      "| “Superior to every ARB.” | No head-to-head evidence |",
+    ].join("\n");
+    const input = focusFromAnswer(answer, {
+      kind: "brief",
+      fallbackTitle: "Brief draft",
+      changeNote: "First draft",
+    });
+    expect(input?.title).toBe("Cardivance HFrEF Outcomes");
+    expect(input?.summary).toBe("An outcomes email for prescribers treating HFrEF.");
+    expect(input?.fields).toEqual([
+      { label: "Headline", value: "Cardivance outcomes at the heart failure meeting" },
+      {
+        label: "Body",
+        value: [
+          "• In the pivotal CARDIO-HF trial, Cardivance reduced the composite endpoint by 20% versus enalapril.",
+          "• The most common adverse reactions were hypotension, hyperkalemia, cough, and dizziness.",
+        ].join("\n"),
+      },
+      { label: "Send time", value: "Weekday 10:00 AM (US Eastern)" },
+      { label: "Channel", value: "Email" },
+      {
+        label: "Ruled out",
+        value: [
+          "Language considered — Reason for exclusion",
+          "“Improves outcomes in HFpEF.” — Not on the approved label",
+          "“Superior to every ARB.” — No head-to-head evidence",
+        ].join("\n"),
+      },
+    ]);
+  });
 });
