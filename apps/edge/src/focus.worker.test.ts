@@ -106,6 +106,56 @@ describe("workspace focus", () => {
     expect(focusFromAnswer("  ", { kind: "email", fallbackTitle: "x", changeNote: "" })).toBeNull();
   });
 
+  it("reads a draft written as a two-column table, with <br> as line breaks", () => {
+    const answer = [
+      "**Draft Email – Cardivance HFrEF Outcomes Campaign**",
+      "",
+      "| Element | Draft |",
+      "|---------|-------|",
+      "| Subject | Cardivance at the heart failure meeting |",
+      "| Body | In the CARDIO-HF trial, Cardivance reduced the composite endpoint.<br><br>Safety profile:<br>• Hypotension<br>• Cough |",
+      "| Call-to-Action | [Download Prescribing Information]<br>[Contact Your Rep] |",
+      "| MLR Approval ID | MLR-2026-0412 |",
+      "",
+      "### Ruled out",
+      "| Claim | Reason |",
+      "|---|---|",
+      "| Superior to every ARB | No head-to-head evidence |",
+      "",
+      "These claims were considered but excluded because they lack a supporting trial.",
+    ].join("\n");
+    const input = focusFromAnswer(answer, {
+      kind: "brief",
+      fallbackTitle: "Brief draft",
+      changeNote: "First draft",
+    });
+    expect(input?.title).toBe("Draft Email – Cardivance HFrEF Outcomes Campaign");
+    // A note after the draft is not its summary.
+    expect(input?.summary).toBe("");
+    expect(input?.fields).toEqual([
+      { label: "Subject", value: "Cardivance at the heart failure meeting" },
+      {
+        label: "Body",
+        value:
+          "In the CARDIO-HF trial, Cardivance reduced the composite endpoint.\n\nSafety profile:\n• Hypotension\n• Cough",
+      },
+      {
+        label: "Call-to-Action",
+        value: "[Download Prescribing Information]\n[Contact Your Rep]",
+      },
+      { label: "MLR Approval ID", value: "MLR-2026-0412" },
+      {
+        label: "Ruled out",
+        // The note after the table explains it, so it stays with it.
+        value: [
+          "Claim — Reason",
+          "Superior to every ARB — No head-to-head evidence",
+          "These claims were considered but excluded because they lack a supporting trial.",
+        ].join("\n"),
+      },
+    ]);
+  });
+
   it("reads labels on their own lines, bullet bodies, and a ruled-out table as fields", () => {
     const answer = [
       "**Cardivance HFrEF Outcomes**",

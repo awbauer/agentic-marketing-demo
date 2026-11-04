@@ -85,8 +85,13 @@ const LABEL_LINE =
   /^\s*(?:[-*•]\s*)?(?:\*\*|__)([^*_:\n]{1,60}?):?(?:\*\*|__):?\s*(.+?)\s*$|^\s*(?:[-*•]\s*)?([A-Z][\w /&'()-]{0,40}):\s+(.+?)\s*$/;
 const stripMarkdown = (text: string) =>
   text
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?[a-z][^>]*>/gi, "")
     .replace(/\*\*|__|`/g, "")
     .replace(/^#+\s*/, "")
+    .split("\n")
+    .map((part) => part.trim())
+    .join("\n")
     .trim();
 
 /**
@@ -107,6 +112,14 @@ const isLabelOnly = (line: string) => {
   if (!label || label.split(/\s+/).length > 5) return "";
   return colon || FIELD_NAMES.test(label) ? label : "";
 };
+/** A Markdown table row's cells, read as plain text. */
+const cellsOf = (line: string) =>
+  line
+    .replace(/^\||\|$/g, "")
+    .split("|")
+    .map((cell) => stripMarkdown(cell));
+const isDivider = (line: string) =>
+  line.startsWith("|") && cellsOf(line).every((cell) => /^:?-{2,}:?$/.test(cell) || cell === "");
 /** A Markdown table row as readable text; the header's divider row reads as nothing. */
 const tableRow = (line: string) => {
   const cells = line
@@ -154,8 +167,10 @@ export function focusFromAnswer(
     if (open) add(open.label, open.lines.join("\n"));
     open = null;
   };
-  for (const line of lines) {
+  let table: { header: string[] } | null = null;
+  for (const [index, line] of lines.entries()) {
     if (line === titleLine) continue;
+    if (!line.startsWith("|")) table = null;
     if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(line)) {
       close();
       continue;
@@ -174,6 +189,22 @@ export function focusFromAnswer(
       open = { label: heading, lines: [] };
       continue;
     }
+    // A table outside any label: a header row (the line before its divider), then its rows. With
+    // two columns each row is a field ("| Subject | … |"); a wider table becomes one field.
+    if (!open && line.startsWith("|")) {
+      if (isDivider(line)) continue;
+      if (isDivider(lines[index + 1] ?? "")) {
+        table = { header: cellsOf(line) };
+        if (table.header.filter(Boolean).length > 2)
+          open = { label: table.header[0] || "Table", lines: [] };
+        continue;
+      }
+      const cells = cellsOf(line);
+      if ((table?.header.length ?? cells.length) <= 2 && cells.length >= 2 && cells[0]) {
+        add(cells[0], cells.slice(1).join(" — "));
+        continue;
+      }
+    }
     if (open) {
       const text = line.startsWith("|")
         ? tableRow(line)
@@ -181,7 +212,9 @@ export function focusFromAnswer(
       if (text) open.lines.push(text);
       continue;
     }
-    if (!/^[-*•|#]/.test(line) && !/^\d+[.)]/.test(line)) prose.push(stripMarkdown(line));
+    // The summary is the prose before the draft's fields, not a note after them.
+    if (!fields.length && !/^[-*•|#]/.test(line) && !/^\d+[.)]/.test(line))
+      prose.push(stripMarkdown(line));
   }
   close();
   if (!fields.length) {
