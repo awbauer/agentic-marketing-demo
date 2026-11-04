@@ -204,6 +204,39 @@ describe("working set", () => {
     expect(JSON.stringify(card)).not.toMatch(/mocked/i);
   });
 
+  it("shows a claims check claim by claim, with its evidence and the assets that carry it", async () => {
+    const graph = await connectKnowledgeGraphTools(knowledgeGraphBackend({}));
+    const tool = (
+      graph.tools as Record<string, { execute: (a: unknown, o: unknown) => Promise<unknown> }>
+    ).graph_check_clinical_claims;
+    const output = await tool?.execute(
+      { drug: "drug-cardivance" },
+      { toolCallId: "claims", messages: [] },
+    );
+    await graph.close();
+    const card = ingestToolResult(emptyWorkingSet(), {
+      toolName: "graph_check_clinical_claims",
+      input: { drug: "drug-cardivance" },
+      output,
+      at,
+    }).cards[0];
+    expect(card?.title).toBe("Claims check: Cardivance");
+    expect(card?.details).toEqual([]);
+    const items = card?.items ?? [];
+    // Usable claims come first, blocked ones last.
+    expect(items[0]?.status).toBe("ok");
+    expect(items.at(-1)?.status).toBe("blocked");
+    const mortality = items.find((item) => /cardiovascular death/.test(item.title));
+    expect(mortality?.label).toBe("Usable");
+    expect(mortality?.facts?.find((fact) => fact.label === "Evidence")?.text).toMatch(/CARDIO-HF/);
+    expect(
+      mortality?.facts?.some((fact) => fact.id === "MLR-2026-0412" && fact.status === "ok"),
+    ).toBe(true);
+    const hfpef = items.find((item) => /preserved ejection fraction/.test(item.title));
+    expect(hfpef).toMatchObject({ status: "blocked", label: "Blocked" });
+    expect(hfpef?.note).toMatch(/not on the approved label/);
+  });
+
   it("tells the model what is open and keeps the catalog separate", () => {
     const empty = workingSetPrompt(emptyWorkingSet());
     expect(empty).toContain("No records are open in this chat yet.");

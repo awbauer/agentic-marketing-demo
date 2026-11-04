@@ -158,6 +158,22 @@ function TileItems({ items }: { items: NonNullable<InsightTile["items"]> }) {
             </span>
           )}
           {item.note && <span className="tile-item-note">{item.note}</span>}
+          {item.facts && item.facts.length > 0 && (
+            <ul className="tile-item-facts">
+              {item.facts.map((fact) => (
+                <li
+                  key={`${fact.label}-${fact.text}`}
+                  className={fact.status ? `status-${fact.status}` : undefined}
+                >
+                  <span className="tile-fact-label">{fact.label}</span>
+                  <span className="tile-fact-text">
+                    {fact.text}
+                    {fact.id && <code>{fact.id}</code>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </li>
       ))}
     </ul>

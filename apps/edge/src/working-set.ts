@@ -644,6 +644,60 @@ function graphSummary(tool: string, data: Record<string, unknown>, count: number
   }
 }
 
+/** A clinical claim as a row: its verdict, why it's blocked, its evidence, and the content carrying it. */
+function claimItem(entry: Record<string, unknown>): TileItem {
+  const verdict = str(entry.verdict) ?? "";
+  const [status, label]: [TileItem["status"], string] =
+    verdict === "Usable"
+      ? ["ok", "Usable"]
+      : verdict.startsWith("Blocked")
+        ? ["blocked", "Blocked"]
+        : verdict.includes("no approved content")
+          ? ["warn", "No approved content"]
+          : ["warn", "Content needs MLR"];
+  const evidence = (list(entry.supportedBy) as Array<Record<string, unknown>>).map((trial) => ({
+    label: "Evidence",
+    text: [
+      str(trial.trial),
+      num(trial.enrollment) ? `${num(trial.enrollment)?.toLocaleString("en-US")} patients` : "",
+      str(trial.result),
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    status: "ok" as const,
+  }));
+  const content = (list(entry.content) as Array<Record<string, unknown>>).map((asset) => {
+    const approval = (asset.approval ?? {}) as Record<string, unknown>;
+    return {
+      label: asset.usable ? "Asset" : "Asset · not usable",
+      text: str(asset.asset) ?? "Content",
+      ...(str(approval.id) ? { id: str(approval.id) as string } : {}),
+      status: (asset.usable ? "ok" : "blocked") as TileItem["status"],
+    };
+  });
+  const issues = list(entry.issues).filter((issue): issue is string => typeof issue === "string");
+  return {
+    status,
+    label,
+    title: str(entry.claim) ?? "Claim",
+    ...(issues.length ? { note: issues.join(". ") } : {}),
+    facts: [
+      ...(evidence.length
+        ? evidence
+        : [
+            {
+              label: "Evidence",
+              text: "No completed trial supports it",
+              status: "blocked" as const,
+            },
+          ]),
+      ...content,
+    ],
+  };
+}
+/** Usable claims first, then those waiting on content, then blocked. */
+const CLAIM_ORDER: Record<TileItem["status"], number> = { ok: 0, info: 1, warn: 2, blocked: 3 };
+
 function graphCard(
   data: Record<string, unknown>,
   tool: string,
@@ -700,6 +754,12 @@ function graphCard(
     })
     .filter((item): item is string => Boolean(item));
   const title = GRAPH_TITLES[tool] ?? titleCase(tool);
+  const claimItems =
+    tool === "check_clinical_claims"
+      ? (list(data.claims) as Array<Record<string, unknown>>)
+          .map(claimItem)
+          .sort((a, b) => CLAIM_ORDER[a.status] - CLAIM_ORDER[b.status])
+      : [];
   const inputKey = JSON.stringify(input ?? {})
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-");
@@ -709,7 +769,10 @@ function graphCard(
         id: `graph:${tool}:${clip(inputKey, 60)}`,
         kind: "graph",
         eyebrow: memory ? "Memory" : "Knowledge graph",
-        title: subject ? `${title}: ${subject}` : title,
+        title:
+          (subject ?? (claimItems.length ? str(data.drug) : undefined))
+            ? `${title}: ${subject ?? str(data.drug)}`
+            : title,
         summary: clip(graphSummary(tool, data, items.length), 200),
         metric: paths ? String(paths) : undefined,
         trend: paths ? "evidence paths" : undefined,
@@ -720,7 +783,8 @@ function graphCard(
           freshness: "just now",
           status: "ready",
         },
-        details: [...new Set(items)].slice(0, 4),
+        details: claimItems.length ? [] : [...new Set(items)].slice(0, 4),
+        ...(claimItems.length ? { items: claimItems.slice(0, 8) } : {}),
         updatedAt: at.toISOString(),
         toolName: tool,
       },

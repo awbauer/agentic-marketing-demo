@@ -26,7 +26,7 @@ import { ArchitectureView } from "./architecture/ArchitectureView";
 import { JourneysView } from "./architecture/JourneysView";
 import { MarketingWriteDetails, PermissionDetails } from "./ConfirmationDetails";
 import { EvaluationView } from "./EvaluationView";
-import { GraphEvidencePanel, latestGraphEvidence } from "./GraphEvidence";
+import { GraphEvidencePanel } from "./GraphEvidence";
 import { GraphView } from "./graph/GraphView";
 import { HistoryView } from "./HistoryView";
 import { LearnView } from "./learn/LearnView";
@@ -1279,7 +1279,7 @@ export function App() {
               can be saved, created, or attached until writes are resumed.
             </div>
           )}
-          <WorkspacePanel workingSet={state.workingSet} graph={latestGraphEvidence(messages)} />
+          <WorkspacePanel workingSet={state.workingSet} />
           <details className="image-workflow-toggle">
             <summary>
               <span className="kicker">External creative workflow</span>

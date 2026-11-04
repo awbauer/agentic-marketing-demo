@@ -32,17 +32,6 @@ export function graphEvidence(message: UIMessage): GraphEvidence[] {
   });
 }
 
-/** The graph evidence of the latest answer that queried the graph, for the workspace's map. */
-export function latestGraphEvidence(messages: readonly UIMessage[]): GraphEvidence[] {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index] as UIMessage;
-    if (message.role !== "assistant") continue;
-    const evidence = graphEvidence(message);
-    if (evidence.length) return evidence;
-  }
-  return [];
-}
-
 function link(path: EvidencePath, a: PathNode, b: PathNode) {
   const forward = path.relationships.find((rel) => rel.from === a.id && rel.to === b.id);
   if (forward) return { type: forward.type, arrow: "→" };

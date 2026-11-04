@@ -8,8 +8,6 @@ import {
 } from "@northstar/contracts";
 import { InsightBoard, recordUrl, relativeTime } from "@northstar/ui";
 import { useEffect, useState } from "react";
-import type { GraphEvidence } from "./GraphEvidence";
-import { GraphUsage } from "./GraphUsage";
 import { readableToolName } from "./turn-trace";
 
 /** Records grouped by the system that holds them, in first-seen order. */
@@ -236,15 +234,12 @@ export function FocusCard({
 export function WorkspacePanel({
   workingSet,
   focusAction,
-  graph = [],
 }: {
   workingSet: WorkingSet;
   focusAction?: FocusAction;
-  /** The knowledge-graph evidence of the latest answer that queried the graph. */
-  graph?: readonly GraphEvidence[];
 }) {
   const { records, cards, focus } = workingSet;
-  if (!focus && records.length === 0 && cards.length === 0 && graph.length === 0)
+  if (!focus && records.length === 0 && cards.length === 0)
     return (
       <div className="workspace-empty">
         <span className="workspace-empty-mark" aria-hidden="true">
@@ -262,7 +257,6 @@ export function WorkspacePanel({
   return (
     <div className="workspace-sections">
       {focus && <FocusCard focus={focus} cards={cards} action={focusAction} />}
-      <GraphUsage evidence={graph} />
       {records.length > 0 && (
         <section className="workspace-section" aria-labelledby="workspace-records-title">
           <h3 id="workspace-records-title">
