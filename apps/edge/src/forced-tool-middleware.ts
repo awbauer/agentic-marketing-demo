@@ -84,6 +84,33 @@ function escapeControlCharacters(text: string) {
   return out;
 }
 
+/**
+ * The first complete JSON object in the text, ignoring anything after it: gpt-oss sometimes
+ * follows a call's arguments with a literal "\n" or channel markup, which fails a strict parse.
+ */
+function leadingObject(text: string) {
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (escaped) escaped = false;
+    else if (char === "\\") escaped = inString;
+    else if (char === '"') inString = !inString;
+    else if (!inString && char === "{") depth += 1;
+    else if (!inString && char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        const candidate = text.slice(start, index + 1);
+        return isJsonObject(candidate) ? candidate : null;
+      }
+    }
+  }
+  return null;
+}
+
 /** `<arg_key>name</arg_key><arg_value>value</arg_value>` pairs, a chat-template call format. */
 function argumentMarkup(text: string) {
   const pairs = [
@@ -107,14 +134,14 @@ function argumentMarkup(text: string) {
 
 /**
  * A tool call's arguments as a JSON object: as sent, with raw control characters in its strings
- * escaped, or read from argument markup. Null when none of those work, as when the model's
- * output was cut off mid-call.
+ * escaped, without anything trailing the object, or read from argument markup. Null when none of
+ * those work, as when the model's output was cut off mid-call.
  */
 export function repairToolInput(input: string): string | null {
   if (!input.trim() || isJsonObject(input)) return input;
   const escaped = escapeControlCharacters(input);
   if (isJsonObject(escaped)) return escaped;
-  return argumentMarkup(input);
+  return leadingObject(escaped) ?? argumentMarkup(input);
 }
 
 /**

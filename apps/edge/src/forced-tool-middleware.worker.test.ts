@@ -244,6 +244,15 @@ describe("forced tool call middleware", () => {
         '{"message":"Draft a campaign brief for Coastline Kitchen. Objective: Email c',
       ),
     ).toBeNull();
+    // Anything after the object is dropped: a literal "\n" the model appended, or channel markup.
+    expect(
+      JSON.parse(repairToolInput('{"inputs":[{"briefId":"21yjV0000004NpFQAU"}]}\\n') ?? ""),
+    ).toEqual({
+      inputs: [{ briefId: "21yjV0000004NpFQAU" }],
+    });
+    expect(JSON.parse(repairToolInput('{"message":"Use {braces} here"}<|call|>') ?? "")).toEqual({
+      message: "Use {braces} here",
+    });
   });
 
   it("retries a forced call whose arguments were cut off, instead of passing them on", async () => {
