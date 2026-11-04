@@ -72,6 +72,7 @@ import {
   connectExternalServiceTools,
   EXTERNAL_SERVICES_TOOL_PREFIX,
 } from "./external-services/server";
+import { reviewBlocker, withDraftReview } from "./draft-review";
 import { applyFocusUpdate, type FocusInput, focusFromAnswer } from "./focus";
 import { forcedToolCallMiddleware } from "./forced-tool-middleware";
 import {
@@ -2803,6 +2804,9 @@ export class MarketingOrchestrator extends AIChatAgent<
     const focus = this.state.workingSet.focus;
     if (!focus)
       return "There's no draft in the workspace yet. Draft something first, then save it.";
+    const unapproved = reviewBlocker(this.state.workingSet);
+    if (unapproved)
+      return `**Not ready to save.** ${unapproved} Nothing was saved in Marketing Cloud.`;
     const plan = planMarketingWrite(focus);
     if (!plan)
       return "This draft's campaign already exists in Marketing Cloud. Open it from the Workspace to set its audience and activate its flow there.";
@@ -2884,7 +2888,7 @@ export class MarketingOrchestrator extends AIChatAgent<
   /** Suggests saving the draft in focus to Salesforce, as a new record or an update. */
   private suggestFocusSave() {
     const focus = this.state.workingSet.focus;
-    if (!focus) return;
+    if (!focus || reviewBlocker(this.state.workingSet)) return;
     const plan = planMarketingWrite(focus);
     if (!plan) return;
     this.suggest({
@@ -3034,6 +3038,9 @@ export class MarketingOrchestrator extends AIChatAgent<
           { error: { code: "CONFLICT", message: "There is no draft to save." } },
           { status: 409 },
         );
+      const unapproved = reviewBlocker(this.state.workingSet);
+      if (unapproved)
+        return json({ error: { code: "CONFLICT", message: unapproved } }, { status: 409 });
       const plan = planMarketingWrite(focus);
       if (!plan)
         return json(
@@ -3057,7 +3064,11 @@ export class MarketingOrchestrator extends AIChatAgent<
 
   /** Saves a draft (or its revision) as the workspace focus. */
   private updateFocus(input: FocusInput) {
-    const workingSet = applyFocusUpdate(this.state.workingSet, input, new Date());
+    // Each new version is checked against the claims checked in this chat.
+    const workingSet = withDraftReview(
+      applyFocusUpdate(this.state.workingSet, input, new Date()),
+      this.scope.brand === "all" ? undefined : this.scope.brand,
+    );
     this.setState({ ...this.state, workingSet });
     return workingSet.focus as FocusItem;
   }

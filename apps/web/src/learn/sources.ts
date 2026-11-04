@@ -54,6 +54,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   routing: ["apps/edge/src/turn-policy.ts"],
   reliability: ["apps/edge/src/forced-tool-middleware.ts", "apps/edge/src/turn-trace.ts"],
   governance: [
+    "apps/edge/src/draft-review.ts",
     "apps/edge/src/auth.ts",
     "apps/web/src/ConfirmationDetails.tsx",
     "packages/contracts/src/index.ts",

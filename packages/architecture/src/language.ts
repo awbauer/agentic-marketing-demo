@@ -44,6 +44,8 @@ const sentencesOf = (text: string) =>
     .filter(Boolean);
 /** Sign-offs that use an assertion word without asserting anything. */
 const SIGN_OFFS = /\b(?:best regards|best wishes|all the best|with best)\b/gi;
+/** The words in a sentence that assert what a product does or how good it is. */
+export const assertionWords = (text: string) => asserted(text);
 const asserted = (text: string) => [
   ...new Set((text.replace(SIGN_OFFS, "").match(ASSERTS) ?? []).map((word) => word.toLowerCase())),
 ];
