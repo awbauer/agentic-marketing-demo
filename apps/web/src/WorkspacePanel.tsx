@@ -61,6 +61,49 @@ const RELATION_LABELS: Record<WorkingRecord["relation"], string> = {
   remembered: "Remembered",
 };
 
+/** The draft checked against the claims checked in this chat. */
+function DraftReviewPanel({
+  review,
+}: {
+  review: NonNullable<FocusItem["versions"][number]["review"]>;
+}) {
+  if (review.issues.length === 0)
+    return (
+      <section className="focus-review ok" aria-label="Claims review">
+        <p className="focus-review-head">
+          <span aria-hidden="true">✓</span> Every factual sentence is approved claim text
+        </p>
+        {review.approvedUsed.length > 0 && (
+          <p className="focus-review-note">
+            Uses {review.approvedUsed.length} approved claim
+            {review.approvedUsed.length === 1 ? "" : "s"} word for word.
+          </p>
+        )}
+      </section>
+    );
+  return (
+    <section className="focus-review issues" aria-label="Claims review">
+      <p className="focus-review-head">
+        <span aria-hidden="true">!</span> Needs review: {review.issues.length} sentence
+        {review.issues.length === 1 ? " isn't" : "s aren't"} approved claim text
+      </p>
+      <ul>
+        {review.issues.map((issue) => (
+          <li key={`${issue.field}-${issue.text}`}>
+            <span className="focus-review-field">{issue.field}</span>
+            <q>{issue.text}</q>
+            <span className="focus-review-reason">{issue.reason}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="focus-review-note">
+        Saving to Marketing Cloud waits until the draft uses the approved claims word for word. Ask
+        the chat to revise it.
+      </p>
+    </section>
+  );
+}
+
 /** The draft the chat is building, with every version and what it was built from. */
 export function FocusCard({
   focus,
@@ -128,6 +171,7 @@ export function FocusCard({
           </div>
         ))}
       </dl>
+      {version.review && <DraftReviewPanel review={version.review} />}
       {sources.length > 0 && (
         <p className="focus-sources">
           Built from{" "}
