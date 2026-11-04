@@ -722,7 +722,7 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
         title: "Observability: technical trace, turn history, and audit export",
         summary: "See exactly what happened in every turn.",
         body: `- **Live tool calls** under the trace while an answer streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
-- **Technical trace** at the top of each answer, so the answer streaming in below doesn't move it: every lifecycle event in order, with timing.
+- **Technical trace** at the top of each answer, so the answer streaming in below doesn't move it: every lifecycle event in order, with timing. It opens while the answer streams (or when something went wrong) and stays open after it finishes, until you close it.
   - turn start, step start and finish (finish reason, token counts)
   - reasoning start and end, with the model's reasoning, redacted
   - text start and end
