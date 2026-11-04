@@ -32,9 +32,10 @@ import { HistoryView } from "./HistoryView";
 import { LearnView } from "./learn/LearnView";
 import { Markdown } from "./Markdown";
 import { SalesforceAgentsPanel } from "./SalesforceAgents";
-import { ToolActivity } from "./ToolActivity";
 import { ScopeBar } from "./ScopeBar";
 import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
+import { TechnicalTrace } from "./TechnicalTrace";
+import { ToolActivity } from "./ToolActivity";
 import { executionTrace } from "./turn-trace";
 import { UseCasesView } from "./usecases/UseCasesView";
 import { WorkspacePanel } from "./WorkspacePanel";
@@ -52,51 +53,6 @@ function rawMessageText(message: UIMessage) {
 function messageText(message: UIMessage) {
   const text = rawMessageText(message);
   return message.role === "assistant" ? normalizeAssistantText(text) : text;
-}
-
-function TechnicalTrace({
-  rows,
-  live,
-}: {
-  rows: ReturnType<typeof executionTrace>;
-  live: boolean;
-}) {
-  if (rows.length === 0) return null;
-  const errors = rows.filter((row) => row.state === "error").length;
-  return (
-    <details className="execution-trace" open={live || errors > 0}>
-      <summary>
-        Behind the scenes · technical trace
-        <span className="trace-summary-meta">
-          {` · ${rows.length} events${errors ? ` · ${errors} with issues` : ""}${live ? " · live" : ""}`}
-        </span>
-      </summary>
-      <ol>
-        {rows.map((row) => (
-          <li className={`trace-${row.state} trace-kind-${row.kind}`} key={row.key}>
-            <i className={`trace-indicator indicator-${row.state}`} />
-            <div className="trace-detail">
-              <div className="trace-heading">
-                <strong>{row.label}</strong>
-                {row.elapsed && <time className="trace-time">{row.elapsed}</time>}
-              </div>
-              <span className="trace-copy">{row.detail}</span>
-              {row.payload && (
-                <details className="payload-viewer">
-                  <summary>{row.payloadLabel ?? "Sanitized payload"}</summary>
-                  <pre>{row.payload}</pre>
-                </details>
-              )}
-            </div>
-          </li>
-        ))}
-      </ol>
-      <p className="trace-boundary">
-        Every model and tool lifecycle event for this turn, in order, with times from the start of
-        the turn. Credentials, confirmation material, and personal data are redacted.
-      </p>
-    </details>
-  );
 }
 
 const CONFIRMATION_COPY = {
