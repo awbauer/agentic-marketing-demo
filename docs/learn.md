@@ -92,7 +92,7 @@ A language model has no memory between calls. Each time the orchestrator asks th
 **In this demo**
 
 - System prompt: apps/edge/src/turn-policy.ts (orchestratorSystemPrompt)
-- Technical trace under each answer shows what the model did with its context
+- Technical trace at the top of each answer shows what the model did with its context
 
 **Learn more**
 
@@ -448,7 +448,7 @@ Around the loop, the orchestrator also handles the events the model must not: it
 **In this demo**
 
 - apps/edge/src/orchestrator.ts
-- “Behind the scenes · technical trace” under each answer
+- “Behind the scenes · technical trace” at the top of each answer
 
 **Learn more**
 
@@ -1058,8 +1058,8 @@ flowchart LR
 
 > **Key idea:** Every turn leaves a trace for engineers and a history for reviewers.
 
-- **Live tool calls** above an answer while it streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
-- **Technical trace** under each answer: every lifecycle event in order, with timing.
+- **Live tool calls** under the trace while an answer streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
+- **Technical trace** at the top of each answer, so the answer streaming in below doesn't move it: every lifecycle event in order, with timing.
   - turn start, step start and finish (finish reason, token counts)
   - reasoning start and end, with the model's reasoning, redacted
   - text start and end
