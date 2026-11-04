@@ -640,7 +640,9 @@ export function planPosition(plan: readonly string[], outcomes: readonly StepOut
   let failures = 0;
   for (const outcome of outcomes) {
     if (position >= plan.length) break;
-    if (outcome.tool === plan[position] && !outcome.ok && failures === 0) {
+    // Another look at a tool the plan already ran doesn't move the plan on.
+    if (outcome.tool !== plan[position]) continue;
+    if (!outcome.ok && failures === 0) {
       failures = 1;
       continue;
     }
@@ -651,9 +653,12 @@ export function planPosition(plan: readonly string[], outcomes: readonly StepOut
 }
 
 /**
- * Per-step tool settings. Step N of a plan forces its Nth tool and only sees that tool; steps after
- * the plan, and the last allowed step, receive no tools at all: Workers AI does not enforce
- * `toolChoice: "none"`, so gpt-oss otherwise emits malformed tool calls instead of the answer.
+ * Per-step tool settings. Step N of a plan forces its Nth tool; steps after the plan, and the last
+ * allowed step, receive no tools at all: Workers AI does not enforce `toolChoice: "none"`, so
+ * gpt-oss otherwise emits malformed tool calls instead of the answer. A forced step also keeps
+ * the plan's earlier read-only tools callable: Workers AI doesn't enforce the forced choice either,
+ * and a model taking a second look at the claims check would otherwise call a tool the step
+ * doesn't offer, which fails the whole turn. Marketing Cloud's agents are never offered early.
  */
 export function stepToolChoice(
   plan: string | readonly string[] | undefined,
@@ -663,13 +668,27 @@ export function stepToolChoice(
   outcomes?: readonly StepOutcome[],
 ) {
   const steps = plan === undefined ? [] : typeof plan === "string" ? [plan] : plan;
-  const forced = steps[outcomes ? planPosition(steps, outcomes) : stepNumber];
-  if (forced && stepNumber < maxSteps - 1)
-    return { toolChoice: { type: "tool" as const, toolName: forced }, activeTools: [forced] };
+  const position = outcomes ? planPosition(steps, outcomes) : stepNumber;
+  const forced = steps[position];
+  if (forced && stepNumber < maxSteps - 1) {
+    const earlier = outcomes
+      ? steps
+          .slice(0, position)
+          .filter((name) => name !== forced && !MARKETING_CLOUD_TOOLS.has(baseName(name)))
+      : [];
+    return {
+      toolChoice: { type: "tool" as const, toolName: forced },
+      activeTools: [forced, ...new Set(earlier)],
+    };
+  }
   if (steps.length > 0 || stepNumber >= maxSteps - 1)
     return { toolChoice: "none" as const, activeTools: [] as string[] };
   return undefined;
 }
+
+/** A tool's name without its server's prefix ("tool_salesforce_…_draft_campaign_brief"). */
+const baseName = (name: string) =>
+  [...MARKETING_CLOUD_TOOLS].find((tool) => name === tool || name.endsWith(`_${tool}`)) ?? name;
 
 export type CampaignChannel = "push" | "email" | "sms";
 
