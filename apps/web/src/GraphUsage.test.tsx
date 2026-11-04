@@ -48,6 +48,31 @@ describe("the knowledge-graph tree", () => {
     ]);
   });
 
+  it("starts at the node most paths pass through, whichever end the paths start from", () => {
+    const tree = graphTree([
+      {
+        tool: "check clinical claims",
+        source: "neo4j",
+        paths: [
+          {
+            nodes: [trial, claim("c1"), drug],
+            relationships: [
+              { type: "SUPPORTED_BY", from: "c1", to: trial.id },
+              { type: "HAS_CLAIM", from: drug.id, to: "c1" },
+            ],
+          },
+          {
+            nodes: [claim("c2"), drug],
+            relationships: [{ type: "HAS_CLAIM", from: drug.id, to: "c2" }],
+          },
+        ],
+      },
+    ]);
+    expect(tree.roots.map((node) => node.name)).toEqual(["Cardivance"]);
+    expect(tree.roots[0]?.children.map((node) => node.id)).toEqual(["c1", "c2"]);
+    expect(tree.roots[0]?.children[0]?.children[0]?.name).toBe("CARDIO-HF");
+  });
+
   it("reads a link pointing back up the tree from the child's side", () => {
     const asset = { id: "a1", label: "ContentAsset", name: "Outcomes email" };
     const tree = graphTree([

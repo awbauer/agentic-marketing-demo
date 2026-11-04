@@ -1212,6 +1212,8 @@ select:disabled,
   margin: 3px 0 0;
   font-size: 13px;
   line-height: 1.45;
+  /* A field may hold several lines, such as a body's bullets or what was ruled out. */
+  white-space: pre-line;
 }
 .focus-sources {
   margin: 10px 0 0;
@@ -2531,6 +2533,7 @@ select:disabled,
 
 /* How the agents used the knowledge graph: a summary, then the evidence as a tree of cards. */
 .graph-usage-summary {
+  overflow-wrap: anywhere;
   margin: 0 0 2px;
   font-size: 13px;
   line-height: 1.45;

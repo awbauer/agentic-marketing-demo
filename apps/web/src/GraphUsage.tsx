@@ -39,33 +39,39 @@ export type GraphTree = {
 };
 
 /**
- * The paths an answer's graph tools walked, as one tree: it starts where the paths start, each node
- * appears once under the first node that reached it, and a node several paths share notes where
- * else it's linked. A tree reads top to bottom in a narrow panel, where a node-link drawing can't
- * fit its labels.
+ * The paths an answer's graph tools walked, as one tree. It starts at the node most paths pass
+ * through (usually the drug or account the question was about) and follows links in either
+ * direction, so evidence that connects reads as one tree whichever end its paths started from.
+ * Each node appears once, under the first node that reached it, and notes where else it's linked.
+ * A tree reads top to bottom in a narrow panel, where a node-link drawing can't fit its labels.
  */
 export function graphTree(evidence: readonly GraphEvidence[]): GraphTree {
   const nodes = new Map<string, PathNode>();
-  const links: Array<{ from: string; to: string; type: string }> = [];
-  const starts: string[] = [];
+  const inPaths = new Map<string, number>();
+  const links = new Map<string, Array<{ id: string; type: string; forward: boolean }>>();
+  const link = (from: string, to: string, type: string, forward: boolean) => {
+    const list = links.get(from) ?? [];
+    if (!list.some((item) => item.id === to)) list.push({ id: to, type, forward });
+    links.set(from, list);
+  };
   for (const item of evidence)
     for (const path of item.paths) {
-      for (const node of path.nodes) if (!nodes.has(node.id)) nodes.set(node.id, node);
-      const first = path.nodes[0];
-      if (first && !starts.includes(first.id)) starts.push(first.id);
-      // Follow the path's own order, so each step hangs under the node before it.
-      path.nodes.forEach((node, index) => {
-        const previous = path.nodes[index - 1];
-        if (!previous) return;
-        const rel = path.relationships.find(
-          (item) =>
-            (item.from === previous.id && item.to === node.id) ||
-            (item.from === node.id && item.to === previous.id),
-        );
-        links.push({ from: previous.id, to: node.id, type: rel?.type ?? "" });
-      });
+      for (const node of new Map(path.nodes.map((node) => [node.id, node])).values()) {
+        if (!nodes.has(node.id)) nodes.set(node.id, node);
+        inPaths.set(node.id, (inPaths.get(node.id) ?? 0) + 1);
+      }
+      for (const rel of path.relationships) {
+        link(rel.from, rel.to, rel.type, true);
+        link(rel.to, rel.from, rel.type, false);
+      }
     }
+  const order = [...nodes.keys()];
+  // Most-traveled first; ties keep the order the paths named them in.
+  const byWeight = [...order].sort(
+    (a, b) => (inPaths.get(b) ?? 0) - (inPaths.get(a) ?? 0) || order.indexOf(a) - order.indexOf(b),
+  );
   const placed = new Map<string, TreeNode>();
+  const parentOf = new Map<string, string>();
   let hidden = 0;
   const make = (id: string, via?: TreeNode["via"]): TreeNode => ({
     ...(nodes.get(id) as PathNode),
@@ -74,44 +80,37 @@ export function graphTree(evidence: readonly GraphEvidence[]): GraphTree {
     children: [],
   });
   const roots: TreeNode[] = [];
-  const queue: TreeNode[] = [];
-  for (const id of starts) {
-    if (placed.has(id)) continue;
-    const root = make(id);
-    placed.set(id, root);
+  for (const start of byWeight) {
+    if (placed.has(start)) continue;
+    const root = make(start);
+    placed.set(start, root);
     roots.push(root);
-    queue.push(root);
-  }
-  while (queue.length) {
-    const parent = queue.shift() as TreeNode;
-    for (const link of links.filter((item) => item.from === parent.id)) {
-      const existing = placed.get(link.to);
-      if (existing) {
-        if (
-          existing !== parent &&
-          !existing.alsoFrom.includes(parent.name) &&
-          !parent.children.includes(existing)
-        )
-          existing.alsoFrom.push(parent.name);
-        continue;
+    const queue = [root];
+    while (queue.length) {
+      const parent = queue.shift() as TreeNode;
+      const next = [...(links.get(parent.id) ?? [])].sort(
+        (a, b) => order.indexOf(a.id) - order.indexOf(b.id),
+      );
+      for (const edge of next) {
+        const existing = placed.get(edge.id);
+        if (existing) {
+          const related =
+            parentOf.get(parent.id) === edge.id || parentOf.get(edge.id) === parent.id;
+          if (!related && !existing.alsoFrom.includes(parent.name))
+            existing.alsoFrom.push(parent.name);
+          continue;
+        }
+        if (placed.size >= MAX_NODES) {
+          hidden += 1;
+          placed.set(edge.id, make(edge.id));
+          continue;
+        }
+        const child = make(edge.id, { type: edge.type, forward: edge.forward });
+        placed.set(edge.id, child);
+        parentOf.set(edge.id, parent.id);
+        parent.children.push(child);
+        queue.push(child);
       }
-      if (placed.size >= MAX_NODES) {
-        hidden += 1;
-        placed.set(link.to, make(link.to));
-        continue;
-      }
-      const rel = evidence
-        .flatMap((item) => item.paths)
-        .flatMap((path) => path.relationships)
-        .find(
-          (item) =>
-            (item.from === parent.id && item.to === link.to) ||
-            (item.from === link.to && item.to === parent.id),
-        );
-      const child = make(link.to, { type: link.type, forward: rel?.from === parent.id });
-      placed.set(link.to, child);
-      parent.children.push(child);
-      queue.push(child);
     }
   }
   const counts = new Map<string, number>();
@@ -174,7 +173,10 @@ export function GraphUsage({ evidence }: { evidence: readonly GraphEvidence[] })
   if (evidence.length === 0) return null;
   const tree = graphTree(evidence);
   const source = evidence.some((item) => item.source === "neo4j") ? "Neo4j" : "local copy";
-  const rootNames = tree.roots.map((root) => root.name).join(", ");
+  const rootNames =
+    tree.roots.length > 2
+      ? `${tree.roots[0]?.name} and ${tree.roots.length - 1} other starting points`
+      : tree.roots.map((root) => root.name).join(" and ");
   const reached = tree.byType.filter(([label]) => !tree.roots.some((root) => root.label === label));
   return (
     <section className="workspace-section graph-usage" aria-labelledby="graph-usage-title">
