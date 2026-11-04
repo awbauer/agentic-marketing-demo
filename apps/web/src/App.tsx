@@ -926,6 +926,13 @@ export function App() {
                 <div className="message-author">
                   {message.role === "user" ? "You" : "Northstar orchestrator"}
                 </div>
+                {/* The trace sits first, so the answer streaming in below doesn't move it. */}
+                {message.role === "assistant" && (
+                  <TechnicalTrace
+                    rows={executionTrace(message)}
+                    live={busy && message.id === messages.at(-1)?.id}
+                  />
+                )}
                 {message.role === "assistant" && (
                   <ToolActivity
                     message={message}
@@ -939,12 +946,6 @@ export function App() {
                 )}
                 {message.role === "assistant" && <SalesforceAgentsPanel message={message} />}
                 {message.role === "assistant" && <GraphEvidencePanel message={message} />}
-                {message.role === "assistant" && (
-                  <TechnicalTrace
-                    rows={executionTrace(message)}
-                    live={busy && message.id === messages.at(-1)?.id}
-                  />
-                )}
               </article>
             ))}
             {busy && (

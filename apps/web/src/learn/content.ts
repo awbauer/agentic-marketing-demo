@@ -295,7 +295,7 @@ export const LEARN_PARTS: LearnPart[] = [
 **Context engineering** is deciding what goes into that window, in what form, and what stays out. More is not better. Long, noisy windows dilute attention ("context rot"), cost more, and give stale or injected text a chance to steer the model. Good context is the *smallest* set of high-signal information that lets the model do the next step well.`,
         inDemo: [
           "System prompt: apps/edge/src/turn-policy.ts (orchestratorSystemPrompt)",
-          "Technical trace under each answer shows what the model did with its context",
+          "Technical trace at the top of each answer shows what the model did with its context",
         ],
         resources: [R.contextEngineering, R.lostInTheMiddle, R.buildingAgents],
       },
@@ -444,7 +444,7 @@ Around the loop, the orchestrator also handles the events the model must not: it
 **The header's brand and role.** Each chat message carries the brand and role chosen in the header. The server withholds other brands' tools, answers a request about another brand with a note to switch rather than answering from memory, and tells the model the role so it leads with what that person decides. The model is told what each brand sells (Lumera's Cardivance, Glucora and Neurelva; Harborstone's Sweep Account; Coastline's chowder), so a request that names a product is read as its brand's, not as another brand. The brand also decides which claims checks a new draft starts with. The role changes emphasis only; it never changes what Salesforce allows or what needs confirmation.`,
         inDemo: [
           "apps/edge/src/orchestrator.ts",
-          "“Behind the scenes · technical trace” under each answer",
+          "“Behind the scenes · technical trace” at the top of each answer",
         ],
         resources: [R.cfAgents, R.cfChatAgents, R.durableObjects, R.aiSdk, R.react],
       },
@@ -721,8 +721,8 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
         id: "observability",
         title: "Observability: technical trace, turn history, and audit export",
         summary: "See exactly what happened in every turn.",
-        body: `- **Live tool calls** above an answer while it streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
-- **Technical trace** under each answer: every lifecycle event in order, with timing.
+        body: `- **Live tool calls** under the trace while an answer streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
+- **Technical trace** at the top of each answer, so the answer streaming in below doesn't move it: every lifecycle event in order, with timing.
   - turn start, step start and finish (finish reason, token counts)
   - reasoning start and end, with the model's reasoning, redacted
   - text start and end
