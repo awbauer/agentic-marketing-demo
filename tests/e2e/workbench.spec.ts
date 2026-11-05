@@ -550,7 +550,9 @@ test("renders model comparison, checks, scenarios, failures, and methodology", a
   });
   await expect(models.getByText("In production")).toBeVisible();
   await expect(models.getByRole("row", { name: /gpt-oss-20b/ })).toContainText("50%");
-  // Cost per turn sits beside latency: tokens (input plus output) and tool calls, averaged.
+  await expect(models.getByRole("columnheader", { name: "Est. USD per turn" })).toBeVisible();
+  await expect(models.getByRole("columnheader", { name: "Est. USD per pass" })).toBeVisible();
+  // Tokens (input plus output) and tool calls per turn are averaged.
   await expect(models.getByRole("row", { name: /gpt-oss-120b/ })).toContainText(
     "1,500 tokens1 tool call",
   );

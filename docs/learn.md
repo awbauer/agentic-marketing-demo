@@ -1119,7 +1119,7 @@ flowchart LR
 `pnpm eval:live` runs the **production pipeline**: policy router, intent router, prompt, guards, and step settings, against live Workers AI models. Three suites:
 
 - **Demo scenarios:** the use-case library's prompts, through the full pipeline.
-- **Routing through the pipeline:** 28 prompts, including memory recall and the financial services use cases, as evaluators experience them.
+- **Routing through the pipeline:** a shared set of prompts, including memory recall and the financial services use cases, as evaluators experience them.
 - **Routing by the model alone:** the same prompts with no routers, isolating model quality.
 
 Each turn is scored on:
@@ -1130,7 +1130,7 @@ Each turn is scored on:
 - **graph-grounded:** a graph or memory answer names only accounts, clients, people, campaigns, content, menu items, and compliance approval IDs that its tools returned
 - **agent request grounded:** a request to the Marketing Cloud Campaign Creation agent carries what the turn gathered. A brief request names the brand, a menu item, and the city or weather; a preview refinement names the saved Brief ID. It's scored on the request the agent actually receives.
 
-Latency and tokens are recorded too, and the Evaluations view shows each turn's seconds with its tokens and tool calls, plus the mean tokens and tool calls per turn for each model. Runs recorded before the grounding check show no rate for it.
+Latency and tokens are recorded before judging, and the Evaluations view shows each turn's seconds with its tokens and tool calls, plus the mean tokens and tool calls per turn for each model. Runs recorded before the grounding check show no rate for it.
 
 **What good looks like.** Pass/fail says the pipeline behaved; it doesn't say the answer was *good*. Each demo scenario has a written **rubric** in `packages/evals/src/rubric.ts`: a goal, an audience persona where a customer is involved, deterministic **criteria** (for the weather-aware Coastline campaign: names a menu item, uses the real weather and time of day, cites what worked before, a key message of 160 characters or fewer, a measurable KPI), and weights saying which quality dimensions matter. Criteria are reported as "criteria met" beside the pass gate, so pass rates stay comparable with earlier runs.
 
@@ -1138,7 +1138,7 @@ Latency and tokens are recorded too, and the Evaluations view shows each turn's 
 
 **A fixed stand-in for the Marketing Cloud agent.** The real agent's copy doesn't depend on the orchestrator model, so every contestant would get the same canned text. In the run, one fixed reference model plays the agent, so what differs is what the orchestrator asked for (weather, time, menu, past results) and how it presents the result.
 
-**Cost.** Every turn, judge call, and simulated-agent call is priced from Cloudflare's published Workers AI per-million-token rates (neurons are derived at $0.011 per 1,000). The run prints a projection first and refuses to start above `--max-usd`; the report shows cost per turn, cost per passing turn, and a cost-versus-quality chart. The default run compares gpt-oss-120b and gpt-oss-20b; the expensive frontier models (Kimi K2.6, GLM-5.3, DeepSeek V4 Pro) are opt-in with `--tier frontier`. GLM-4.7-Flash and Llama 4 Scout, which scored low, are no longer run (ADR-011); the published report still shows their earlier turns. Cloudflare limits paid frontier models to 20 requests a minute per model, so the runner throttles every call (turns, judges, simulator) per model, serves contestant turns before judge calls, and refreshes its sign-in token during long runs.
+**Cost.** Every turn, judge call, and simulated-agent call is priced from Cloudflare's published Workers AI per-million-token rates (neurons are derived at $0.011 per 1,000). The run prints a projection first and refuses to start above `--max-usd`; the report shows estimated USD per demo-scenario turn and per passing turn, a cost-versus-quality chart, and a run total with judges and the simulated agent. The estimates use list rates before account-level allowances. The default run compares gpt-oss-120b and gpt-oss-20b; the paid-access frontier models (Kimi K2.6, GLM-5.3, GLM-5.3-Flash, DeepSeek V4 Pro, and DeepSeek V4.1 Flash) are opt-in with `--tier frontier`. GLM-4.7-Flash and Llama 4 Scout, which scored low, are no longer run (ADR-011); the published report still shows their earlier turns. Cloudflare limits paid frontier models to 20 requests a minute per model, so the runner throttles every call (turns, judges, simulator) per model, serves contestant turns before judge calls, and refreshes its sign-in token during long runs.
 
 `pnpm eval` runs the routing set through the production policy and intent routers without a model, on every verify. Read-style Salesforce tools are fixtures in the live run, so the scores measure orchestration, not Salesforce agent quality. A held-out set of paraphrases guards the router against overfitting. The first published run found a real routing bug: any prompt mentioning "campaign" forced the summary tool.
 

@@ -1,7 +1,7 @@
 // Workers AI list prices, copied from Cloudflare's pricing page. Cloudflare bills in neurons at a
 // fixed USD rate and publishes per-token rates alongside, so USD is the source and neurons derive.
 export const PRICING_SOURCE = "https://developers.cloudflare.com/workers-ai/platform/pricing/";
-export const PRICING_AS_OF = "2026-09-17";
+export const PRICING_AS_OF = "2026-11-05";
 export const NEURON_USD = 0.011 / 1000;
 export const FREE_NEURONS_PER_DAY = 10_000;
 
@@ -22,6 +22,8 @@ export const WORKERS_AI_PRICING: Readonly<Record<string, ModelPrice>> = {
   "@cf/meta/llama-4-scout-17b-16e-instruct": { input: 0.27, output: 0.85 },
   "@cf/moonshotai/kimi-k2.6": { input: 0.95, cachedInput: 0.16, output: 4 },
   "@cf/zai-org/glm-5.3": { input: 1.4, cachedInput: 0.26, output: 4.4 },
+  "@cf/zai-org/glm-5.3-flash": { input: 0.15, cachedInput: 0.03, output: 0.5 },
+  "@cf/deepseek-ai/deepseek-v4.1-flash-1017": { input: 0.3, cachedInput: 0.006, output: 1.2 },
   "@cf/deepseek-ai/deepseek-v4-pro-0813": { input: 1.32, cachedInput: 0.044, output: 3.96 },
 };
 

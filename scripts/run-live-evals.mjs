@@ -6,7 +6,7 @@
 //                       [--out path] [--live-graph] [--cases id,id] [--no-judge]
 //                       [--dry-run] [--max-usd n]
 //   --tier frontier  also runs the expensive models (they need Workers Paid)
-//   --models         explicit ids; the only way to run a model marked `excluded`
+//   --models         explicit model IDs from the comparison roster
 //   --cases          only these case ids; for cheap targeted re-runs
 //   --dry-run        print the projected cost and exit without calling any model
 //   --max-usd        refuse to start when the projected cost exceeds this (default 2, or 15 with --tier frontier)
@@ -27,16 +27,16 @@ import {
   EXTERNAL_SERVICES_TOOL_PREFIX,
 } from "../apps/edge/src/external-services/server.ts";
 import { applyFocusUpdate } from "../apps/edge/src/focus.ts";
-import {
-  connectLifeSciencesTools,
-  LIFE_SCIENCES_TOOL_PREFIX,
-} from "../apps/edge/src/life-sciences/server.ts";
 import { forcedToolCallMiddleware } from "../apps/edge/src/forced-tool-middleware.ts";
 import {
   connectKnowledgeGraphTools,
   KNOWLEDGE_GRAPH_TOOL_PREFIX,
   knowledgeGraphBackend,
 } from "../apps/edge/src/knowledge-graph/server.ts";
+import {
+  connectLifeSciencesTools,
+  LIFE_SCIENCES_TOOL_PREFIX,
+} from "../apps/edge/src/life-sciences/server.ts";
 import { pinBriefToRefinement } from "../apps/edge/src/marketing-writes.ts";
 import {
   MAX_OUTPUT_TOKENS,
@@ -73,16 +73,16 @@ import {
   rememberDraft,
 } from "../packages/knowledge-graph/src/index.ts";
 import { estimateRun, formatEstimate } from "./lib/eval-estimate.mjs";
-import { createEvalProvider } from "./lib/eval-provider.mjs";
-import { concurrencyFor } from "./lib/eval-throttle.mjs";
 import { buildQuality, JUDGES, judgeAnswer } from "./lib/eval-judge.mjs";
 import { buildMethodology } from "./lib/eval-methodology.mjs";
+import { createEvalProvider } from "./lib/eval-provider.mjs";
 import {
   createSimulatedAgent,
   SIMULATED_TOOLS,
   simulatedResult,
 } from "./lib/eval-simulated-agent.mjs";
 import { summarize, summarizeAgreement, summarizeCost } from "./lib/eval-summary.mjs";
+import { concurrencyFor } from "./lib/eval-throttle.mjs";
 
 // Served as a static asset so the demo UI shows the latest committed run without a code change.
 const DEFAULT_REPORT_PATH = "apps/web/public/evals/latest.json";
@@ -90,15 +90,25 @@ const DEFAULT_REPORT_PATH = "apps/web/public/evals/latest.json";
 const TOOL_PREFIX = "tool_salesforce_northstar-marketing-salesforce_";
 const CALIBRATION_PATH = "artifacts/reports/eval-calibration.json";
 
-// Inexpensive models run by default. The frontier tier is opt-in (--tier frontier) because Kimi K2.6
-// alone was about 60% of an earlier five-model run, and GLM-5.3 and DeepSeek V4 Pro are priced alike.
-// `excluded` marks a low performer that is skipped unless named in --models. GLM-4.7-Flash and
-// Llama 4 Scout, excluded in WU-051, are no longer listed (ADR-011); add them back here to rerun.
+// The two gpt-oss baselines run by default. The paid-access models are opt-in (--tier frontier).
+// GLM-4.7-Flash and Llama 4 Scout were retired from the live roster in ADR-011.
 const MODELS = [
   { id: "@cf/openai/gpt-oss-120b", label: "gpt-oss-120b", family: "openai", tier: "default" },
   { id: "@cf/openai/gpt-oss-20b", label: "gpt-oss-20b", family: "openai", tier: "default" },
   { id: "@cf/moonshotai/kimi-k2.6", label: "Kimi K2.6", family: "moonshot", tier: "frontier" },
   { id: "@cf/zai-org/glm-5.3", label: "GLM-5.3", family: "zai", tier: "frontier" },
+  {
+    id: "@cf/zai-org/glm-5.3-flash",
+    label: "GLM-5.3-Flash",
+    family: "zai",
+    tier: "frontier",
+  },
+  {
+    id: "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
+    label: "DeepSeek V4.1 Flash",
+    family: "deepseek",
+    tier: "frontier",
+  },
   {
     id: "@cf/deepseek-ai/deepseek-v4-pro-0813",
     label: "DeepSeek V4 Pro",
@@ -391,6 +401,7 @@ async function runCase(model, tools, suite, testCase, trial, judging) {
       .filter(([, ok]) => !ok)
       .map(([check]) => check)
       .join(", ");
+  const latencyMs = Date.now() - started;
   const isDemo = suite === "demo-scenarios";
   let criteria;
   let quality;
@@ -420,7 +431,7 @@ async function runCase(model, tools, suite, testCase, trial, judging) {
     toolCalled,
     checks,
     passed,
-    latencyMs: Date.now() - started,
+    latencyMs,
     inputTokens,
     ...(cachedInputTokens ? { cachedInputTokens } : {}),
     outputTokens,
@@ -586,7 +597,7 @@ const frontier = argument("tier", "default") === "frontier";
 const judgingOn = !process.argv.includes("--no-judge");
 const selected = argument(
   "models",
-  MODELS.filter((model) => !model.excluded && (frontier || model.tier === "default"))
+  MODELS.filter((model) => frontier || model.tier === "default")
     .map((model) => model.id)
     .join(","),
 ).split(",");
