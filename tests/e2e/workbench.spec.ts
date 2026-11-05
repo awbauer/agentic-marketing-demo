@@ -574,9 +574,8 @@ test("renders model comparison, checks, scenarios, failures, and methodology", a
     "aria-pressed",
     "true",
   );
-  await page.screenshot({
-    path: `artifacts/evidence/WU-041/evaluations-${testInfo.project.name}.png`,
-    fullPage: true,
+  await models.screenshot({
+    path: `artifacts/evidence/WU-072/evaluations-${testInfo.project.name}.png`,
   });
 });
 
