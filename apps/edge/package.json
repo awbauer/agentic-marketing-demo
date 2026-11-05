@@ -1,5 +1,8 @@
 {
   "name": "@northstar/edge",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@northstar/architecture": "workspace:*"
+  }
 }

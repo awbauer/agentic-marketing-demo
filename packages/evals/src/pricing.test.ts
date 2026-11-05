@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NEURON_USD, priceFor, sumCosts, turnCost, WORKERS_AI_PRICING } from "./pricing";
+import { formatUsd, NEURON_USD, priceFor, sumCosts, turnCost, WORKERS_AI_PRICING } from "./pricing";
 
 describe("Workers AI pricing", () => {
   it("prices a turn from per-million-token rates", () => {
@@ -49,4 +49,13 @@ describe("Workers AI pricing", () => {
       expect(price.output).toBeGreaterThan(0);
     }
   });
+});
+
+it.each([
+  [0, "$0.0000"],
+  [0.001234, "$0.0012"],
+  [0.059, "$0.0590"],
+  [5.3, "$5.3000"],
+])("formats %s USD with four decimal places", (amount, expected) => {
+  expect(formatUsd(amount)).toBe(expected);
 });

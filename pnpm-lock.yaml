@@ -106,7 +106,11 @@ importers:
         specifier: 4.135.0
         version: 4.135.0(@cloudflare/workers-types@5.20260919.1)(@types/node@24.10.1)
 
-  apps/edge: {}
+  apps/edge:
+    dependencies:
+      '@northstar/architecture':
+        specifier: workspace:*
+        version: link:../../packages/architecture
 
   apps/web: {}
 
@@ -2705,6 +2709,9 @@ packages:
 
   workers-ai-provider@4.0.0:
     resolution: {integrity: sha512-FkhwMP1EP/MKXR8Jv1o7wLVKfTqu0h/PUaEmhZ7gyDiioib5Wsh3oPAKhG+7+SWfU3roTDHaEWlJpkJjpXu+fQ==}
+    deprecated: |-
+      Deprecated. Use createAI from agents/models/ai-sdk, or
+       ai-search-provider for AI Search: https://developers.cloudflare.com/agents/models/ai-sdk/
     peerDependencies:
       '@ai-sdk/anthropic': ^4.0.0
       '@ai-sdk/google': ^4.0.0

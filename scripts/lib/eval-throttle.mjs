@@ -11,6 +11,8 @@ export const PAID_MODEL_RPM = 18;
 const PAID_MODELS = new Set([
   "@cf/moonshotai/kimi-k2.6",
   "@cf/zai-org/glm-5.3",
+  "@cf/zai-org/glm-5.3-flash",
+  "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
   "@cf/deepseek-ai/deepseek-v4-pro-0813",
 ]);
 

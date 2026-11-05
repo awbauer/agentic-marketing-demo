@@ -1,7 +1,8 @@
 // Methodology text shared by the live runner and the offline rescore command.
+
+import { demoScenarios } from "../../packages/evals/src/cases.ts";
 import { PRICING_AS_OF } from "../../packages/evals/src/pricing.ts";
 import { DIMENSION_META, QUALITY_DIMENSIONS } from "../../packages/evals/src/quality.ts";
-import { demoScenarios } from "../../packages/evals/src/cases.ts";
 import { scenarioRubrics } from "../../packages/evals/src/rubric.ts";
 
 export function buildMethodology({ trialsDemo, trialsRouting }) {
@@ -17,7 +18,7 @@ export function buildMethodology({ trialsDemo, trialsRouting }) {
     ],
     toolResults:
       "Read-style Salesforce tools return fictional fixture JSON shaped like Salesforce agent results. The drafting tools (campaign brief, content, content section, preview refinement) are answered by one fixed reference model that stands in for the Marketing Cloud agent, so creative quality depends on what the orchestrator asked for and how it presents the result, not on a canned string. Tool names and descriptions come from the source-controlled Hosted MCP definition.",
-    costModel: `Cost is tokens times Cloudflare's published Workers AI per-million-token rates (snapshot ${PRICING_AS_OF}); neurons are derived at $0.011 per 1,000. Cached input tokens are billed at the cached rate where the model has one. The report splits spend into the models under test, the judge panel, and the simulated agent. Policy-routed turns make no model call and cost nothing. The Workers AI free allocation of 10,000 neurons per day offsets a small run only on the Free plan; the frontier models require Workers Paid.`,
+    costModel: `Cost is tokens times Cloudflare's published Workers AI per-million-token rates (snapshot ${PRICING_AS_OF}); neurons are derived at $0.011 per 1,000. Cached input tokens are billed at the cached rate where the model has one. The report splits spend into the models under test, the judge panel, and the simulated agent. Policy-routed turns make no model call and cost nothing. These estimates are before account-level billing adjustments, including the daily free allocation. The frontier models require paid access.`,
     rubric: demoScenarios.map(({ id }) => ({
       caseId: id,
       goal: scenarioRubrics[id].goal,
@@ -45,15 +46,14 @@ export function buildMethodology({ trialsDemo, trialsRouting }) {
       {
         id: "routing-pipeline",
         label: "Routing through the pipeline",
-        description:
-          "The 20-prompt routing set through the full pipeline, as evaluators experience it.",
+        description: "The routing set through the full pipeline, as evaluators experience it.",
         trials: trialsRouting,
       },
       {
         id: "routing-model-only",
         label: "Routing by the model alone",
         description:
-          "The same 20 prompts with no policy or intent router, so the model alone chooses whether and which tool to call. This isolates model quality.",
+          "The same prompts with no policy or intent router, so the model alone chooses whether and which tool to call. This isolates model quality.",
         trials: trialsRouting,
       },
     ],

@@ -1,7 +1,7 @@
-import { formatUsd } from "@northstar/evals/pricing";
+import { formatUsd, PRICING_SOURCE } from "@northstar/evals/pricing";
 import { EVAL_CHECKS, type EvalReport, EvalReportSchema } from "@northstar/evals/report";
 import { useEffect, useMemo, useState } from "react";
-import { toolCallCount, toolCallsLabel, tokensLabel, turnStats } from "./turn-stats";
+import { tokensLabel, toolCallCount, toolCallsLabel, turnStats } from "./turn-stats";
 
 type LoadState =
   | { status: "loading" }
@@ -162,10 +162,10 @@ function ReportView({
         {report.cost && (
           <>
             {" "}
-            · run cost <strong>{usd(report.cost.totalUsd)}</strong> (models{" "}
+            · estimated run cost <strong>{usd(report.cost.totalUsd)}</strong> (models{" "}
             {usd(report.cost.contestantsUsd)}, judges {usd(report.cost.judgesUsd)}, simulated agent{" "}
-            {usd(report.cost.simulatorUsd)}) at Cloudflare list prices as of{" "}
-            {report.cost.pricingAsOf}
+            {usd(report.cost.simulatorUsd)}) at <a href={PRICING_SOURCE}>Cloudflare list prices</a>{" "}
+            as of {report.cost.pricingAsOf}
           </>
         )}
       </p>
@@ -174,8 +174,10 @@ function ReportView({
         <h3 id="evaluation-models">Model comparison</h3>
         <p className="evaluation-note">
           A turn passes only when every check passes. Latency and tokens cover model turns only.
+          {hasCost &&
+            " Estimated USD per turn and pass covers demo scenario model calls at Cloudflare list rates. Judges and the simulated agent are included in the run total above."}
           {hasQuality &&
-            " Quality index is a 0–100 judge score on the demo scenarios (± is half the 95% interval); “Customer would act” is the share of judged ratings of 4 or 5 given as the audience persona; criteria met is the share of scenario rubric checks the answers satisfied. Cost and quality columns cover the demo scenarios."}
+            " Quality index is a 0–100 judge score on the demo scenarios (± is half the 95% interval); “Customer would act” is the share of judged ratings of 4 or 5 given as the audience persona; criteria met is the share of scenario rubric checks the answers satisfied. Quality columns cover the demo scenarios."}
         </p>
         <div className="evaluation-table-wrap">
           <table className="evaluation-table">
@@ -187,6 +189,12 @@ function ReportView({
                     {entry.label}
                   </th>
                 ))}
+                {hasCost && (
+                  <>
+                    <th scope="col">Est. USD per turn</th>
+                    <th scope="col">Est. USD per pass</th>
+                  </>
+                )}
                 <th scope="col">Median latency</th>
                 <th scope="col">Slow runs (p90)</th>
                 <th scope="col">Output tokens</th>
@@ -197,12 +205,6 @@ function ReportView({
                     <th scope="col">Quality index</th>
                     <th scope="col">Customer would act</th>
                     <th scope="col">Criteria met</th>
-                  </>
-                )}
-                {hasCost && (
-                  <>
-                    <th scope="col">Cost per turn</th>
-                    <th scope="col">Cost per pass</th>
                   </>
                 )}
               </tr>
@@ -227,6 +229,12 @@ function ReportView({
                         </td>
                       );
                     })}
+                    {hasCost && (
+                      <>
+                        <td>{usd(demo?.costPerTurnUsd)}</td>
+                        <td>{usd(demo?.costPerPassUsd)}</td>
+                      </>
+                    )}
                     <td>{demo ? seconds(demo.latencyP50Ms) : "—"}</td>
                     <td>{demo ? seconds(demo.latencyP90Ms) : "—"}</td>
                     <td>{demo ? demo.meanOutputTokens.toLocaleString() : "—"}</td>
@@ -253,12 +261,6 @@ function ReportView({
                             ? "—"
                             : percent(demo.criteriaMetRate)}
                         </td>
-                      </>
-                    )}
-                    {hasCost && (
-                      <>
-                        <td>{usd(demo?.costPerTurnUsd)}</td>
-                        <td>{usd(demo?.costPerPassUsd)}</td>
                       </>
                     )}
                   </tr>
