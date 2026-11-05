@@ -561,7 +561,7 @@ test("renders model comparison, checks, scenarios, failures, and methodology", a
   );
   await expect(models.getByRole("row", { name: /gpt-oss-120b/ })).toContainText("72 ±8");
   await expect(models.getByRole("row", { name: /gpt-oss-120b/ })).toContainText("$0.0020");
-  await expect(page.getByText(/run cost \$0\.059/)).toBeVisible();
+  await expect(page.getByText(/run cost \$0\.0590\b/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Cost vs quality" })).toBeVisible();
   await expect(page.getByText("Kimi K2.6 not evaluated: Errored.")).toBeVisible();
   await expect(page.getByRole("heading", { name: /Failed turns .*\(1\)/ })).toBeVisible();

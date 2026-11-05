@@ -63,5 +63,4 @@ export const sumCosts = (costs: readonly (Cost | undefined)[]): Cost =>
     { usd: 0, neurons: 0 },
   );
 
-export const formatUsd = (usd: number) =>
-  usd === 0 ? "$0" : usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(usd < 1 ? 3 : 2)}`;
+export const formatUsd = (usd: number) => `$${usd.toFixed(4)}`;

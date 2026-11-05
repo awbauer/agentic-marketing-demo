@@ -96,7 +96,6 @@ const MODELS = [
   { id: "@cf/openai/gpt-oss-120b", label: "gpt-oss-120b", family: "openai", tier: "default" },
   { id: "@cf/openai/gpt-oss-20b", label: "gpt-oss-20b", family: "openai", tier: "default" },
   { id: "@cf/moonshotai/kimi-k2.6", label: "Kimi K2.6", family: "moonshot", tier: "frontier" },
-  { id: "@cf/zai-org/glm-5.3", label: "GLM-5.3", family: "zai", tier: "frontier" },
   {
     id: "@cf/zai-org/glm-5.3-flash",
     label: "GLM-5.3-Flash",
