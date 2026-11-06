@@ -28,8 +28,32 @@ Status: in review
 
 ## Not yet demonstrated
 
-The Worker routes aren't deployed, so these wait for the merge and deploy:
+The Worker routes are deployed: Workers Build `a75967bd-2066-4ce7-ac6c-b83f77cc98cd` shipped merge commit `3857dd4` as version `46ce9cbc-59b2-47ad-aea7-9869d59cf51f`, with `SURFACE_ALLOWED_ORIGINS` read back on that version.
 
-- Access accepting the hand-off token in `cf-access-token` from Apex.
-- `window.opener` surviving the Access sign-in window. If it doesn't, the page asks the person to press Login again, which skips the identity provider.
-- A real turn, Salesforce connection, and write from Lightning.
+A person signed in and used the page from their own browser on 2026-11-06. Production Worker logs from 17:01 to 18:05 UTC show:
+
+- 91 requests carrying `cf-access-token`, which only the Apex relay sends, all successful: `bootstrap` 2, `POST turn` 202 × 4, turn polls 46, `messages` 10, `clear` 2, `turns` 7, `operations` 4, `salesforce/status` 14, `salesforce/connect` 2. This shows Access accepting the token from Apex, so the `CF_Authorization` fallback isn't needed.
+- `/api/surface/login` served once with `200`. A token could reach Apex only through that hand-off, so `window.opener` survived the Access sign-in.
+- All 91 logged `cf-access-token` values are `REDACTED`.
+- Two OAuth callbacks in the same 17:45 to 18:06 window as the two connects from Lightning.
+- Two gateway `allow` decisions at 17:59, in the same window as the turns: `ext_get_fed_announcements` and `graph_match_news_to_approved_content`.
+
+Still not demonstrated:
+
+- A Salesforce MCP tool call from Lightning. The gateway log has none in that window, and a `302` callback doesn't prove the connection works.
+- A confirmed write from Lightning. No `confirmations/execute` request reached the Worker in that window.
+- The rendered tool trace, selectors, and history tab. The logs show the data being fetched, not how it looked.
+
+## Post-merge regression
+
+Merging added `.forceignore`, and the `Salesforce metadata` run on `3857dd4` then failed its last step. Its deploy and Apex test steps passed. Salesforce CLI's default `**/.*` ignore applies only when a `.forceignore` exists, so the retrieve into `.salesforce-readback` reported "Nothing retrieved" and the workflow's `find` failed.
+
+Read-only retrieves against the proof org on the merged tree, using the pinned CLI 2.128.5:
+
+| Tree | Output directory | Result |
+| --- | --- | --- |
+| With `.forceignore` | `.salesforce-readback` | Nothing retrieved |
+| With `.forceignore` | `salesforce-readback` | Retrieved |
+| Without `.forceignore` | `.salesforce-readback` | Retrieved |
+
+The workflow now uses `salesforce-readback`. That step runs only on pushes to `main`, so its first real run is the merge of this fix.
