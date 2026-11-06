@@ -1,0 +1,18 @@
+.answer {
+  width: 100%;
+  max-width: none;
+}
+
+.trace-row {
+  border-block-end: 1px solid var(--slds-g-color-border-1, currentColor);
+}
+
+.payload {
+  max-height: 16rem;
+  overflow: auto;
+  padding: var(--slds-g-spacing-2, 0.5rem);
+  border-radius: var(--slds-g-radius-border-2, 0.25rem);
+  background: var(--slds-g-color-surface-container-2, transparent);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

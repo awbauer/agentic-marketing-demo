@@ -1,0 +1,155 @@
+<template>
+  <div class="slds-page-header slds-m-bottom_small">
+    <div class="slds-page-header__row">
+      <div class="slds-page-header__col-title">
+        <div class="slds-media">
+          <div class="slds-media__figure">
+            <lightning-icon icon-name="standard:bot" alternative-text="" size="medium"></lightning-icon>
+          </div>
+          <div class="slds-media__body">
+            <h1 class="slds-page-header__title slds-truncate">Northstar Workbench</h1>
+            <p class="slds-page-header__meta-text">
+              <template lwc:if={identity}>Signed in as {identity}</template>
+              <template lwc:else>Marketing agent with its tools in plain view</template>
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="slds-page-header__col-actions">
+        <div class="slds-page-header__controls">
+          <template lwc:if={ready}>
+            <div class="slds-page-header__control scope-control">
+              <lightning-combobox
+                label="Brand"
+                value={scope.brand}
+                options={brandOptions}
+                onchange={handleBrand}
+              ></lightning-combobox>
+            </div>
+            <div class="slds-page-header__control scope-control">
+              <lightning-combobox
+                label="Run as"
+                value={scope.persona}
+                options={personaOptions}
+                onchange={handlePersona}
+              ></lightning-combobox>
+            </div>
+            <div class="slds-page-header__control">
+              <lightning-button label="Log out" onclick={handleLogout}></lightning-button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <template lwc:if={error}>
+    <div class="slds-notify slds-notify_alert slds-alert_error slds-m-bottom_small" role="alert">
+      <h2>{error}</h2>
+    </div>
+  </template>
+
+  <template lwc:if={needsLogin}>
+    <lightning-card title="Log in to the workbench" icon-name="utility:lock">
+      <div class="slds-p-horizontal_medium">
+        <p class="slds-m-bottom_small">
+          The workbench signs you in with Cloudflare Access. That connects this page to the same
+          agent, tools, and history as the browser workbench. A window opens for the sign-in.
+        </p>
+        <lightning-button
+          variant="brand"
+          label="Log in with Cloudflare Access"
+          icon-name="utility:lock"
+          disabled={signingIn}
+          onclick={handleLogin}
+        ></lightning-button>
+      </div>
+    </lightning-card>
+  </template>
+
+  <template lwc:if={loading}>
+    <div class="loading"><lightning-spinner alternative-text="Loading the workbench"></lightning-spinner></div>
+  </template>
+
+  <template lwc:if={ready}>
+    <div class="slds-grid slds-wrap slds-gutters_small">
+      <div class="slds-col slds-size_1-of-1 slds-large-size_9-of-12">
+        <lightning-card>
+          <div class="slds-p-horizontal_small">
+            <lightning-tabset active-tab-value={activeTab} variant="default">
+              <lightning-tab label="Chat" value="chat" onactive={handleTab}>
+                <c-northstar-chat
+                  scope={scope}
+                  placeholder={placeholder}
+                  draft={draft}
+                  onturnsettled={handleTurnSettled}
+                  onchaterror={handleChatError}
+                ></c-northstar-chat>
+              </lightning-tab>
+              <lightning-tab label="Use cases" value="usecases" onactive={handleTab}>
+                <c-northstar-use-cases
+                  use-cases={useCases}
+                  brand={scope.brand}
+                  ontry={handleTry}
+                ></c-northstar-use-cases>
+              </lightning-tab>
+              <lightning-tab label="History" value="history" onactive={handleTab}>
+                <c-northstar-history
+                  refresh-key={historyKey}
+                  onchaterror={handleChatError}
+                ></c-northstar-history>
+              </lightning-tab>
+            </lightning-tabset>
+          </div>
+        </lightning-card>
+      </div>
+      <div class="slds-col slds-size_1-of-1 slds-large-size_3-of-12">
+        <lightning-card title="Connections" icon-name="utility:connected_apps">
+          <ul class="slds-p-horizontal_medium slds-has-dividers_bottom-space">
+            <li class="slds-item">
+              <div class="slds-grid slds-grid_align-spread">
+                <span class="slds-text-title_bold">Cloudflare Access</span>
+                <lightning-badge label="Signed in" class="slds-theme_success"></lightning-badge>
+              </div>
+            </li>
+            <li class="slds-item">
+              <div class="slds-grid slds-grid_align-spread slds-m-bottom_xx-small">
+                <span class="slds-text-title_bold">Salesforce MCP</span>
+                <lightning-badge label={salesforceState.label} class={salesforceState.className}></lightning-badge>
+              </div>
+              <p class="slds-text-body_small slds-m-bottom_x-small">{salesforceMessage}</p>
+              <template lwc:if={salesforceConnected}>
+                <lightning-button label="Disconnect" onclick={handleDisconnect}></lightning-button>
+              </template>
+              <template lwc:else>
+                <lightning-button
+                  variant="brand"
+                  label={connectLabel}
+                  disabled={connecting}
+                  onclick={handleConnect}
+                ></lightning-button>
+              </template>
+            </li>
+            <template for:each={mcpServers} for:item="server">
+              <li key={server.id} class="slds-item">
+                <div class="slds-grid slds-grid_align-spread">
+                  <span class="slds-text-title_bold">{server.label}</span>
+                  <lightning-badge label="Ready" class="slds-theme_success"></lightning-badge>
+                </div>
+                <p class="slds-text-body_small">{server.detail}</p>
+              </li>
+            </template>
+            <li class="slds-item">
+              <div class="slds-grid slds-grid_align-spread">
+                <span class="slds-text-title_bold">AI Gateway</span>
+                <lightning-badge label="Cloudflare" class="slds-theme_success"></lightning-badge>
+              </div>
+              <p class="slds-text-body_small">{gatewayId}</p>
+              <p class="slds-text-body_small">{modelId}</p>
+            </li>
+          </ul>
+        </lightning-card>
+      </div>
+    </div>
+  </template>
+</template>

@@ -14,6 +14,18 @@ HXL `UiWidgetBundle` and `LightningTypeBundle` metadata is intentionally exclude
 
 The SFDX URL is passed to `sf org login sfdx-url --sfdx-url-stdin`, so credential material is not written to a repository file. GitHub environment protection can require approval before either validation or deployment receives the secrets.
 
+## The Lightning surface
+
+`salesforce/workbench-surface` is a separate package directory holding the Lightning Web Components, the Apex relay, and their app, tab, Remote Site, and permission set. The `Salesforce metadata` workflow doesn't deploy it. Deploy it explicitly to the org that hosts the surface, then run its tests, because a production-classified org may report the deploy's test run as skipped:
+
+```sh
+sf project deploy start --source-dir salesforce/workbench-surface -o <alias> --test-level RunSpecifiedTests --tests NorthstarWorkbenchControllerTest --wait 15
+sf apex run test -o <alias> --class-names NorthstarWorkbenchControllerTest --code-coverage --wait 10
+sf org assign permset -n Northstar_Workbench_User -o <alias>
+```
+
+Add the org's Lightning origin to `SURFACE_ALLOWED_ORIGINS` in `wrangler.jsonc` and deploy the Worker, or Login is refused. See ADR-012.
+
 ## Retiring metadata
 
 The core job only adds and updates metadata; removing a component from source doesn't delete it from the org. To retire a component:

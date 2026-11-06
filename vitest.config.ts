@@ -32,6 +32,7 @@ export default defineConfig({
       "packages/**/*.test.ts",
       "packages/**/*.test.tsx",
       "scripts/**/*.test.mjs",
+      "salesforce/workbench-surface/**/*.test.js",
     ],
     setupFiles: ["./tests/setup.ts"],
   },

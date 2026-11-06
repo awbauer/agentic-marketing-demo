@@ -1,0 +1,58 @@
+<template>
+  <section role="log" aria-label="Conversation" class="slds-chat transcript">
+    <template lwc:if={empty}>
+      <p class="slds-text-color_weak slds-p-vertical_large slds-text-align_center">
+        Ask the agent something, or pick a scenario from Use cases.
+      </p>
+    </template>
+    <ul class="slds-chat-list">
+      <template for:each={transcript} for:item="message">
+        <c-northstar-turn key={message.id} message={message}></c-northstar-turn>
+      </template>
+    </ul>
+    <template lwc:if={active}>
+      <p class="slds-text-color_weak slds-p-vertical_x-small" role="status">The agent is working…</p>
+    </template>
+  </section>
+
+  <template lwc:if={pendingConfirmation}>
+    <article class="slds-box slds-m-vertical_small confirmation">
+      <h3 class="slds-text-heading_small slds-m-bottom_xx-small">{confirmationTitle}</h3>
+      <p class="slds-m-bottom_x-small">{pendingConfirmation.summary}</p>
+      <p class="slds-text-body_small slds-m-bottom_small">
+        Nothing changes until you confirm. This expires at {confirmationExpiry}.
+      </p>
+      <template lwc:if={notPermitted}>
+        <p class="slds-text-color_error slds-m-bottom_small">Salesforce's permission check denied this write.</p>
+      </template>
+      <lightning-button-group>
+        <lightning-button variant="brand" label="Confirm" disabled={confirmDisabled} onclick={handleConfirm}></lightning-button>
+        <lightning-button label="Decline" disabled={deciding} onclick={handleDecline}></lightning-button>
+      </lightning-button-group>
+    </article>
+  </template>
+
+  <template lwc:if={notice}>
+    <p class="slds-text-color_success slds-m-vertical_x-small" role="status">{notice}</p>
+  </template>
+
+  <div class="slds-m-top_small" onkeydown={handleKeydown}>
+    <lightning-textarea
+      label="Message"
+      variant="label-hidden"
+      placeholder={placeholder}
+      value={prompt}
+      max-length="4000"
+      onchange={handlePrompt}
+    ></lightning-textarea>
+  </div>
+  <div class="slds-grid slds-grid_align-spread slds-m-top_x-small">
+    <lightning-button label="New chat" disabled={clearDisabled} onclick={handleClear}></lightning-button>
+    <template lwc:if={active}>
+      <lightning-button variant="destructive-text" label="Stop" onclick={handleStop}></lightning-button>
+    </template>
+    <template lwc:else>
+      <lightning-button variant="brand" label="Send" disabled={sendDisabled} onclick={handleSend}></lightning-button>
+    </template>
+  </div>
+</template>

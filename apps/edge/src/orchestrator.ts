@@ -133,6 +133,7 @@ import {
   wantsSalesforceRecord,
 } from "./turn-policy";
 import { createTurnTracer, describeTurnError, type TurnRoute } from "./turn-trace";
+import { parseSurfaceTurn, surfaceConfirmation, surfaceMessage } from "./surface";
 import {
   addCreatedRecord,
   baseToolName,
@@ -755,6 +756,9 @@ export function writeBlockReason(
   return null;
 }
 
+/** How many recent messages a surface loads; older ones stay in the transcript. */
+const SURFACE_MESSAGE_LIMIT = 12;
+
 export class MarketingOrchestrator extends AIChatAgent<
   OrchestratorBindings,
   OrchestratorState,
@@ -787,6 +791,8 @@ export class MarketingOrchestrator extends AIChatAgent<
     }
   }
   private imageGenerationInFlight = false;
+  /** Cancels the turn another surface started over HTTP; null when none is running. */
+  private surfaceAbort: AbortController | null = null;
   /** Set when the Campaign Creation agent drafted the brief in focus during this turn. */
   private agentBriefThisTurn = false;
   /** This chat's latest forecast, weather-demand map, and stock counts, for the inventory check. */
@@ -3434,8 +3440,95 @@ export class MarketingOrchestrator extends AIChatAgent<
     await pruneConfirmationAudit(this.env.APP_DB);
   }
 
+  /** The answer being streamed right now; the SDK keeps it private and offers no reader for it. */
+  private streamingMessage() {
+    return (this as unknown as { _streamingMessage: UIMessage | null })._streamingMessage;
+  }
+
+  private surfaceTurnActive() {
+    return this.surfaceAbort !== null || this.streamingMessage() !== null;
+  }
+
+  /** What a poll needs: whether a turn runs, its answer so far, and any write awaiting a person. */
+  private surfaceProgress() {
+    const live = this.streamingMessage();
+    return {
+      active: this.surfaceTurnActive(),
+      message: live ? surfaceMessage(live, true) : null,
+      confirmation: surfaceConfirmation(this.state.pendingConfirmation),
+    };
+  }
+
+  /**
+   * The HTTP face of a chat turn, for surfaces that cannot hold the chat WebSocket, such as Apex.
+   * A turn runs through saveMessages, so it reaches the same onChatMessage as a browser's turn:
+   * the same policy router, gateway, tools, and history. Only the transport differs.
+   */
+  private async surfaceRoute(request: Request, url: URL): Promise<Response | null> {
+    const marker = url.pathname.indexOf("/surface/");
+    if (marker < 0) return null;
+    const route = `${request.method} ${url.pathname.slice(marker + "/surface/".length)}`;
+    if (route === "GET turn") return json(this.surfaceProgress());
+    if (route === "GET messages")
+      return json({
+        ...this.surfaceProgress(),
+        messages: this.messages.slice(-SURFACE_MESSAGE_LIMIT).map((item) => surfaceMessage(item)),
+      });
+    if (route === "POST stop") {
+      this.surfaceAbort?.abort();
+      return json({ stopped: this.surfaceAbort !== null });
+    }
+    if (route === "POST clear") {
+      if (this.surfaceTurnActive())
+        return json(
+          { error: { code: "CONFLICT", message: "Wait for the current turn to finish." } },
+          { status: 409 },
+        );
+      this.resetTurnState();
+      await this.persistMessages([], [], { _deleteStaleRows: true });
+      this.resetWorkingSet();
+      return json({ cleared: true });
+    }
+    if (route === "POST turn") {
+      const turn = parseSurfaceTurn(await request.json().catch(() => null));
+      if (!turn)
+        return json(
+          { error: { code: "VALIDATION_FAILED", message: "A message of 1-4000 characters." } },
+          { status: 400 },
+        );
+      if (this.surfaceTurnActive())
+        return json(
+          { error: { code: "CONFLICT", message: "A turn is already running." } },
+          { status: 409 },
+        );
+      const abort = new AbortController();
+      this.surfaceAbort = abort;
+      // saveMessages hands the last request body to onChatMessage, which reads the scope from it.
+      this._lastBody = { scope: turn.scope };
+      const message: UIMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        parts: [{ type: "text", text: turn.text }],
+      };
+      this.ctx.waitUntil(
+        this.saveMessages((current) => [...current, message], { signal: abort.signal })
+          .catch((error: unknown) => console.error("[surface] turn failed", error))
+          .finally(() => {
+            if (this.surfaceAbort === abort) this.surfaceAbort = null;
+          }),
+      );
+      return json({ turnId: message.id }, { status: 202 });
+    }
+    return json(
+      { error: { code: "NOT_FOUND", message: "Surface endpoint not found." } },
+      { status: 404 },
+    );
+  }
+
   override async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const surfaceResponse = await this.surfaceRoute(request, url);
+    if (surfaceResponse) return surfaceResponse;
     if (url.pathname.endsWith("/diagnostics/chat") && request.method === "POST") {
       const body = (await request.json()) as { scenario?: unknown };
       if (body.scenario !== "campaign-summary")

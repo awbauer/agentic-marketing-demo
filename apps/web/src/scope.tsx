@@ -1,4 +1,5 @@
 import {
+  BRAND_PLACEHOLDER,
   type Brand,
   DEFAULT_SCOPE,
   type Persona,
@@ -6,6 +7,8 @@ import {
   type WorkbenchScope,
 } from "@northstar/architecture";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+
+export { BRAND_PLACEHOLDER };
 
 const KEY = "northstar.scope";
 
@@ -18,15 +21,6 @@ export const BRAND_NODE_IDS: Record<Brand, string> = {
 export const brandForNode = (nodeId: string | null): Brand | "all" =>
   (Object.entries(BRAND_NODE_IDS).find(([, id]) => id === nodeId)?.[0] as Brand | undefined) ??
   "all";
-
-/** A prompt to try for the chosen brand, shown in the message box. */
-export const BRAND_PLACEHOLDER: Record<Brand | "all", string> = {
-  all: "Try: Check the sample campaign readiness",
-  "Coastline Kitchen":
-    "Try: Draft a push notification for Coastline Kitchen based on today's weather",
-  "Harborstone Wealth": "Try: What approved content can we send now that the Fed has moved rates?",
-  "Lumera Therapeutics": "Try: Which hospitals should we target first for Cardivance?",
-};
 
 /** A starting image concept for the chosen brand; the box stays editable. */
 export const BRAND_IMAGE_CONCEPT: Record<Brand | "all", string> = {

@@ -1,0 +1,9 @@
+.scope-control {
+  min-width: 12rem;
+  margin-inline-start: var(--slds-g-spacing-2, 0.5rem);
+}
+
+.loading {
+  position: relative;
+  min-height: 6rem;
+}
