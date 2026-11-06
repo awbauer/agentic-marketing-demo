@@ -1,0 +1,9 @@
+.transcript {
+  min-height: 20rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.confirmation {
+  border-color: var(--slds-g-color-accent-1, currentColor);
+}

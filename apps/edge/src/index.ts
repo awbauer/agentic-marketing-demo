@@ -17,6 +17,7 @@ import { type AuthBindings, AuthError, deriveAgentKey, resolvePrincipal } from "
 import { createCampaignContextMcpServer } from "./campaign-context/server";
 import { createKnowledgeGraphMcpServer, knowledgeGraphBackend } from "./knowledge-graph/server";
 import { pruneConfirmationAudit } from "./orchestrator";
+import { surfaceBootstrap, surfaceLoginPage } from "./surface";
 
 export { MarketingOrchestrator } from "./orchestrator";
 
@@ -147,6 +148,13 @@ export default {
         const agentKey = await deriveAgentKey(principal, PROOF_DEFAULTS.workspaceId);
         return json({ workspaceId: PROOF_DEFAULTS.workspaceId, principal, agentKey });
       }
+      // Behind Access like everything else: reaching this page is what signing in means.
+      if (url.pathname === "/api/surface/login") {
+        await resolvePrincipal(request, env);
+        return surfaceLoginPage(request, env);
+      }
+      if (url.pathname === "/api/surface/bootstrap")
+        return json(surfaceBootstrap(await resolvePrincipal(request, env), env));
       if (url.pathname.startsWith("/api/arch/")) {
         const principal = await resolvePrincipal(request, env);
         const response = await handleArchitecture(request, env, principal, id);

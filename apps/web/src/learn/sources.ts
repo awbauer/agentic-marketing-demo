@@ -27,7 +27,12 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "scripts/seed-knowledge-graph.mjs",
     "scripts/check-knowledge-graph.mjs",
   ],
-  orchestrator: ["apps/edge/src/orchestrator.ts", "apps/edge/src/index.ts"],
+  orchestrator: [
+    "apps/edge/src/orchestrator.ts",
+    "apps/edge/src/index.ts",
+    "apps/edge/src/surface.ts",
+    "salesforce/workbench-surface/",
+  ],
   workspace: [
     "apps/edge/src/working-set.ts",
     "apps/edge/src/focus.ts",
@@ -188,6 +193,7 @@ export const TAUGHT_ROOTS = [
   "apps/web/src/",
   "packages/",
   "salesforce/force-app/",
+  "salesforce/workbench-surface/",
   "scripts/",
 ] as const;
 

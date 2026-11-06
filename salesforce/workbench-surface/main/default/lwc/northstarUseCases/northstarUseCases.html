@@ -1,0 +1,107 @@
+<template>
+  <p class="slds-m-bottom_small">
+    Each use case is a scenario the demo can run end to end. Everything uses fictional Northstar
+    data, writes wait for your confirmation, and nothing is published or sent.
+  </p>
+  <template lwc:if={brandNotice}>
+    <p class="slds-text-color_weak slds-m-bottom_small" role="status">{brandNotice}</p>
+  </template>
+  <div class="slds-m-bottom_small">
+    <template for:each={filters} for:item="option">
+      <lightning-button
+        key={option.team}
+        label={option.label}
+        variant={option.variant}
+        data-team={option.team}
+        class="slds-m-right_xx-small slds-m-bottom_xx-small"
+        onclick={handleFilter}
+      ></lightning-button>
+    </template>
+  </div>
+
+  <div class="slds-grid slds-wrap slds-gutters_small">
+    <div class="slds-col slds-size_1-of-1 slds-large-size_5-of-12">
+      <ul aria-label="Available use cases">
+        <template for:each={cards} for:item="card">
+          <li key={card.id} class="slds-m-bottom_x-small">
+            <button
+              type="button"
+              class={card.cardClass}
+              aria-pressed={card.pressed}
+              data-id={card.id}
+              onclick={handleSelect}
+            >
+              <span class="slds-text-title_bold slds-show">{card.title}</span>
+              <span class="slds-text-body_small slds-show">{card.team} · {card.summary}</span>
+            </button>
+          </li>
+        </template>
+      </ul>
+      <template lwc:if={hasComingSoon}>
+        <h3 class="slds-text-title_caps slds-m-vertical_small">Coming soon</h3>
+        <ul aria-label="Coming soon use cases">
+          <template for:each={comingSoon} for:item="item">
+            <li key={item.id} class="slds-box slds-m-bottom_x-small slds-text-color_weak" aria-disabled="true">
+              <span class="slds-text-title_bold slds-show">{item.title}</span>
+              <span class="slds-text-body_small slds-show">{item.summary}</span>
+            </li>
+          </template>
+        </ul>
+      </template>
+    </div>
+
+    <div class="slds-col slds-size_1-of-1 slds-large-size_7-of-12">
+      <template lwc:if={selected}>
+        <h3 class="slds-text-heading_small slds-m-bottom_xx-small">{selected.title}</h3>
+        <p class="slds-m-bottom_small">{selected.scenario}</p>
+
+        <h4 class="slds-text-title_caps slds-m-bottom_xx-small">Try it</h4>
+        <ul class="slds-m-bottom_small">
+          <template for:each={selected.prompts} for:item="prompt">
+            <li key={prompt.text} class="slds-m-bottom_x-small">
+              <p>{prompt.text}</p>
+              <p class="slds-text-body_small slds-m-bottom_xx-small">{prompt.demonstrates}</p>
+              <lightning-button label="Use this prompt" data-prompt={prompt.text} onclick={handleTry}></lightning-button>
+            </li>
+          </template>
+        </ul>
+
+        <h4 class="slds-text-title_caps slds-m-bottom_xx-small">Systems</h4>
+        <ul class="slds-m-bottom_small">
+          <template for:each={selected.systems} for:item="system">
+            <li key={system.name} class="slds-m-bottom_xx-small">
+              <lightning-badge label={system.kind} class="slds-m-right_x-small"></lightning-badge>
+              <strong>{system.name}</strong>
+              <span class="slds-show slds-text-body_small">{system.role}</span>
+            </li>
+          </template>
+        </ul>
+
+        <h4 class="slds-text-title_caps slds-m-bottom_xx-small">How data flows</h4>
+        <ol class="slds-list_ordered slds-m-bottom_small">
+          <template for:each={flowSteps} for:item="step">
+            <li key={step.key}>{step.from} → {step.to}: {step.carries}</li>
+          </template>
+        </ol>
+
+        <template lwc:if={selected.graphRole}>
+          <h4 class="slds-text-title_caps slds-m-bottom_xx-small">Knowledge graph</h4>
+          <p class="slds-m-bottom_small">{selected.graphRole}</p>
+        </template>
+
+        <h4 class="slds-text-title_caps slds-m-bottom_xx-small">Records created</h4>
+        <p class="slds-m-bottom_small">{selected.writes}</p>
+
+        <h4 class="slds-text-title_caps slds-m-bottom_xx-small">What to watch</h4>
+        <ul class="slds-list_dotted">
+          <template for:each={selected.watch} for:item="item">
+            <li key={item}>{item}</li>
+          </template>
+        </ul>
+      </template>
+      <template lwc:else>
+        <p class="slds-text-color_weak">No use cases match this filter.</p>
+      </template>
+    </div>
+  </div>
+</template>

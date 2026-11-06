@@ -10,7 +10,8 @@
       "!!playwright-report",
       "!!test-results",
       "!!apps/edge/src/worker-configuration.d.ts",
-      "!!apps/web/public/evals"
+      "!!apps/web/public/evals",
+      "!!salesforce/workbench-surface/**/*.html"
     ]
   },
   "formatter": {

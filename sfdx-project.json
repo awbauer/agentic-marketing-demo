@@ -3,6 +3,9 @@
     {
       "path": "salesforce/force-app",
       "default": true
+    },
+    {
+      "path": "salesforce/workbench-surface"
     }
   ],
   "name": "northstar-marketing-workbench",

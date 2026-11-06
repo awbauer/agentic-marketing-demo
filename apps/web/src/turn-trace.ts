@@ -485,3 +485,42 @@ export function executionTrace(message: UIMessage): TraceRow[] {
   const trace = turnTrace(message);
   return trace ? rowsFromTrace(message, trace) : rowsFromParts(message);
 }
+
+export type ToolCallState = "running" | "done" | "failed";
+export type ToolCall = { id: string; system: string; tool: string; state: ToolCallState };
+
+/** A result that came back but says the call failed or found nothing usable. */
+const failedOutput = (output: unknown) => {
+  const status = (output as { semanticStatus?: unknown } | null)?.semanticStatus;
+  return status === "error" || status === "unavailable";
+};
+
+/** Every tool call in an answer, in order, and whether its result has come back. */
+export function toolCalls(message: UIMessage): ToolCall[] {
+  return message.parts.flatMap((part) => {
+    const item = part as {
+      type: string;
+      toolName?: string;
+      toolCallId?: string;
+      state?: string;
+      output?: unknown;
+    };
+    if (item.type !== "dynamic-tool" && !item.type.startsWith("tool-")) return [];
+    const name = item.toolName ?? item.type.slice("tool-".length);
+    const state: ToolCallState =
+      item.state === "output-error" ||
+      (item.state === "output-available" && failedOutput(item.output))
+        ? "failed"
+        : item.state === "output-available"
+          ? "done"
+          : "running";
+    return [
+      {
+        id: item.toolCallId ?? `${name}-${state}`,
+        system: toolSystem(name),
+        tool: readableToolName(name),
+        state,
+      },
+    ];
+  });
+}

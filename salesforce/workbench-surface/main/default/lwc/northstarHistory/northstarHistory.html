@@ -1,0 +1,67 @@
+<template>
+  <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-end slds-m-bottom_small">
+    <lightning-radio-group
+      label="Show"
+      type="button"
+      options={filters}
+      value={filter}
+      onchange={handleFilter}
+    ></lightning-radio-group>
+    <lightning-button-icon
+      icon-name="utility:refresh"
+      alternative-text="Refresh history"
+      onclick={handleRefresh}
+    ></lightning-button-icon>
+  </div>
+  <p class="slds-text-body_small slds-m-bottom_small">{retentionNote}</p>
+
+  <template lwc:if={loading}>
+    <lightning-spinner alternative-text="Loading turn history" size="small"></lightning-spinner>
+  </template>
+  <template lwc:if={empty}>
+    <p class="slds-text-color_weak slds-p-vertical_medium">No turns to show.</p>
+  </template>
+  <template lwc:else>
+    <lightning-datatable
+      key-field="id"
+      data={rows}
+      columns={columns}
+      hide-checkbox-column
+      onrowaction={handleRow}
+    ></lightning-datatable>
+  </template>
+
+  <template lwc:if={selected}>
+    <article class="slds-box slds-m-top_small">
+      <h3 class="slds-text-heading_small slds-m-bottom_x-small">{selected.utterance}</h3>
+      <dl class="slds-m-bottom_small">
+        <dt class="slds-text-title_bold">How it was handled</dt>
+        <dd class="slds-m-bottom_x-small">{selected.interpretation}</dd>
+        <dt class="slds-text-title_bold">Model</dt>
+        <dd class="slds-m-bottom_x-small">{selected.model} · {selected.steps} steps · {selected.tokens}</dd>
+        <template lwc:if={selected.reasoning}>
+          <dt class="slds-text-title_bold">Reasoning</dt>
+          <dd class="slds-m-bottom_x-small">{selected.reasoning}</dd>
+        </template>
+        <template lwc:if={selected.failure}>
+          <dt class="slds-text-title_bold">Failure</dt>
+          <dd class="slds-m-bottom_x-small slds-text-color_error">{selected.failure}</dd>
+        </template>
+        <dt class="slds-text-title_bold">Answer</dt>
+        <dd>{selected.answer}</dd>
+      </dl>
+      <template lwc:if={hasSelectedTools}>
+        <lightning-accordion allow-multiple-sections-open active-section-name="">
+          <template for:each={selected.tools} for:item="tool">
+            <lightning-accordion-section key={tool.toolCallId} name={tool.toolCallId} label={tool.title}>
+              <p class="slds-text-title_bold">Input</p>
+              <pre class="payload">{tool.inputText}</pre>
+              <p class="slds-text-title_bold slds-m-top_x-small">Output</p>
+              <pre class="payload">{tool.outputText}</pre>
+            </lightning-accordion-section>
+          </template>
+        </lightning-accordion>
+      </template>
+    </article>
+  </template>
+</template>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomTab xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Chat with the Northstar marketing agent from Salesforce.</description>
+    <label>Northstar Workbench</label>
+    <lwcComponent>northstarWorkbench</lwcComponent>
+    <motif>Custom19: Wrench</motif>
+</CustomTab>

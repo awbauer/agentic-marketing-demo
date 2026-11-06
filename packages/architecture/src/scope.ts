@@ -7,6 +7,15 @@ import { BRANDS, type Brand } from "./types.ts";
 export type WorkbenchScope = { brand: Brand | "all"; persona: Persona };
 export const DEFAULT_SCOPE: WorkbenchScope = { brand: "all", persona: "marketer" };
 
+/** A prompt to try for the chosen brand, shown in the message box. */
+export const BRAND_PLACEHOLDER: Record<Brand | "all", string> = {
+  all: "Try: Check the sample campaign readiness",
+  "Coastline Kitchen":
+    "Try: Draft a push notification for Coastline Kitchen based on today's weather",
+  "Harborstone Wealth": "Try: What approved content can we send now that the Fed has moved rates?",
+  "Lumera Therapeutics": "Try: Which hospitals should we target first for Cardivance?",
+};
+
 export const isBrand = (value: unknown): value is Brand =>
   typeof value === "string" && (BRANDS as readonly string[]).includes(value);
 
