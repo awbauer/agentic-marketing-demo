@@ -28,8 +28,22 @@ Status: in review
 
 ## Not yet demonstrated
 
-The Worker routes aren't deployed, so these wait for the merge and deploy:
+The Worker routes are deployed: Workers Build `a75967bd-2066-4ce7-ac6c-b83f77cc98cd` shipped merge commit `3857dd4` as version `46ce9cbc-59b2-47ad-aea7-9869d59cf51f`, with `SURFACE_ALLOWED_ORIGINS` read back on that version. These still need a person's sign-in, because the browser pane opens popups only from a person's click:
 
 - Access accepting the hand-off token in `cf-access-token` from Apex.
 - `window.opener` surviving the Access sign-in window. If it doesn't, the page asks the person to press Login again, which skips the identity provider.
 - A real turn, Salesforce connection, and write from Lightning.
+
+## Post-merge regression
+
+Merging added `.forceignore`, and the `Salesforce metadata` run on `3857dd4` then failed its last step. Its deploy and Apex test steps passed. Salesforce CLI's default `**/.*` ignore applies only when a `.forceignore` exists, so the retrieve into `.salesforce-readback` reported "Nothing retrieved" and the workflow's `find` failed.
+
+Read-only retrieves against the proof org on the merged tree, using the pinned CLI 2.128.5:
+
+| Tree | Output directory | Result |
+| --- | --- | --- |
+| With `.forceignore` | `.salesforce-readback` | Nothing retrieved |
+| With `.forceignore` | `salesforce-readback` | Retrieved |
+| Without `.forceignore` | `.salesforce-readback` | Retrieved |
+
+The workflow now uses `salesforce-readback`. That step runs only on pushes to `main`, so its first real run is the merge of this fix.
