@@ -57,6 +57,8 @@ export default class NorthstarWorkbench extends LightningElement {
       this.bootstrap = bootstrap;
       this.connector = connector;
       this.knowledgeGraph = operations.knowledgeGraph ?? "";
+      // A waking agent restores its MCP connections in the background, so one read can be early.
+      if (connector.state === "authenticating") this.watchConnection(0);
       if (!bootstrap.personas.some((persona) => persona.value === this.scope.persona))
         this.setScope({ persona: "marketer" });
     } catch (error) {
@@ -125,6 +127,7 @@ export default class NorthstarWorkbench extends LightningElement {
 
   handleTurnSettled() {
     this.historyKey += 1;
+    if (!this.connecting) this.watchConnection(0);
   }
 
   handleChatError(event) {
@@ -147,6 +150,7 @@ export default class NorthstarWorkbench extends LightningElement {
   }
 
   async watchConnection(attempt) {
+    window.clearTimeout(this.connectTimer);
     try {
       const connector = await request("salesforceStatus");
       this.connector = connector;

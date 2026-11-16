@@ -20,6 +20,12 @@ describe("toHtml", () => {
     );
   });
 
+  it("renders a table that follows text with no blank line", () => {
+    expect(toHtml("Blockers\n| Category | Issue |\n|---|---|\n| Consent | Missing |")).toBe(
+      "<p>Blockers</p><table><thead><tr><th>Category</th><th>Issue</th></tr></thead><tbody><tr><td>Consent</td><td>Missing</td></tr></tbody></table>",
+    );
+  });
+
   it("escapes HTML the model or a tool wrote, including inside code", () => {
     const html = toHtml('<img src=x onerror="alert(1)">\n\n```\n<script>\n```');
     expect(html).not.toContain("<img");
