@@ -62,7 +62,7 @@ export function sanitizedText(value: string, maxLength = 4000) {
   return redacted.length > maxLength ? `${redacted.slice(0, maxLength)}…` : redacted;
 }
 
-function isKnownTool(name: string) {
+export function isKnownTool(name: string) {
   return ORCHESTRATOR_TOOLS.some((tool) => name === tool || name.endsWith(`_${tool}`));
 }
 
@@ -72,12 +72,16 @@ export function readableToolName(name: string) {
   return known.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-/** "Salesforce agent: X (kind) · subagent · actions" for a tool backed by a Salesforce agent. */
-export function salesforceAgentLine(name: string) {
+export function salesforceToolDetail(name: string) {
   const tool = Object.keys(SALESFORCE_TOOL_DETAILS).find(
     (candidate) => name === candidate || name.endsWith(`_${candidate}`),
   );
-  const detail = tool ? SALESFORCE_TOOL_DETAILS[tool] : undefined;
+  return tool ? SALESFORCE_TOOL_DETAILS[tool] : undefined;
+}
+
+/** "Salesforce agent: X (kind) · subagent · actions" for a tool backed by a Salesforce agent. */
+export function salesforceAgentLine(name: string) {
+  const detail = salesforceToolDetail(name);
   if (!detail) return null;
   const actions = detail.actions.map((action) => action.label).join(" → ");
   if (!detail.agent) return `Salesforce Apex action: ${actions}`;
@@ -85,7 +89,7 @@ export function salesforceAgentLine(name: string) {
   return `Salesforce agent: ${agent.label} (${agent.kind})${detail.subagent ? ` · ${detail.subagent}` : ""} · ${actions}`;
 }
 
-function semanticToolFailure(value: unknown): "unavailable" | "error" | null {
+export function semanticToolFailure(value: unknown): "unavailable" | "error" | null {
   if (!value || typeof value !== "object") return null;
   const status = (value as { semanticStatus?: unknown }).semanticStatus;
   return status === "unavailable" || status === "error" ? status : null;
@@ -100,7 +104,7 @@ type ToolPartView = {
   errorText?: string;
 };
 
-function toolParts(message: UIMessage): ToolPartView[] {
+export function toolParts(message: UIMessage): ToolPartView[] {
   return message.parts.flatMap((part) => {
     const name =
       part.type === "dynamic-tool"
@@ -135,7 +139,7 @@ export function turnTrace(message: UIMessage): TurnTrace | null {
   return parsed.success ? parsed.data : null;
 }
 
-const ROUTE_DETAIL = {
+export const ROUTE_DETAIL = {
   "confirmation-required":
     "Handled by the policy router without a model call: writes need the confirmation flow",
   unsupported: "Handled by the policy router without a model call: this action is blocked",
@@ -145,10 +149,10 @@ const ROUTE_DETAIL = {
 } as const;
 
 const json = (value: unknown) => JSON.stringify(sanitizedPayload(value), null, 2);
-const plural = (count: number, noun: string) =>
+export const plural = (count: number, noun: string) =>
   `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
 
-function seconds(ms: number) {
+export function seconds(ms: number) {
   return `${(Math.max(0, ms) / 1000).toFixed(2)}s`;
 }
 

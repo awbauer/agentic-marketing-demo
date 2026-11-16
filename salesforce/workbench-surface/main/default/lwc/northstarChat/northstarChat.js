@@ -19,6 +19,7 @@ export default class NorthstarChat extends LightningElement {
   @api placeholder;
   messages = [];
   live = null;
+  route = null;
   active = false;
   loaded = false;
   prompt = "";
@@ -75,6 +76,7 @@ export default class NorthstarChat extends LightningElement {
       this.messages = snapshot.messages;
       this.confirmation = snapshot.confirmation;
       this.live = snapshot.message;
+      this.route = snapshot.route;
       this.active = snapshot.active;
       this.loaded = true;
       this.followLatest();
@@ -95,6 +97,7 @@ export default class NorthstarChat extends LightningElement {
       const progress = await request("progress");
       this.failures = 0;
       this.live = progress.message ?? this.live;
+      this.route = progress.route ?? this.route;
       this.confirmation = progress.confirmation;
       this.followLatest();
       if (progress.active) {
@@ -135,7 +138,8 @@ export default class NorthstarChat extends LightningElement {
     this.active = true;
     this.live = null;
     try {
-      const { turnId } = await request("startTurn", { text, scope: this.scope });
+      const { turnId, route } = await request("startTurn", { text, scope: this.scope });
+      this.route = route;
       this.messages = [
         ...this.messages,
         { id: turnId, role: "user", text, toolCalls: [], trace: [], live: false },

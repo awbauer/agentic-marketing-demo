@@ -21,6 +21,10 @@
     </template>
   </section>
 
+  <template lwc:if={route}>
+    <c-northstar-route route={route}></c-northstar-route>
+  </template>
+
   <template lwc:if={pendingConfirmation}>
     <article class="slds-box slds-m-vertical_small confirmation">
       <h3 class="slds-text-heading_small slds-m-bottom_xx-small">{confirmationTitle}</h3>
