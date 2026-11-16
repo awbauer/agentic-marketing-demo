@@ -22,14 +22,14 @@ const FILTERS = [
   { label: "Policy", value: "policy" },
 ];
 const COLUMNS = [
-  { label: "Started", fieldName: "started", initialWidth: 170 },
-  { label: "Prompt", fieldName: "utterance", wrapText: true },
-  { label: "Scope", fieldName: "scopeLabel", initialWidth: 190, wrapText: true },
-  { label: "Route", fieldName: "routeLabel", initialWidth: 150 },
-  { label: "Outcome", fieldName: "outcomeLabel", initialWidth: 110 },
-  { label: "Time", fieldName: "seconds", initialWidth: 80 },
-  { label: "Tools", fieldName: "toolCount", type: "number", initialWidth: 70 },
-  { type: "button", initialWidth: 90, typeAttributes: { label: "Details", name: "details" } },
+  { label: "Started", fieldName: "started", initialWidth: 150 },
+  { label: "Prompt", fieldName: "utterance", initialWidth: 220 },
+  { label: "Scope", fieldName: "scopeLabel", initialWidth: 150, wrapText: true },
+  { label: "Route", fieldName: "routeLabel", initialWidth: 90 },
+  { label: "Outcome", fieldName: "outcomeLabel", initialWidth: 90 },
+  { label: "Time", fieldName: "seconds", initialWidth: 60 },
+  { label: "Tools", fieldName: "toolCount", type: "number", initialWidth: 60 },
+  { type: "button", initialWidth: 80, typeAttributes: { label: "Details", name: "details" } },
 ];
 
 const hasIssue = (turn) =>

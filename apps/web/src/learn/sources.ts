@@ -81,7 +81,9 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   observability: [
     "apps/web/src/HistoryView.tsx",
     "apps/web/src/ToolActivity.tsx",
+    "apps/web/src/RouteMapPanel.tsx",
     "apps/web/src/TechnicalTrace.tsx",
+    "apps/web/src/turn-route.ts",
     "apps/web/src/turn-trace.ts",
     "apps/web/src/turn-stats.ts",
   ],

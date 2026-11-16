@@ -38,11 +38,28 @@ A person signed in and used the page from their own browser on 2026-11-06. Produ
 - Two OAuth callbacks in the same 17:45 to 18:06 window as the two connects from Lightning.
 - Two gateway `allow` decisions at 17:59, in the same window as the turns: `ext_get_fed_announcements` and `graph_match_news_to_approved_content`.
 
+Then, in the Lightning org on 2026-11-06, with the person signed in through the browser pane:
+
+- **A Salesforce MCP tool call.** `Check Campaign Readiness` ran through the Agentforce agent and returned `isError: false`. With campaign `701jV00000CUSj7QAH` it returned "Start Your Day Right Campaign", its type and status, and its blockers, matching a direct query of the proof org. Without an ID, the agent asked for one.
+- **The brand reaches the backend.** Coastline Kitchen offered 30 governed tools and All brands 47.
+- **The rendered page.** Identity, the Brand and Run as selectors, the 20 use cases, connections, History with scope, outcome, and timing, and the tool trace with sanitized inputs and outputs. History matched the browser app's, and the brand survived a reload. Run as was shown but not switched.
+- An `ok` turn ended with no text from the model and showed the recovery message. That is model behaviour, not the surface.
+
 Still not demonstrated:
 
-- A Salesforce MCP tool call from Lightning. The gateway log has none in that window, and a `302` callback doesn't prove the connection works.
-- A confirmed write from Lightning. No `confirmations/execute` request reached the Worker in that window.
-- The rendered tool trace, selectors, and history tab. The logs show the data being fetched, not how it looked.
+- A confirmed write from Lightning. No `confirmations/execute` request has reached the Worker from it.
+
+## Fixes from the live check
+
+| Defect seen in Lightning | Fix | Seen live after deploy |
+| --- | --- | --- |
+| Salesforce stayed on "Authorizing" after a waking agent restored its connection | The page rechecks the status after loading and after each turn | Yes: Authorizing at 3 s, Connected at 8 s |
+| History's Prompt column was a sliver | Fixed column widths | Prompt yes; the tightened Time, Tools, and Details widths not yet |
+| The header overlapped the selectors at narrow widths | The title and selectors wrap | The first version yes; the second, which keeps them on one row when they fit, not yet |
+| A table straight after a line of text showed raw pipes | The Markdown parser starts a table without a blank line, with a regression test | Not yet |
+| Chat didn't follow new messages | It follows the newest unless the person has scrolled up | Not yet |
+
+Deploys: `0Afg800000KzhuACAR`, `0Afg800000L0DcICAV`, `0Afg800000L0XCnCAN`, `0Afg800000L0ZphCAF`. The org showed each component's new modification time, but the browser pane kept serving Lightning's cached component builds, so the rows marked "Not yet" are deployed and unseen. Org settings such as component caching were left unchanged.
 
 ## Post-merge regression
 

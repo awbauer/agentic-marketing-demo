@@ -9,6 +9,7 @@ import {
   surfaceLoginPage,
   surfaceMessage,
 } from "./surface";
+import type { RouteMap } from "../../web/src/turn-route";
 import { agentStubFor } from "./worker.test-helpers";
 
 const ORIGIN = "https://example.lightning.force.com";
@@ -29,6 +30,9 @@ const login = (origin: string | null, token: string | null = accessToken) =>
     ),
     env,
   );
+
+const routeNode = (route: RouteMap, id: string) =>
+  route.lanes.flatMap((lane) => lane.nodes).find((node) => node.id === id);
 
 const principal = {
   subject: "person",
@@ -163,10 +167,18 @@ describe("surface routes", () => {
       scope: { brand: "Coastline Kitchen", persona: "reviewer" },
     });
     expect(started.status).toBe(202);
+    const accepted = (await started.json()) as { route: RouteMap };
+    expect(routeNode(accepted.route, "router")?.state).toBe("active");
     await settled(stub);
-    const { messages } = (await (await get(stub, "messages")).json()) as {
+    const { messages, route } = (await (await get(stub, "messages")).json()) as {
       messages: { role: string; text: string; trace: unknown[] }[];
+      route: RouteMap;
     };
+    // The policy router blocked this one, so the route ends there, and it came through Apex.
+    expect(route.live).toBe(false);
+    expect(routeNode(route, "relay")?.state).toBe("done");
+    expect(routeNode(route, "router")?.state).toBe("done");
+    expect(routeNode(route, "model")?.state).toBe("idle");
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
     expect(messages[1]?.text.length).toBeGreaterThan(0);
     expect(messages[1]?.trace.length).toBeGreaterThan(0);

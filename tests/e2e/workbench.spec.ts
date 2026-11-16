@@ -58,6 +58,11 @@ test("builds the workspace from the chat and completes a durable turn", async ({
   await expect(page.getByText("Weather · Open-Meteo")).toBeVisible();
   // Locally there are no Neo4j secrets, so the rail reports the in-memory demo copy.
   await expect(page.getByText("Knowledge graph · demo copy")).toBeVisible();
+  // Locally no model runs, so the route stops at the policy router and says so.
+  const route = page.getByRole("region", { name: "Query route" });
+  await expect(route).toContainText("Answered without a model call");
+  await expect(route.locator('[data-node="router"]')).toHaveClass(/done/);
+  await expect(route.locator('[data-node="model"]')).toHaveClass(/idle/);
   const trace = page.locator(".execution-trace").last();
   await trace.getByText("Behind the scenes · technical trace").click();
   for (const label of [

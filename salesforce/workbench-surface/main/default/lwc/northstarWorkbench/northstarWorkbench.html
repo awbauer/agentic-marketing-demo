@@ -1,7 +1,7 @@
 <template>
   <div class="slds-page-header slds-m-bottom_small">
-    <div class="slds-page-header__row">
-      <div class="slds-page-header__col-title">
+    <div class="slds-page-header__row header-row">
+      <div class="slds-page-header__col-title header-title">
         <div class="slds-media">
           <div class="slds-media__figure">
             <lightning-icon icon-name="standard:bot" alternative-text="" size="medium"></lightning-icon>
@@ -15,8 +15,8 @@
           </div>
         </div>
       </div>
-      <div class="slds-page-header__col-actions">
-        <div class="slds-page-header__controls">
+      <div class="slds-page-header__col-actions header-actions">
+        <div class="slds-page-header__controls header-controls">
           <template lwc:if={ready}>
             <div class="slds-page-header__control scope-control">
               <lightning-combobox

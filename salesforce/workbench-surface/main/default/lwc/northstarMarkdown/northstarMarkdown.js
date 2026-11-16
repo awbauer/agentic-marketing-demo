@@ -23,6 +23,8 @@ const cells = (row) =>
     .split("|")
     .map((cell) => cell.trim());
 const isTableRule = (line) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
+const startsTable = (lines, index) =>
+  lines[index].includes("|") && isTableRule(lines[index + 1] ?? "");
 const LIST_ITEM = /^\s*(?:[-*+]|(\d+)\.)\s+(.*)$/;
 
 function table(lines) {
@@ -54,7 +56,7 @@ export function toHtml(markdown) {
       const level = Math.min(line.match(/^#+/)[0].length + 2, 6);
       blocks.push(`<h${level}>${inline(line.replace(/^#+\s+/, ""))}</h${level}>`);
       index += 1;
-    } else if (line.includes("|") && isTableRule(lines[index + 1] ?? "")) {
+    } else if (startsTable(lines, index)) {
       const rows = [];
       while (index < lines.length && lines[index].includes("|")) rows.push(lines[index++]);
       blocks.push(table(rows));
@@ -73,7 +75,8 @@ export function toHtml(markdown) {
         index < lines.length &&
         lines[index].trim() &&
         !LIST_ITEM.test(lines[index]) &&
-        !/^(#{1,6}\s|```)/.test(lines[index])
+        !/^(#{1,6}\s|```)/.test(lines[index]) &&
+        !startsTable(lines, index)
       )
         paragraph.push(lines[index++]);
       blocks.push(`<p>${paragraph.map(inline).join("<br>")}</p>`);

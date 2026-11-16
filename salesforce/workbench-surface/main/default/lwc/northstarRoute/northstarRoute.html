@@ -1,0 +1,23 @@
+<template>
+  <section class={panelClass} aria-label="Query route">
+    <p class="summary slds-truncate" aria-live="polite">
+      <strong class="slds-m-right_x-small">Route</strong>{route.summary}
+    </p>
+    <template for:each={lanes} for:item="lane">
+      <ol key={lane.id} class="lane" aria-label={lane.label}>
+        <template for:each={lane.nodes} for:item="node">
+          <li key={node.id} class={node.className} data-node={node.id} title={node.detail}>
+            <span class="mark" aria-hidden="true"></span>
+            <span class="text">
+              <span class="slds-truncate label">{node.label}</span>
+              <template lwc:if={node.detail}>
+                <span class="slds-truncate detail">{node.detail}</span>
+              </template>
+            </span>
+            <span class="slds-assistive-text">: {node.stateLabel}</span>
+          </li>
+        </template>
+      </ol>
+    </template>
+  </section>
+</template>

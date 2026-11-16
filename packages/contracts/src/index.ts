@@ -480,22 +480,49 @@ const EXTERNAL_SYSTEMS: Record<string, string> = {
   get_fed_announcements: "The Federal Reserve feed",
 };
 
-/**
- * The system that answered a tool call, for messages about its result: an Aprimo failure is
- * Aprimo's, not Salesforce's. Tool names may carry their server's prefix.
- */
-export function toolSystem(name: string): string {
-  const bare = name.replace(/^(?:tool_salesforce_[^_]+_|ls_|graph_|ext_|context_)/, "");
+export type ToolServer =
+  | "salesforce"
+  | "campaign-context"
+  | "external-services"
+  | "life-sciences"
+  | "knowledge-graph";
+
+const bareToolName = (name: string) =>
+  name.replace(/^(?:tool_salesforce_[^_]+_|ls_|graph_|ext_|context_)/, "");
+
+/** The MCP server behind a tool. Tool names may carry their server's prefix. */
+export function toolServer(name: string): ToolServer {
+  const bare = bareToolName(name);
   if (name.startsWith("ls_") || (LIFE_SCIENCES_TOOLS as readonly string[]).includes(bare))
-    return LIFE_SCIENCES_SYSTEMS[bare.split("_")[0] ?? ""] ?? "The life-sciences system";
-  if (EXTERNAL_SYSTEMS[bare]) return EXTERNAL_SYSTEMS[bare];
+    return "life-sciences";
+  if (EXTERNAL_SYSTEMS[bare]) return "external-services";
   if (
     name.startsWith("graph_") ||
     ([...KNOWLEDGE_GRAPH_TOOLS, ...MEMORY_TOOLS] as readonly string[]).includes(bare)
   )
-    return "The knowledge graph";
-  if (name.startsWith("context_")) return "Campaign context";
-  return "Salesforce";
+    return "knowledge-graph";
+  if (name.startsWith("context_")) return "campaign-context";
+  return "salesforce";
+}
+
+/**
+ * The system that answered a tool call, for messages about its result: an Aprimo failure is
+ * Aprimo's, not Salesforce's.
+ */
+export function toolSystem(name: string): string {
+  const bare = bareToolName(name);
+  switch (toolServer(name)) {
+    case "life-sciences":
+      return LIFE_SCIENCES_SYSTEMS[bare.split("_")[0] ?? ""] ?? "The life-sciences system";
+    case "external-services":
+      return EXTERNAL_SYSTEMS[bare] ?? "External services";
+    case "knowledge-graph":
+      return "The knowledge graph";
+    case "campaign-context":
+      return "Campaign context";
+    case "salesforce":
+      return "Salesforce";
+  }
 }
 
 /** Read-only recall tools over the workspace's long-term memory in the graph. See ADR-007. */

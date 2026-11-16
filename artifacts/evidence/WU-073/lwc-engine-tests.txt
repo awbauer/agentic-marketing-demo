@@ -1,0 +1,20 @@
+PASS force-app/main/default/lwc/northstarWorkbench/__tests__/signedIn.test.js
+  signed-in surface
+    ✓ draws identity, scope selectors, and every connection (59 ms)
+    ✓ shows a settled answer with its trace above the text, closed until opened (25 ms)
+    ✓ opens the trace when a turn failed (13 ms)
+    ✓ sends with the scope, shows live tools, and keeps the trace open after the answer finishes (2026 ms)
+    ✓ draws the route it is given, follows it through a turn, and stays quiet without one (1937 ms)
+    ✓ holds a write for confirmation and sends the decision (18 ms)
+    ✓ disables Confirm when Salesforce denied the write (11 ms)
+    ✓ signs in through the Worker's page and presents the token it received (10 ms)
+    ✓ returns to Login when the session has expired (4 ms)
+    ✓ opens the Salesforce authorization and follows it to connected (12 ms)
+  use cases and history components
+    ✓ filters by brand, shows details, and hands a prompt to the chat (4 ms)
+    ✓ lists turns, filters them, and opens a turn's tools (6 ms)
+Test Suites: 1 passed, 1 total
+Tests:       12 passed, 12 total
+Snapshots:   0 total
+Time:        4.691 s, estimated 5 s
+Ran all test suites.

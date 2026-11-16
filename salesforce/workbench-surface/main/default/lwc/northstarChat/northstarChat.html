@@ -1,5 +1,11 @@
 <template>
-  <section role="log" aria-label="Conversation" class="slds-chat transcript">
+  <section
+    role="log"
+    aria-label="Conversation"
+    class="slds-chat transcript"
+    lwc:ref="transcript"
+    onscroll={handleScroll}
+  >
     <template lwc:if={empty}>
       <p class="slds-text-color_weak slds-p-vertical_large slds-text-align_center">
         Ask the agent something, or pick a scenario from Use cases.
@@ -14,6 +20,10 @@
       <p class="slds-text-color_weak slds-p-vertical_x-small" role="status">The agent is working…</p>
     </template>
   </section>
+
+  <template lwc:if={route}>
+    <c-northstar-route route={route}></c-northstar-route>
+  </template>
 
   <template lwc:if={pendingConfirmation}>
     <article class="slds-box slds-m-vertical_small confirmation">
