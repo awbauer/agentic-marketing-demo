@@ -28,6 +28,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArchApiError, archFetch, archStream, useArch } from "../architecture/api";
 import { ErrorNote } from "../architecture/Shared";
 import { useScope } from "../scope";
+import { RichText } from "./RichText";
 import { TeamHierarchy } from "./TeamHierarchy";
 import { DecisionCard, DecisionLog } from "./TeamPeople";
 import { ArtifactView, LifecycleDecisionCard, PhaseStepper, PhaseWorkspace } from "./TeamLifecycle";
@@ -344,7 +345,7 @@ function MessageFeed({
                   <Party id={message.to} />
                   <em className="team-kind">{KIND_LABELS[message.kind]}</em>
                 </div>
-                <p>{message.text}</p>
+                <RichText text={message.text} />
               </li>
             ))}
           </ol>

@@ -1737,3 +1737,105 @@
 .team-rail .team-stats dd {
   font-size: 15px;
 }
+
+/* Agents' prose, made scannable (RichText). */
+.team-rich {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  min-width: 0;
+}
+.team-rich p {
+  margin: 0;
+}
+.team-rich-bullets,
+.team-rich-list {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 20px;
+}
+.team-rich-bullets li::marker {
+  color: var(--muted);
+}
+.team-rich-list li::marker {
+  font-weight: 700;
+  color: var(--forest);
+}
+.team-rich-sections {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.team-rich-sections dt {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.team-rich-sections dd {
+  margin: 0;
+}
+.team-rich-id,
+.team-rich-sources code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--paper);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.team-rich-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.team-rich-sources > span {
+  margin-right: 2px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.team-option-body {
+  grid-column: 2;
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+  color: var(--ink);
+}
+.team-option-body h6 {
+  margin: 6px 0 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.team-decision-card blockquote > span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.team-message .team-rich {
+  margin-top: 4px;
+  font-size: 13px;
+}
+.team-choice input[type="radio"] {
+  align-self: start;
+  margin-top: 4px;
+}
+/* On a narrow screen an option's detail uses the card's full width, not the column beside the
+   radio button. */
+@container team (max-width: 560px) {
+  .team-choice label {
+    padding: 10px;
+  }
+  .team-option-body {
+    grid-column: 1 / -1;
+  }
+}

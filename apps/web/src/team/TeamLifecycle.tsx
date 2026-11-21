@@ -29,6 +29,7 @@ import {
   type TeamEvent,
 } from "@northstar/architecture";
 import { type ReactNode, useState } from "react";
+import { RichText, SourceChips } from "./RichText";
 import { ApprovedAssets } from "./TeamWork";
 
 type Artifact = Extract<TeamEvent, { type: "artifact" }>;
@@ -40,6 +41,23 @@ const num = (value: number) => value.toLocaleString("en-US");
 
 // Artifacts -----------------------------------------------------------------------------------
 
+/** One focus area, laid out to scan: why, how success is measured, and the data it cites. */
+function FocusAreaBody({ area }: { area: FocusArea }) {
+  return (
+    <div className="team-option-body">
+      <h6>Why</h6>
+      <RichText text={area.rationale} />
+      {area.measure && (
+        <>
+          <h6>How we'd measure it</h6>
+          <RichText text={area.measure} />
+        </>
+      )}
+      <SourceChips ids={area.sources} />
+    </div>
+  );
+}
+
 function FocusAreas({ areas, chosen }: { areas: FocusArea[]; chosen?: string }) {
   return (
     <ol className="team-options">
@@ -47,16 +65,26 @@ function FocusAreas({ areas, chosen }: { areas: FocusArea[]; chosen?: string }) 
         <li key={area.title} className={chosen === String(index + 1) ? "chosen" : ""}>
           <strong>{area.title}</strong>
           {chosen === String(index + 1) && <em> · chosen</em>}
-          <p>{area.rationale}</p>
-          <small>
-            Measure: {area.measure} · cites{" "}
-            {area.sources.map((source) => (
-              <code key={source}>{source}</code>
-            ))}
-          </small>
+          <FocusAreaBody area={area} />
         </li>
       ))}
     </ol>
+  );
+}
+
+/** One concept: the idea, the claims that carry it and the approved images it uses. */
+function ConceptBody({ concept }: { concept: Concept }) {
+  return (
+    <div className="team-option-body">
+      <RichText text={concept.bigIdea} />
+      <p className="team-rich-sources">
+        <span>Claims</span>
+        {concept.claimTopics.map((topic) => (
+          <code key={topic}>{topic}</code>
+        ))}
+      </p>
+      <ApprovedAssets picks={concept.assets} />
+    </div>
   );
 }
 
@@ -67,14 +95,7 @@ function Concepts({ concepts, chosen }: { concepts: Concept[]; chosen?: string }
         <li key={concept.name} className={chosen === String(index + 1) ? "chosen" : ""}>
           <strong>{concept.name}</strong>
           {chosen === String(index + 1) && <em> · chosen</em>}
-          <p>{concept.bigIdea}</p>
-          <small>
-            Carried by{" "}
-            {concept.claimTopics.map((topic) => (
-              <code key={topic}>{topic}</code>
-            ))}
-          </small>
-          <ApprovedAssets picks={concept.assets} />
+          <ConceptBody concept={concept} />
         </li>
       ))}
     </ol>
@@ -131,7 +152,9 @@ function MlrJobView({ job }: { job: MlrJob }) {
       </p>
       <ul>
         {job.coordinatorNotes.map((note) => (
-          <li key={note}>{note}</li>
+          <li key={note}>
+            <RichText text={note} />
+          </li>
         ))}
       </ul>
       <div className="team-table-wrap">
@@ -316,8 +339,9 @@ function PerformanceView({ report }: { report: PerformanceReport }) {
   return (
     <div className="team-work">
       <p>
-        Recommends <strong>{report.recommendation}</strong>: {report.rationale}
+        Recommends <strong>{report.recommendation}</strong>
       </p>
+      <RichText text={report.rationale} />
       <ul>
         {report.findings.map((finding) => (
           <li key={finding.text}>
@@ -453,6 +477,32 @@ const PLACEHOLDERS: Partial<Record<string, string>> = {
   "next-action": "For example: why optimize rather than continue?",
 };
 
+/** An option's detail, from the agents' structured work where there is some. */
+function OptionBody({
+  gate,
+  id,
+  detail,
+  lifecycle,
+}: {
+  gate: string;
+  id: string;
+  detail?: string;
+  lifecycle: LifecycleState;
+}) {
+  const index = Number(id) - 1;
+  if (gate === "focus") {
+    const area = (lifecycle.artifacts.propose_focus_areas?.data as { areas?: FocusArea[] })
+      ?.areas?.[index];
+    if (area) return <FocusAreaBody area={area} />;
+  }
+  if (gate === "concept") {
+    const concept = (lifecycle.artifacts.propose_concepts?.data as { concepts?: Concept[] })
+      ?.concepts?.[index];
+    if (concept) return <ConceptBody concept={concept} />;
+  }
+  return detail ? <RichText text={detail} className="team-option-body" /> : null;
+}
+
 export function LifecycleDecisionCard({
   waiting,
   lifecycle,
@@ -496,7 +546,8 @@ export function LifecycleDecisionCard({
         {rounds > 0 && <small className="team-round">decision {rounds + 1}</small>}
       </h3>
       <blockquote>
-        <span>{from}:</span> {waiting.why}
+        <span>{from}</span>
+        <RichText text={waiting.why} />
       </blockquote>
       {choice ? (
         <fieldset className="team-choice">
@@ -512,7 +563,12 @@ export function LifecycleDecisionCard({
                 onChange={() => setPicked(option.id)}
               />
               <strong>{option.label}</strong>
-              {option.detail && <small>{option.detail}</small>}
+              <OptionBody
+                gate={waiting.gate}
+                id={option.id}
+                detail={option.detail}
+                lifecycle={lifecycle}
+              />
             </label>
           ))}
         </fieldset>

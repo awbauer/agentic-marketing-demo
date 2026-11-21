@@ -11,6 +11,7 @@ import {
   type TeamEvent,
 } from "@northstar/architecture";
 import { useRef, useState } from "react";
+import { RichText } from "./RichText";
 
 type Waiting = Extract<TeamEvent, { type: "await-person" }>;
 type Decided = Extract<TeamEvent, { type: "decided" }> & { choiceLabel?: string };
@@ -79,7 +80,8 @@ export function DecisionCard({
       </p>
       <h3 id="team-decision-title">{waiting.title}</h3>
       <blockquote>
-        <span>Campaign lead:</span> {waiting.why}
+        <span>Campaign lead</span>
+        <RichText text={waiting.why} />
       </blockquote>
       {waiting.gate === "compliance" && strategy && <CopyUnderReview strategy={strategy} />}
       {waiting.gate === "client" && strategy && (
