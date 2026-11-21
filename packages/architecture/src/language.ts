@@ -9,6 +9,13 @@ export const ABSOLUTE = /\b(guaranteed?|risk[- ]free|can'?t lose|best returns?)\
 export const PHARMA_OVERREACH =
   /\b(?:superior|best[- ]in[- ]class|first[- ]in[- ]class|breakthrough|cures?|completely safe|no side effects|better than)\b/i;
 
+/**
+ * A prescription brand's own words implying an endorsement or an outcome: guideline status before
+ * a guideline says so, "proven", or a result restated outside the cited claim that carries it.
+ */
+export const PHARMA_IMPLIED =
+  /\b(?:guideline[- ‑](?:ready|recommended|endorsed|preferred)|(?:meets|aligns? with|in line with)\s+(?:the\s+)?(?:upcoming\s+)?guidelines?(?:\s+recommendations?)?|proven|reduc(?:es|ed|ing|tions?)|lower(?:s|ed)? (?:the )?risk|significant(?:ly)?|improves? outcomes|life[- ‑]saving)\b/i;
+
 /** Dates and times say when, not what: "on November 10", "2026-11-10", "at 5 pm". */
 const WHEN =
   /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi;
@@ -122,5 +129,9 @@ export function framingProblems(text: string, brand?: string): string[] {
     );
   if (brand === "Lumera Therapeutics" && PHARMA_OVERREACH.test(text))
     problems.push(`"${text}" uses superiority or absolute-safety language.`);
+  if (brand === "Lumera Therapeutics" && PHARMA_IMPLIED.test(text))
+    problems.push(
+      `"${text}" implies an endorsement or an outcome (${PHARMA_IMPLIED.exec(text)?.[0]}) in your own words. Only a cited claim or the label may say what the product does, and no guideline has endorsed it.`,
+    );
   return problems;
 }

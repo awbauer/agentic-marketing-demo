@@ -19,8 +19,9 @@ import type { TeamRun } from "./run";
 import { teamScriptedModel } from "./scripted";
 
 /** USD per million tokens for the vendor models; Workers AI prices come from the eval pricing table. */
-const VENDOR_PRICES: Record<string, { input: number; output: number }> = {
-  "claude-opus-5-5": { input: 4, output: 20 },
+const VENDOR_PRICES: Record<string, { input: number; cachedInput: number; output: number }> = {
+  "claude-opus-5-5": { input: 4, cachedInput: 0.4, output: 20 },
+  "claude-sonnet-5-5": { input: 2, cachedInput: 0.2, output: 10 },
 };
 
 /** What a run's model calls cost, or null when any model in it has no recorded price. */
@@ -39,8 +40,13 @@ export function runCost(events: readonly TeamEvent[]): number | null {
       })();
     if (!price) return null;
     const input = event.inputTokens ?? event.tokens;
+    const cached = Math.min(event.cachedInputTokens ?? 0, input);
     const output = event.outputTokens ?? 0;
-    usd += (input * price.input + output * price.output) / 1_000_000;
+    usd +=
+      ((input - cached) * price.input +
+        cached * (price.cachedInput ?? price.input) +
+        output * price.output) /
+      1_000_000;
   }
   return usd;
 }

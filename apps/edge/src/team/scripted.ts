@@ -152,10 +152,14 @@ function creative(_input: Json, done: Done): Next {
         question: "Which segment should the visuals speak to first?",
       },
     };
+  if (!has(done, "find_approved_assets")) return { tool: "find_approved_assets", args: {} };
   if (saved(done, "propose_creative")) return { text: "Concept saved." };
   const palette = (last(done, "get_brand_guidelines").palette as Json[])
     .slice(0, 2)
     .map((c) => c.hex);
+  const usable = (last(done, "find_approved_assets").assets as Json[]).filter(
+    (asset) => asset.usable,
+  );
   return {
     tool: "propose_creative",
     args: {
@@ -164,10 +168,10 @@ function creative(_input: Json, done: Done): Next {
       visualDirection: "Close crops with natural light.",
       palette,
       mood: "Cozy",
-      keyVisuals: [
-        { format: "display", description: "A close crop with soft morning light." },
-        { format: "email hero", description: "The team at work, candid." },
-      ],
+      assets: usable.slice(0, 2).map((asset, index) => ({
+        assetId: asset.assetId,
+        use: index === 0 ? "Email hero and display" : "Sign-off",
+      })),
       rationale: "Speaks to the research's primary segment.",
     },
   };
@@ -237,6 +241,185 @@ function media(input: Json, done: Done): Next {
   };
 }
 
+// The pharma lifecycle ------------------------------------------------------------------------
+
+/** The lifecycle lead follows the step each result names, with a task or a message for a person. */
+function lifecycleLead(input: Json, done: Done, lastUser: string, resumed: boolean): Next {
+  // A person's decision arrives as a user message after the lead's last call.
+  const previous = resumed ? {} : (done[done.length - 1]?.output ?? {});
+  if (previous.waiting) return { text: "Waiting for a person." };
+  const latest = /Input: (\{.*\})\s*$/s.exec(lastUser)?.[1];
+  const fromUser = latest ? (JSON.parse(latest) as Json).nextStep : input.nextStep;
+  const next = (previous.nextStep as Json | undefined) ?? fromUser;
+  if (!next || next.kind === "finished") return { text: "The lifecycle is complete." };
+  const call = (args: Json): Next => ({ tool: "lifecycle_step", args });
+  if (next.kind === "agent")
+    return call({
+      kind: "assign",
+      why: `${next.phaseTitle} needs ${next.agent}.`,
+      agent: next.agent,
+      task: `${next.does}${next.notes ? ` A person asked: ${next.notes}` : ""}`,
+    });
+  return call({
+    kind: "request_decision",
+    why: `${next.decider} decides here.`,
+    message: `Ready for you: ${next.does}`,
+  });
+}
+
+const failed = (done: Done, tool: string) =>
+  done.some((item) => item.tool === tool && typeof item.output.error === "string");
+
+function lifecycleWorker(step: string, input: Json, done: Done): Next {
+  const read = (tools: string[]): Next | null => {
+    for (const tool of tools) if (!has(done, tool)) return { tool, args: {} };
+    return null;
+  };
+  if (saved(done, step)) return { text: "Saved." };
+  if (step === "propose_focus_areas") {
+    const first = read(["get_audience_segments", "get_market_signals", "get_past_results"]);
+    if (first) return first;
+    const segments = last(done, "get_audience_segments").segments as Json[];
+    const signals = last(done, "get_market_signals").signals as Json[];
+    const results = last(done, "get_past_results").results as Json[];
+    return {
+      tool: step,
+      args: {
+        areas: [
+          {
+            title: "Bring the congress outcomes data to heart failure specialists",
+            rationale: signals[0]?.signal,
+            sources: [signals[0]?.id, segments[0]?.id, results[0]?.id],
+            measure: "Click rate on the outcomes email against last year's",
+          },
+          {
+            title: "Reach heart failure nurse practitioners with the safety profile",
+            rationale: signals[1]?.signal,
+            sources: [signals[1]?.id, segments[2]?.id],
+            measure: "Reach among HF nurse practitioners",
+          },
+        ],
+      },
+    };
+  }
+  if (step === "propose_concepts" || step === "draft_modules") {
+    const first = read(["get_claims_library", "find_approved_assets"]);
+    if (first) return first;
+    const claims = (last(done, "get_claims_library").claims as Json[]).filter(
+      (claim) => claim.usable,
+    );
+    const assets = (last(done, "find_approved_assets").assets as Json[]).filter(
+      (asset) => asset.usable,
+    );
+    const topics = claims.map((claim) => claim.topic);
+    const images = assets.slice(0, 2).map((asset, index) => ({
+      assetId: asset.assetId,
+      use: index === 0 ? "Hero" : "Product shot",
+    }));
+    if (step === "propose_concepts")
+      return {
+        tool: step,
+        args: {
+          concepts: [
+            {
+              name: "The data, in full",
+              bigIdea: "Lead with the outcomes data, plainly.",
+              claimTopics: topics,
+              assets: images,
+            },
+            {
+              name: "What the congress showed",
+              bigIdea: "Bring the congress to the clinic.",
+              claimTopics: topics.slice(0, 1),
+              assets: images.slice(0, 1),
+            },
+          ],
+        },
+      };
+    // The first draft reaches for a claim the library refuses; the service says so and the second
+    // draft drops it, as a real writer's would after the refusal.
+    const reach = failed(done, step) || input.notes ? [] : ["cardivance-superior"];
+    const module = (channel: string) => ({
+      channel,
+      headline: "Cardivance: news from the heart failure congress",
+      opening: "See the CARDIO-HF results presented at the congress.",
+      claimTopics: [...topics, ...reach],
+      closing: "See the full prescribing information below.",
+      cta: "Read the data",
+      assets: channel === "email" ? images : [],
+    });
+    return { tool: step, args: { modules: [module("email"), module("display")] } };
+  }
+  if (step === "submit_mlr_job") {
+    const first = read(["get_claims_library"]);
+    if (first) return first;
+    return {
+      tool: step,
+      args: {
+        notes: [
+          "Every claim is annotated to its reference; fair balance is attached to both modules.",
+        ],
+      },
+    };
+  }
+  if (step === "build_audience") {
+    const first = read(["get_hcp_universe"]);
+    if (first) return first;
+    const segments = last(done, "get_hcp_universe").segments as Json[];
+    return {
+      tool: step,
+      args: {
+        include: [
+          { segmentId: segments[0]?.segmentId, deciles: ["high", "mid"] },
+          { segmentId: segments[2]?.segmentId, deciles: ["high"] },
+        ],
+        rationale:
+          "The highest-writing specialists, and the nurse practitioners who manage titration.",
+      },
+    };
+  }
+  if (step === "schedule_deployment") {
+    const first = read(["get_approved_job"]);
+    if (first) return first;
+    const job = last(done, "get_approved_job");
+    const segmentIds = (job.audience as Json[]).map((line) => line.segmentId);
+    const modules = job.approved.modules as Json[];
+    return {
+      tool: step,
+      args: {
+        lines: modules.map((module) => ({
+          moduleId: module.id,
+          channel: module.channel === "email" ? "approved-email" : "hcp-display",
+          segmentIds,
+          start: job.window.start,
+          end: job.window.end,
+          budgetUsd: Math.round(job.budgetUsd * (module.channel === "email" ? 0.2 : 0.6)),
+        })),
+      },
+    };
+  }
+  if (step === "prepare_form_2253") {
+    const first = read(["get_approved_job"]);
+    if (first) return first;
+    return { tool: step, args: { note: "Approved materials and the current PI, at first use." } };
+  }
+  if (step === "report_performance") {
+    const first = read(["get_campaign_results"]);
+    if (first) return first;
+    const lines = last(done, "get_campaign_results").lines as Json[];
+    return {
+      tool: step,
+      args: {
+        findings: [{ text: "Specialists opened the email most.", sources: [lines[0]?.id] }],
+        recommendation: "optimize",
+        rationale: "Email outperforms display; move display budget to email.",
+        nextSteps: ["Shift display budget to email for specialists."],
+      },
+    };
+  }
+  return { text: "No script for this step." };
+}
+
 const AGENTS: Record<string, (input: Json, done: Done, lastUser?: string) => Next> = {
   "campaign-lead": director,
   "audience-analyst": research,
@@ -248,6 +431,8 @@ const AGENTS: Record<string, (input: Json, done: Done, lastUser?: string) => Nex
 function read(prompt: Prompt) {
   let agent = "";
   let mode = "work";
+  let lifecycle = "";
+  let resumed = false;
   let input: Json = {};
   let lastUser = "";
   const done: Done = [];
@@ -255,7 +440,12 @@ function read(prompt: Prompt) {
     if (message.role === "system") {
       agent = /agent id: ([a-z-]+)/.exec(message.content)?.[1] ?? "";
       mode = /Mode: (work|answer|report)/.exec(message.content)?.[1] ?? "work";
+      lifecycle =
+        /Lifecycle step: ([a-z_0-9]+)/.exec(message.content)?.[1] ??
+        (/Lifecycle lead\./.test(message.content) ? "lead" : "");
     }
+    if (message.role === "user") resumed = true;
+    if (message.role === "tool") resumed = false;
     if (message.role === "user")
       for (const part of message.content)
         if (part.type === "text") {
@@ -271,11 +461,11 @@ function read(prompt: Prompt) {
             output: part.output.type === "json" ? (part.output.value as Json) : {},
           });
   }
-  return { agent, mode, input, done, lastUser };
+  return { agent, mode, input, done, lastUser, lifecycle, resumed };
 }
 
 function respond(prompt: Prompt): Next {
-  const { agent, mode, input, done, lastUser } = read(prompt);
+  const { agent, mode, input, done, lastUser, lifecycle, resumed } = read(prompt);
   if (agent === "squad-judge")
     return done.some((item) => item.tool === "score_proposal")
       ? { text: "Scored." }
@@ -297,6 +487,9 @@ function respond(prompt: Prompt): Next {
           },
         };
   if (mode === "answer") return { text: `${agent} answers from its saved work.` };
+  if (lifecycle === "lead") return lifecycleLead(input, done, lastUser, resumed && done.length > 0);
+  if (lifecycle && mode === "report") return { text: `${agent} saved ${lifecycle}.` };
+  if (lifecycle) return lifecycleWorker(lifecycle, input, done);
   if (mode === "report") return { text: `${agent} delivered its work.` };
   if (SPECIALISTS.includes(agent) || agent === "campaign-lead")
     return AGENTS[agent]?.(input, done, lastUser) ?? { text: "No script." };

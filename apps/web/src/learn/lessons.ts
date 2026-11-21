@@ -321,6 +321,12 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
       "A lead coordinates and judges; spokes do the work and talk to each other. Code, not prompts, enforces the rules, one semantic layer defines every number, the gateway governs every call, people take the decisions no agent may, and every run is scored the same way whichever provider's model ran.",
     tryIt: [{ kind: "view", label: "Open the Campaign squad", view: "team" }],
   },
+  "pharma-lifecycle": {
+    diagram: "agent-lifecycle",
+    keyIdea:
+      "Agents do every step of a regulated campaign and code checks each one against the claims library, the asset library, consent and the label; people decide at the nine points a brand team, MLR and operations would, and the MLR system routes the job reviewer to reviewer.",
+    tryIt: [{ kind: "view", label: "Open the Campaign squad", view: "team" }],
+  },
   "long-term-memory": {
     diagram: "long-term-memory",
     keyIdea:

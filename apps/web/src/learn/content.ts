@@ -968,7 +968,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **Salesforce stays the system of record.** The lifecycle adds no new Salesforce writes. The state machine's approval is the workbench's own; the confirmed review-task write remains how a decision reaches Salesforce.
 
-**A regulated brand beyond finance.** Lumera Therapeutics' content runs through the same stages. Its claims need a trial-backed study report, the safety information (and a boxed warning for Cardivance) is a required disclosure the authoring agent adds, and the farm treats superiority or absolute-safety wording as a blocking finding.`,
+**A regulated brand beyond finance.** Lumera Therapeutics' content runs through the same stages. Its claims need a trial-backed study report, the safety information (and a boxed warning for Cardivance) is a required disclosure the authoring agent adds, and the farm treats superiority or absolute-safety wording as a blocking finding. The writer's own words may not imply what only a cited claim or the label can say either: "guideline-ready", "proven", "a significant reduction" or "reduced the risk" outside the claim is refused, since no guideline has endorsed the product and the claim already carries the result.`,
         inDemo: [
           "Architecture → Module Library → Author a module (cite or refuse): pick topics “sweep-apy” and “wire-fees”",
           "Architecture → Approvals → open a module → Decision, History",
@@ -1027,7 +1027,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **The roles.** The **campaign lead** sits at the hub. It turns the brief into a work plan, hands one piece at a time to the spoke that owns it, and decides whether to keep what comes back or send it back with notes. It never does a spoke's work. The four spokes each own one piece:
 - the **audience analyst**: who to win, how big each group is, what rivals are doing, which signals point to an opening
-- the **art director**: the campaign idea, its look and palette, and the images to make
+- the **art director**: the campaign idea, its look and palette, and the approved images from the asset library it uses (none are generated)
 - the **copy lead**: the line, the recurring themes and copy for each placement
 - the **channel planner**: the channels to buy, the spend and dates for each, and the results to expect
 
@@ -1058,6 +1058,40 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
           "docs/decisions/ADR-014-squad-people-and-evals.md",
         ],
         resources: [R.buildingAgents, R.cfAgents, R.aiGateway, R.cedar],
+      },
+      {
+        id: "pharma-lifecycle",
+        title: "A pharma campaign, focus to analytics, with MLR",
+        summary:
+          "Seven agents take a prescription brand's campaign through six phases; people decide at nine points, including Medical, Legal and Regulatory review.",
+        body: `The **Pharma lifecycle** mode of the Campaign squad page runs a prescription brand's campaign end to end: business focus, ideation, content and MLR review, audience selection, publishing and analytics. Agents do every piece of work; people take the decisions a brand team, an MLR committee and an operations team would. The page lists every step, agent or person, and marks where the run is.
+
+**The path, step by step.**
+- **Business focus.** The audience analyst reads the segments, competitors, signals and last year's results and proposes two or three focus areas, each citing data ids and a success measure (\`propose_focus_areas\`). The **brand lead** chooses one.
+- **Ideation.** The art director proposes concepts carried only by substantiated claims from the claims library (\`get_claims_library\`) and shown with approved, in-rights images from the asset library (\`find_approved_assets\`); no image is generated (\`propose_concepts\`). The brand lead chooses one.
+- **Content and MLR.** The copy lead assembles an email and a display module (\`draft_modules\`): the service inserts each claim's exact approved text with a reference marker and attaches the ISI, boxed warning and PI the claims require; an unsubstantiated claim is refused. The **MLR coordinator** annotates every claim to its reference, runs the pre-review checks (reference valid through the campaign, fair balance, images, wording) and submits the job (\`submit_mlr_job\`). **Medical**, **Legal** and **Regulatory** review in turn; the MLR system routes the job from one to the next without the lead. Regulatory's approval issues a document number and an expiry (twelve months, or the first reference expiry if sooner).
+- **Audience.** The audience analyst builds the HCP list by segment and prescribing decile (\`get_hcp_universe\`, \`build_audience\`): email only to HCPs with documented consent, the do-not-contact list removed everywhere, rep coverage shown. **Marketing operations** approves it.
+- **Publishing.** The channel planner schedules only the approved modules, by document number, to approved email and endemic HCP display, inside the window, before expiry and within budget (\`get_approved_job\`, \`schedule_deployment\`). The brand lead approves go-live; the MLR coordinator prepares **Form FDA 2253** (\`prepare_form_2253\`) and **Regulatory** submits it at first use.
+- **Analytics.** Thirty days in market are simulated from the brand's benchmarks and segment affinities and labelled so. The performance analyst reads them (\`get_campaign_results\`, \`get_past_results\`) and recommends continue, optimize or retire, citing result lines (\`report_performance\`). The brand lead decides.
+
+**How the lead moves.** The campaign lead has one tool, \`lifecycle_step\`: assign the next agent step, or ask the next person (\`request_decision\`). The server holds the lifecycle as data (\`PHARMA_PHASES\`) and a pure state machine, and refuses any step out of order. Every result tells the lead what comes next.
+
+**People.** Each human step is a gateway action only its role may take: the brand lead (\`team:decide_focus\`, \`decide_concept\`, \`approve_go_live\`, \`decide_next_action\`), Medical (the reviewer persona), Legal (senior), Regulatory (compliance) and marketing operations (marketer). Choice steps take one of the agents' options. A person who asks for changes sends the phase back to its first step, with their words, in a new round; a resubmitted MLR job gets a new job code.
+
+**Models.** Coordinators (the campaign lead and the MLR coordinator) run on each provider's top model, workers on a smaller one: Opus 5.5 and Sonnet 5.5 on Anthropic, gpt-6-astra and gpt-5.4-mini on OpenAI, Kimi K2.6 and gpt-oss-120b on Workers AI. Each agent's calls share a growing prefix, so they are cached: Anthropic requests carry top-level \`cache_control\`, OpenAI requests a per-agent \`promptCacheKey\`, and the cost estimate prices cache reads at the cached rate.
+
+**Scoring.** A lifecycle run's scorecard counts the phases finished, saves accepted on the first try, MLR resubmissions, brand-team changes and gateway denials.
+
+**What it does not do.** No channel is called and no Form 2253 is filed; the results, the HCP universe and its consent rates are fictional. One person plays every role.`,
+        inDemo: [
+          "Campaign squad → What the team runs → Pharma lifecycle → Start the campaign lifecycle",
+          "Campaign squad → The lifecycle, step by step (each agent and person step, and where the run is)",
+          "Campaign squad → Campaign file (one tab per phase)",
+          "packages/architecture/src/team-pharma.ts",
+          "apps/edge/src/team/lifecycle.ts, lifecycle-workers.ts",
+          "docs/decisions/ADR-015-pharma-campaign-lifecycle.md",
+        ],
+        resources: [R.buildingAgents, R.cfAgents, R.aiGateway],
       },
       {
         id: "long-term-memory",

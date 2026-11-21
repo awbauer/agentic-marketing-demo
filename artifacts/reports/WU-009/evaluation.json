@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-09-29T19:27:08.116Z",
+  "generatedAt": "2026-11-21T02:57:42.152Z",
   "status": "passed",
   "score": 1,
   "threshold": 0.9,
-  "total": 28,
+  "total": 35,
   "mode": "production-policy-and-intent-routers",
   "results": [
     {
@@ -200,6 +200,55 @@
       "prompt": "What are the best plays to grow the Marin Family Office relationship?",
       "expected": "build_aum_account_plan",
       "actual": "build_aum_account_plan",
+      "passed": true
+    },
+    {
+      "id": "routing-29",
+      "prompt": "Which hospitals and prescriber groups should we target first for Cardivance?",
+      "expected": "build_hcp_target_list",
+      "actual": "build_hcp_target_list",
+      "passed": true
+    },
+    {
+      "id": "routing-30",
+      "prompt": "Can we still use the Cardivance superiority claim, or is it off-label?",
+      "expected": "check_clinical_claims",
+      "actual": "check_clinical_claims",
+      "passed": true
+    },
+    {
+      "id": "routing-30b",
+      "prompt": "Draft an email campaign for Cardivance using approved claims and create it in Salesforce Marketing Cloud.",
+      "expected": "check_clinical_claims",
+      "actual": "check_clinical_claims",
+      "passed": true
+    },
+    {
+      "id": "routing-31",
+      "prompt": "How should we engage Mesa Verde Regional Hospital on formulary access?",
+      "expected": "plan_hospital_engagement",
+      "actual": "plan_hospital_engagement",
+      "passed": true
+    },
+    {
+      "id": "routing-32",
+      "prompt": "Which Cardivance assets are MLR-approved in Aprimo right now?",
+      "expected": "aprimo_search_approved_assets",
+      "actual": "aprimo_search_approved_assets",
+      "passed": true
+    },
+    {
+      "id": "routing-33",
+      "prompt": "Is everything on the HCP website for Glucora compliant?",
+      "expected": "drupal_list_hcp_site_content",
+      "actual": "drupal_list_hcp_site_content",
+      "passed": true
+    },
+    {
+      "id": "routing-34",
+      "prompt": "Show the Reltio golden record for Lakeshore Health System",
+      "expected": "reltio_resolve_organization",
+      "actual": "reltio_resolve_organization",
       "passed": true
     }
   ]

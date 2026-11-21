@@ -3,6 +3,7 @@
 // reconciles the pieces where they disagree, and sends the client one proposal. It never does a
 // spoke's work itself.
 import {
+  teamAgentsFor,
   buildTeamPolicies,
   CLIENT_ROUNDS,
   type CampaignBrief,
@@ -48,6 +49,7 @@ import {
   teamModels,
 } from "./run";
 import { evaluateRun } from "./evals";
+import { continueLifecycleRun } from "./lifecycle";
 import { runSpecialist } from "./specialists";
 
 /** How many times the lead may send one spoke's work back. */
@@ -56,7 +58,9 @@ const REVISION_LIMIT = 2;
 const specialist = z.enum(TEAM_SPECIALISTS);
 
 function systemFor(brief: CampaignBrief) {
-  const roster = TEAM_AGENTS.filter((agent) => agent.role === "spoke")
+  const roster = TEAM_AGENTS.filter(
+    (agent) => agent.role === "spoke" && agent.modes.includes("squad"),
+  )
     .map((agent) => `- ${agent.id} (${agent.name}) owns ${agent.use}.`)
     .join("\n");
   const channels = Object.keys(teamMarket(brief.brand).benchmarks)
@@ -440,7 +444,7 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
  * Saves the run. A run waiting for a person keeps the lead's conversation, so it can resume. A
  * run that ended is scored first: its scorecard is the last event before the save.
  */
-async function settle(run: TeamRun, messages: ModelMessage[], emit: Emit) {
+export async function settle(run: TeamRun, messages: ModelMessage[], emit: Emit) {
   const { ctx } = run;
   if (!run.waiting)
     await evaluateRun(run).catch((error: unknown) =>
@@ -453,7 +457,7 @@ async function settle(run: TeamRun, messages: ModelMessage[], emit: Emit) {
       brand: run.brief.brand,
       status: run.waiting ? "waiting" : run.finished ? "done" : "stopped",
       waitingOn: run.waiting,
-      messages: [{ provider: run.provider, lead: messages }],
+      messages: [{ provider: run.provider, mode: run.mode, lead: messages }],
       events: run.events,
       at: ISO(ctx),
     })
@@ -493,7 +497,11 @@ export async function startTeamRun(
             : null,
         // Agents with live grants; the people's permits are counted apart.
         policies: buildTeamPolicies(await overridesFor(ctx)).filter(
-          (policy) => policy.principal.type === "agent",
+          (policy) =>
+            policy.principal.type === "agent" &&
+            teamAgentsFor("squad").some(
+              (agent) => policy.principal.ids !== "*" && policy.principal.ids.includes(agent.id),
+            ),
         ).length,
         store: "D1",
         scripted: ctx.env.AGENT_MODEL === "scripted",
@@ -522,7 +530,7 @@ export async function startTeamRun(
 export async function continueTeamRun(
   ctx: Ctx,
   id: string,
-  input: { gate: TeamGate; decision: "approve" | "changes"; note: string },
+  input: { gate: TeamGate; decision: "approve" | "changes"; note: string; choice?: string },
 ) {
   const saved = await ctx.store.orchestration(id);
   if (!saved || !saved.flowId.startsWith("team:"))
@@ -535,6 +543,9 @@ export async function continueTeamRun(
         ? `This run is waiting for ${TEAM_GATES[saved.waitingOn as TeamGate]?.label.toLowerCase() ?? saved.waitingOn}, not ${TEAM_GATES[input.gate].label.toLowerCase()}.`
         : "This run is not waiting for a decision.",
     );
+  const start = (saved.events as TeamEvent[]).find((event) => event.type === "start");
+  if (start?.type === "start" && start.mode === "lifecycle")
+    return continueLifecycleRun(ctx, saved, input);
   const spec = TEAM_GATES[input.gate];
   await invoke(
     ctx,

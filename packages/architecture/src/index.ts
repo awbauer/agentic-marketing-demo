@@ -17,6 +17,7 @@ export * from "./team.ts";
 export * from "./team-data.ts";
 export * from "./team-evals.ts";
 export * from "./team-semantic.ts";
+export * from "./team-pharma.ts";
 export * from "./team-services.ts";
 export * from "./trust.ts";
 export * from "./types.ts";

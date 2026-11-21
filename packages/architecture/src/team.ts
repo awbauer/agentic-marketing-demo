@@ -32,17 +32,44 @@ export const TEAM_SPECIALISTS = [
 ] as const;
 export type TeamSpecialist = (typeof TEAM_SPECIALISTS)[number];
 export const TEAM_DIRECTOR = "campaign-lead" as const;
-export type TeamAgentId = typeof TEAM_DIRECTOR | TeamSpecialist;
+/** Agents that join only for the pharma lifecycle (see team-pharma.ts). */
+export const LIFECYCLE_AGENTS = ["mlr-coordinator", "performance-analyst"] as const;
+export type LifecycleAgent = (typeof LIFECYCLE_AGENTS)[number];
+export type TeamAgentId = typeof TEAM_DIRECTOR | TeamSpecialist | LifecycleAgent;
+/** A lifecycle worker: any agent but the lead. */
+export type LifecycleWorker = TeamSpecialist | LifecycleAgent;
+
+/**
+ * How a run works. squad: the lead's brief-to-proposal loop. lifecycle: a regulated brand's
+ * campaign from business focus to analytics, with MLR review and the human steps around it.
+ */
+export const TEAM_MODES = ["squad", "lifecycle"] as const;
+export type TeamMode = (typeof TEAM_MODES)[number];
 /**
  * A party to a message: an agent, the whole team (a broadcast), or the client who sent the brief
  * and receives the strategy.
  */
-export type TeamParty = TeamAgentId | "client" | "team" | "compliance";
+export type TeamParty =
+  | TeamAgentId
+  | "client"
+  | "team"
+  | "compliance"
+  /** The people in the pharma lifecycle; the person at the browser plays each. */
+  | "brand-lead"
+  | "medical"
+  | "legal"
+  | "regulatory"
+  | "marketing-ops"
+  | "market";
 
 export type TeamAgent = {
   id: TeamAgentId;
   name: string;
   role: "hub" | "spoke";
+  /** Coordinators get each provider's top model; workers a smaller one. */
+  tier: "coordinator" | "worker";
+  /** The runs the agent takes part in. */
+  modes: readonly TeamMode[];
   /** The model task class the router binds the agent to. */
   taskClass: "orchestrate" | "draft";
   summary: string;
@@ -63,6 +90,7 @@ export const TEAM_TOOL_NAMES = [
   "reconcile_plan",
   "request_compliance_review",
   "send_proposal",
+  "request_decision",
   // Shared
   "read_team_output",
   "query_semantic_layer",
@@ -76,11 +104,27 @@ export const TEAM_TOOL_NAMES = [
   "get_brand_guidelines",
   "get_channel_specs",
   "get_channel_benchmarks",
+  "find_approved_assets",
+  // The lifecycle's data reads
+  "get_past_results",
+  "get_claims_library",
+  "get_hcp_universe",
+  "get_approved_job",
+  "get_campaign_results",
   // Spokes' save tools
   "report_research",
   "propose_creative",
   "write_copy",
   "plan_media",
+  // The lifecycle's save tools
+  "propose_focus_areas",
+  "propose_concepts",
+  "draft_modules",
+  "submit_mlr_job",
+  "build_audience",
+  "schedule_deployment",
+  "prepare_form_2253",
+  "report_performance",
 ] as const;
 export type TeamTool = (typeof TEAM_TOOL_NAMES)[number];
 
@@ -95,6 +139,12 @@ export const TEAM_READ_TOOLS: readonly TeamTool[] = [
   "get_brand_guidelines",
   "get_channel_specs",
   "get_channel_benchmarks",
+  "find_approved_assets",
+  "get_past_results",
+  "get_claims_library",
+  "get_hcp_universe",
+  "get_approved_job",
+  "get_campaign_results",
 ];
 
 const SEMANTIC: readonly TeamTool[] = ["query_semantic_layer", "define_term"];
@@ -110,6 +160,8 @@ export const TEAM_AGENTS: readonly TeamAgent[] = [
     id: "campaign-lead",
     name: "Campaign lead",
     role: "hub",
+    tier: "coordinator",
+    modes: ["squad", "lifecycle"],
     taskClass: "orchestrate",
     summary:
       "Sits at the hub. Turns the brief into a work plan, hands out the pieces, checks each one, reconciles them and sends the client a single proposal.",
@@ -121,6 +173,7 @@ export const TEAM_AGENTS: readonly TeamAgent[] = [
       "reconcile_plan",
       "request_compliance_review",
       "send_proposal",
+      "request_decision",
       "read_team_output",
     ],
     deliverable: null,
@@ -129,6 +182,8 @@ export const TEAM_AGENTS: readonly TeamAgent[] = [
     id: "audience-analyst",
     name: "Audience analyst",
     role: "spoke",
+    tier: "worker",
+    modes: ["squad", "lifecycle"],
     taskClass: "draft",
     summary:
       "Works out who to win and why: sizes the segments, reads the competition and the market signals, and cites the data behind every finding.",
@@ -138,6 +193,10 @@ export const TEAM_AGENTS: readonly TeamAgent[] = [
       "get_competitors",
       "get_market_signals",
       "report_research",
+      "get_past_results",
+      "get_hcp_universe",
+      "propose_focus_areas",
+      "build_audience",
       ...SHARED,
     ],
     deliverable: "report_research",
@@ -146,40 +205,105 @@ export const TEAM_AGENTS: readonly TeamAgent[] = [
     id: "art-director",
     name: "Art director",
     role: "spoke",
+    tier: "worker",
+    modes: ["squad", "lifecycle"],
     taskClass: "draft",
     summary:
-      "Sets the look: a named idea, a palette drawn from the brand book, and the key images each placement needs.",
-    use: "the campaign idea, its look and palette, and the key images",
-    tools: ["get_brand_guidelines", "propose_creative", ...SHARED],
+      "Sets the look: a named idea, a palette drawn from the brand book, and the approved images from the brand's asset library each placement uses.",
+    use: "the campaign idea, its look and palette, and which approved images from the asset library it uses",
+    tools: [
+      "get_brand_guidelines",
+      "find_approved_assets",
+      "propose_creative",
+      "get_claims_library",
+      "propose_concepts",
+      ...SHARED,
+    ],
     deliverable: "propose_creative",
   },
   {
     id: "copy-lead",
     name: "Copy lead",
     role: "spoke",
+    tier: "worker",
+    modes: ["squad", "lifecycle"],
     taskClass: "draft",
     summary:
       "Finds the words: a line, the themes the campaign keeps returning to, and copy for each placement that fits its character limits.",
     use: "the campaign line, its recurring themes and the copy for each placement",
-    tools: ["get_brand_guidelines", "get_channel_specs", "write_copy", ...SHARED],
+    tools: [
+      "get_brand_guidelines",
+      "get_channel_specs",
+      "write_copy",
+      "get_claims_library",
+      "find_approved_assets",
+      "draft_modules",
+      ...SHARED,
+    ],
     deliverable: "write_copy",
   },
   {
     id: "channel-planner",
     name: "Channel planner",
     role: "spoke",
+    tier: "worker",
+    modes: ["squad", "lifecycle"],
     taskClass: "draft",
     summary:
       "Decides where the money goes: which channels, how much in each, when each runs, and what it should return, priced from benchmarks.",
     use: "which channels to buy, the spend and dates for each, and the results to expect",
-    tools: ["get_channel_benchmarks", "get_audience_segments", "plan_media", ...SHARED],
+    tools: [
+      "get_channel_benchmarks",
+      "get_audience_segments",
+      "plan_media",
+      "get_approved_job",
+      "schedule_deployment",
+      ...SHARED,
+    ],
     deliverable: "plan_media",
+  },
+  {
+    id: "mlr-coordinator",
+    name: "MLR coordinator",
+    role: "spoke",
+    tier: "coordinator",
+    modes: ["lifecycle"],
+    taskClass: "orchestrate",
+    summary:
+      "Runs the Medical, Legal and Regulatory review: annotates every claim to its reference, runs the pre-review checks, submits the job to the reviewers, and prepares Form FDA 2253 at first use.",
+    use: "the MLR job: claim-to-reference annotation, pre-review checks, submission to the reviewers, and Form FDA 2253",
+    tools: [
+      "get_claims_library",
+      "get_approved_job",
+      "submit_mlr_job",
+      "prepare_form_2253",
+      ...SEMANTIC,
+    ],
+    deliverable: "submit_mlr_job",
+  },
+  {
+    id: "performance-analyst",
+    name: "Performance analyst",
+    role: "spoke",
+    tier: "worker",
+    modes: ["lifecycle"],
+    taskClass: "draft",
+    summary:
+      "Reads what happened in market by segment, decile and channel, compares it with past results, and recommends whether to continue, optimize or retire.",
+    use: "in-market results, what they mean, and the next action",
+    tools: ["get_campaign_results", "get_past_results", "report_performance", ...SEMANTIC],
+    deliverable: "report_performance",
   },
 ];
 
 export const teamAgentById = (id: string) => TEAM_AGENTS.find((agent) => agent.id === id);
 export const isTeamSpecialist = (id: string): id is TeamSpecialist =>
   (TEAM_SPECIALISTS as readonly string[]).includes(id);
+export const isLifecycleWorker = (id: string): id is LifecycleWorker =>
+  isTeamSpecialist(id) || (LIFECYCLE_AGENTS as readonly string[]).includes(id);
+/** The agents a run of this mode uses. */
+export const teamAgentsFor = (mode: TeamMode) =>
+  TEAM_AGENTS.filter((agent) => agent.modes.includes(mode));
 
 export const TEAM_PARTY_LABELS: Record<TeamParty, string> = {
   client: "Client",
@@ -190,6 +314,14 @@ export const TEAM_PARTY_LABELS: Record<TeamParty, string> = {
   "art-director": "Art director",
   "copy-lead": "Copy lead",
   "channel-planner": "Channel planner",
+  "mlr-coordinator": "MLR coordinator",
+  "performance-analyst": "Performance analyst",
+  "brand-lead": "Brand lead",
+  medical: "Medical reviewer",
+  legal: "Legal reviewer",
+  regulatory: "Regulatory reviewer",
+  "marketing-ops": "Marketing operations",
+  market: "In market",
 };
 
 /**
@@ -238,6 +370,61 @@ export const TEAM_GATES = {
     decider: "Client (played by the brand lead)",
     personas: ["brand-lead", "admin"],
     action: "team:decide_proposal",
+  },
+  // The pharma lifecycle's people (team-pharma.ts lists where each one decides).
+  focus: {
+    label: "Choose the focus area",
+    decider: "Brand lead",
+    personas: ["brand-lead", "admin"],
+    action: "team:decide_focus",
+  },
+  concept: {
+    label: "Choose the concept",
+    decider: "Brand lead",
+    personas: ["brand-lead", "admin"],
+    action: "team:decide_concept",
+  },
+  medical: {
+    label: "Medical review",
+    decider: "Medical reviewer",
+    personas: ["reviewer", "admin"],
+    action: "team:review_medical",
+  },
+  legal: {
+    label: "Legal review",
+    decider: "Legal reviewer",
+    personas: ["senior", "admin"],
+    action: "team:review_legal",
+  },
+  regulatory: {
+    label: "Regulatory review and approval",
+    decider: "Regulatory reviewer",
+    personas: ["compliance", "admin"],
+    action: "team:review_regulatory",
+  },
+  audience: {
+    label: "Approve the HCP list",
+    decider: "Marketing operations lead",
+    personas: ["marketer", "admin"],
+    action: "team:approve_audience",
+  },
+  "go-live": {
+    label: "Approve go-live",
+    decider: "Brand lead",
+    personas: ["brand-lead", "admin"],
+    action: "team:approve_go_live",
+  },
+  "fda-2253": {
+    label: "Submit Form FDA 2253",
+    decider: "Regulatory reviewer",
+    personas: ["compliance", "admin"],
+    action: "team:submit_2253",
+  },
+  "next-action": {
+    label: "Decide the next action",
+    decider: "Brand lead",
+    personas: ["brand-lead", "admin"],
+    action: "team:decide_next_action",
   },
 } as const satisfies Record<
   string,
@@ -369,7 +556,8 @@ export type CreativeConcept = {
   /** Hex colors, all from the brand palette. */
   palette: string[];
   mood: string;
-  keyVisuals: Array<{ format: string; description: string }>;
+  /** Approved images from the brand's asset library, each with where it is used. No image is made. */
+  assets: Array<{ assetId: string; use: string }>;
   rationale: string;
 };
 
@@ -470,7 +658,8 @@ export type TeamMessageKind =
   | "proposal"
   | "delivery"
   | "approval-request"
-  | "decision";
+  | "decision"
+  | "handoff";
 
 export type TeamAgentState = "idle" | "working" | "waiting" | "done" | "revising" | "blocked";
 
@@ -488,6 +677,8 @@ export type TeamEvent =
   | {
       type: "start";
       id: string;
+      /** squad when absent (runs saved before the lifecycle existed). */
+      mode?: TeamMode;
       brief: CampaignBrief;
       models: Record<TeamAgentId, string>;
       /** The infrastructure this run is served by. */
@@ -504,6 +695,8 @@ export type TeamEvent =
       /** Split, so a run can be priced; total is their sum. */
       inputTokens?: number;
       outputTokens?: number;
+      /** Input tokens served from the provider's prompt cache, billed at its lower rate. */
+      cachedInputTokens?: number;
       agent: TeamAgentId;
       model: string;
       purpose: "lead" | "work" | "answer" | "report";
@@ -548,6 +741,8 @@ export type TeamEvent =
       persona: Persona;
       title: string;
       why: string;
+      /** For a choice: the options the person picks from, by id. */
+      options?: Array<{ id: string; label: string; detail?: string }>;
     }
   | {
       type: "decided";
@@ -555,6 +750,20 @@ export type TeamEvent =
       decision: "approve" | "changes";
       note: string;
       persona: Persona;
+      /** The option the person chose, for a choice. */
+      choice?: string;
+    }
+  /** The lifecycle moved into a phase, or finished one. */
+  | { type: "phase"; phase: string; state: "active" | "done"; round: number }
+  /** Something the lifecycle produced: an agent's saved work, or what the system issued. */
+  | {
+      type: "artifact";
+      phase: string;
+      name: string;
+      by: TeamAgentId | "system";
+      version: number;
+      round: number;
+      data: unknown;
     }
   | { type: "delivered"; strategy: CampaignStrategy }
   | { type: "evaluation"; scorecard: TeamScorecard }

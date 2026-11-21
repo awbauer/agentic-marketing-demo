@@ -5,7 +5,6 @@ import {
   buildTeamPolicies,
   type CampaignBrief,
   type CampaignStrategy,
-  routeModel,
   TEAM_AGENTS,
   type TeamAgentId,
   type TeamAgentState,
@@ -16,15 +15,17 @@ import {
   type TeamPlan,
   type TeamGate,
   TEAM_SPECIALISTS,
-  TEAM_DIRECTOR,
   TEAM_PROVIDER_LABELS,
   TEAM_PROVIDERS,
   type TeamProvider,
   type TeamSpecialist,
   type TeamToolStep,
+  type LifecycleState,
+  newLifecycle,
+  type TeamMode,
 } from "@northstar/architecture";
 import { type LanguageModel, type LanguageModelMiddleware, wrapLanguageModel } from "ai";
-import { championsFrom, modelFactory } from "../architecture/agent-runtime";
+import { modelFactory } from "../architecture/agent-runtime";
 import { ArchError, type Ctx, invoke } from "../architecture/context";
 import { createOpenAI } from "@ai-sdk/openai";
 import { anthropicModel, DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
@@ -39,6 +40,9 @@ export type TeamRun = {
   id: string;
   ctx: Ctx;
   provider: TeamProvider;
+  mode: TeamMode;
+  /** Where a lifecycle run is; null for a squad run. */
+  lifecycle: LifecycleState | null;
   brief: CampaignBrief;
   emit: Emit;
   events: TeamEvent[];
@@ -75,11 +79,14 @@ export function newTeamRun(
   brief: CampaignBrief,
   emitOut: Emit,
   provider: TeamProvider = "cloudflare",
+  mode: TeamMode = "squad",
 ): TeamRun {
   const run: TeamRun = {
     id: `team-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     ctx,
     provider,
+    mode,
+    lifecycle: mode === "lifecycle" ? newLifecycle() : null,
     brief,
     emit: () => undefined,
     events: [],
@@ -176,10 +183,18 @@ export const setStatus = (run: TeamRun, agent: TeamAgentId, state: TeamAgentStat
  * through the AI Gateway named by AI_GATEWAY_ID, which supplies the key stored on it (BYOK).
  */
 export type ProviderEnv = {
-  /** Overrides claude-opus-5-5. */
+  /** The coordinator's model on Anthropic; overrides claude-opus-5-5. */
   ANTHROPIC_TEAM_MODEL?: string;
-  /** Overrides gpt-6-astra. */
+  /** The workers' model on Anthropic; overrides claude-sonnet-5-5. */
+  ANTHROPIC_WORKER_MODEL?: string;
+  /** The coordinator's model on OpenAI; overrides gpt-6-astra. */
   OPENAI_TEAM_MODEL?: string;
+  /** The workers' model on OpenAI; overrides gpt-5.4-mini. */
+  OPENAI_WORKER_MODEL?: string;
+  /** The coordinators' model on Workers AI; overrides kimi-k2.6. */
+  CLOUDFLARE_TEAM_MODEL?: string;
+  /** The workers' model on Workers AI; overrides gpt-oss-120b. */
+  CLOUDFLARE_WORKER_MODEL?: string;
   /** An AI Gateway token, only needed if the AI binding cannot send vendor requests itself. */
   CF_AIG_TOKEN?: string;
 };
@@ -187,24 +202,44 @@ const providerEnv = (ctx: Ctx) => ctx.env as Ctx["env"] & ProviderEnv;
 
 export const DEFAULT_OPENAI_MODEL = "gpt-6-astra";
 
-/** The lead plans and judges, so it thinks harder; the spokes do bounded pieces of work. */
-const effortFor = (agent: TeamAgentId) => (agent === TEAM_DIRECTOR ? "medium" : "low");
+/**
+ * Coordinators plan, judge and reconcile, so they get each provider's top model; workers do
+ * bounded pieces of work checked by rules, so they get a smaller, cheaper one.
+ */
+export const MODEL_TIERS = {
+  cloudflare: { coordinator: "@cf/moonshotai/kimi-k2.6", worker: "@cf/openai/gpt-oss-120b" },
+  anthropic: { coordinator: DEFAULT_ANTHROPIC_MODEL, worker: "claude-sonnet-5-5" },
+  openai: { coordinator: DEFAULT_OPENAI_MODEL, worker: "gpt-5.4-mini" },
+} as const satisfies Record<TeamProvider, { coordinator: string; worker: string }>;
 
-/** The model each team agent runs on, for a provider. */
+/** Coordinators plan and judge, so they think harder; workers do bounded pieces of work. */
+const effortFor = (agent: TeamAgentId) =>
+  TEAM_AGENTS.find((item) => item.id === agent)?.tier === "coordinator" ? "medium" : "low";
+
+/** The model each team agent runs on, for a provider: coordinators on the top tier, workers below. */
 export function teamModels(
   ctx: Ctx,
   provider: TeamProvider = "cloudflare",
 ): Record<TeamAgentId, string> {
   const env = providerEnv(ctx);
-  const champions = championsFrom(ctx.env);
+  const tiers = {
+    cloudflare: {
+      coordinator: env.CLOUDFLARE_TEAM_MODEL ?? MODEL_TIERS.cloudflare.coordinator,
+      worker: env.CLOUDFLARE_WORKER_MODEL ?? MODEL_TIERS.cloudflare.worker,
+    },
+    anthropic: {
+      coordinator: env.ANTHROPIC_TEAM_MODEL ?? MODEL_TIERS.anthropic.coordinator,
+      worker: env.ANTHROPIC_WORKER_MODEL ?? MODEL_TIERS.anthropic.worker,
+    },
+    openai: {
+      coordinator: env.OPENAI_TEAM_MODEL ?? MODEL_TIERS.openai.coordinator,
+      worker: env.OPENAI_WORKER_MODEL ?? MODEL_TIERS.openai.worker,
+    },
+  }[provider];
   return Object.fromEntries(
     TEAM_AGENTS.map((agent) => [
       agent.id,
-      provider === "anthropic"
-        ? (env.ANTHROPIC_TEAM_MODEL ?? DEFAULT_ANTHROPIC_MODEL)
-        : provider === "openai"
-          ? (env.OPENAI_TEAM_MODEL ?? DEFAULT_OPENAI_MODEL)
-          : routeModel(agent.taskClass, { champions }).model,
+      agent.tier === "coordinator" ? tiers.coordinator : tiers.worker,
     ]),
   ) as Record<TeamAgentId, string>;
 }
@@ -284,7 +319,15 @@ export function teamModel(
   });
   return provider === "anthropic"
     ? anthropicModel({ apiKey: GATEWAY_HELD_KEY, model: modelId, effort: effortFor(agent), fetch })
-    : openaiModel({ apiKey: GATEWAY_HELD_KEY, model: modelId, effort: effortFor(agent), fetch });
+    : openaiModel({
+        apiKey: GATEWAY_HELD_KEY,
+        model: modelId,
+        effort: effortFor(agent),
+        fetch,
+        // One cache key per agent per run: each agent's calls share a growing prefix, so OpenAI
+        // routes them to the same cache. Anthropic requests cache with top-level cache_control.
+        promptCacheKey: `${run.id}:${agent}`,
+      });
 }
 
 /** The gateway check for one team tool call, as `team:<tool>`, on the brief's brand. */
@@ -365,7 +408,9 @@ export const addUsage = (run: TeamRun, usage: { inputTokens?: number; outputToke
   run.tokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
 };
 
-type V3Usage = { inputTokens?: { total?: number }; outputTokens?: { total?: number } } | undefined;
+type V3Usage =
+  | { inputTokens?: { total?: number; cacheRead?: number }; outputTokens?: { total?: number } }
+  | undefined;
 const total = (usage: V3Usage) =>
   (usage?.inputTokens?.total ?? 0) + (usage?.outputTokens?.total ?? 0);
 
@@ -388,6 +433,7 @@ export function metered(
       purpose,
       tokens: total(usage),
       inputTokens: usage?.inputTokens?.total ?? 0,
+      cachedInputTokens: usage?.inputTokens?.cacheRead ?? 0,
       outputTokens: usage?.outputTokens?.total ?? 0,
       latencyMs: Date.now() - started,
       ok,
@@ -467,6 +513,7 @@ export function openaiModel(options: {
   effort: "low" | "medium";
   baseURL?: string;
   fetch?: typeof fetch;
+  promptCacheKey?: string;
 }): Exclude<LanguageModel, string> {
   const openai = createOpenAI({
     apiKey: options.apiKey,
@@ -480,7 +527,11 @@ export function openaiModel(options: {
         ...params,
         providerOptions: {
           ...params.providerOptions,
-          openai: { ...params.providerOptions?.openai, reasoningEffort: options.effort },
+          openai: {
+            ...params.providerOptions?.openai,
+            reasoningEffort: options.effort,
+            ...(options.promptCacheKey ? { promptCacheKey: options.promptCacheKey } : {}),
+          },
         },
       }),
     },
