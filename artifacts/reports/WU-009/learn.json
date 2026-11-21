@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-21T03:51:57.771Z",
-  "status": "failed",
+  "generatedAt": "2026-11-21T03:52:34.642Z",
+  "status": "passed",
   "baseRef": "origin/main",
   "mergeBase": "52b6ce2171b3b1db52db17135f9b4ec555ff46a5",
   "inventory": {
@@ -14,7 +14,7 @@
   "drift": [
     {
       "section": "pharma-lifecycle",
-      "status": "stale",
+      "status": "reviewed",
       "paths": [
         "apps/edge/src/team/lifecycle-workers.ts",
         "apps/edge/src/team/lifecycle.ts",
@@ -23,7 +23,7 @@
     },
     {
       "section": "campaign-squad",
-      "status": "stale",
+      "status": "reviewed",
       "paths": [
         "apps/edge/src/team/lifecycle-workers.ts",
         "apps/edge/src/team/lifecycle.ts",
@@ -36,7 +36,5 @@
     }
   ],
   "notices": [],
-  "failures": [
-    "Learn drift: this branch changes code that these Learn sections explain, but the sections didn't change:\n  • pharma-lifecycle (“A pharma campaign, focus to analytics, with MLR”) ← apps/edge/src/team/lifecycle-workers.ts, apps/edge/src/team/lifecycle.ts, apps/web/src/team/TeamLifecycle.tsx\n  • campaign-squad (“The campaign squad: a lead, four spokes, and the platform under them”) ← apps/edge/src/team/lifecycle-workers.ts, apps/edge/src/team/lifecycle.ts, apps/web/src/team/RichText.tsx, apps/web/src/team/TeamLifecycle.tsx, apps/web/src/team/TeamPeople.tsx, apps/web/src/team/TeamView.tsx, apps/web/src/team/team.css\nUpdate each section in apps/web/src/learn/content.ts (or its lesson or reference entries) so it teaches the change.\nIf nothing a reader learns has changed, say so in a commit trailer:\n  Learn-Reviewed: pharma-lifecycle, campaign-squad (why no Learn update is needed)"
-  ]
+  "failures": []
 }
