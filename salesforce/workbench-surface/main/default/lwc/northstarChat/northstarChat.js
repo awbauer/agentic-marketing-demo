@@ -2,6 +2,7 @@ import { api, LightningElement } from "lwc";
 import { request } from "c/northstarApi";
 
 const POLL_MS = 900;
+const FOLLOW_MARGIN_PX = 80;
 const POLL_FAILURE_LIMIT = 4;
 
 const ACTION_LABELS = {
@@ -18,6 +19,7 @@ export default class NorthstarChat extends LightningElement {
   @api placeholder;
   messages = [];
   live = null;
+  route = null;
   active = false;
   loaded = false;
   prompt = "";
@@ -25,6 +27,25 @@ export default class NorthstarChat extends LightningElement {
   deciding = false;
   notice = "";
   failures = 0;
+  following = true;
+  scrollPending = false;
+
+  renderedCallback() {
+    if (!this.scrollPending) return;
+    this.scrollPending = false;
+    const transcript = this.refs.transcript;
+    if (transcript) transcript.scrollTop = transcript.scrollHeight;
+  }
+
+  /** Stays on the newest message, unless the person scrolled up to read something. */
+  followLatest() {
+    if (this.following) this.scrollPending = true;
+  }
+
+  handleScroll(event) {
+    const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
+    this.following = scrollHeight - scrollTop - clientHeight < FOLLOW_MARGIN_PX;
+  }
 
   @api
   get draft() {
@@ -55,8 +76,10 @@ export default class NorthstarChat extends LightningElement {
       this.messages = snapshot.messages;
       this.confirmation = snapshot.confirmation;
       this.live = snapshot.message;
+      this.route = snapshot.route;
       this.active = snapshot.active;
       this.loaded = true;
+      this.followLatest();
       if (snapshot.active) this.schedulePoll();
     } catch (error) {
       this.report(error);
@@ -74,7 +97,9 @@ export default class NorthstarChat extends LightningElement {
       const progress = await request("progress");
       this.failures = 0;
       this.live = progress.message ?? this.live;
+      this.route = progress.route ?? this.route;
       this.confirmation = progress.confirmation;
+      this.followLatest();
       if (progress.active) {
         this.schedulePoll();
         return;
@@ -113,11 +138,14 @@ export default class NorthstarChat extends LightningElement {
     this.active = true;
     this.live = null;
     try {
-      const { turnId } = await request("startTurn", { text, scope: this.scope });
+      const { turnId, route } = await request("startTurn", { text, scope: this.scope });
+      this.route = route;
       this.messages = [
         ...this.messages,
         { id: turnId, role: "user", text, toolCalls: [], trace: [], live: false },
       ];
+      this.following = true;
+      this.followLatest();
       this.schedulePoll();
     } catch (error) {
       this.active = false;

@@ -118,8 +118,10 @@ jobs:
             if (!(Number(s.testsRan) > 0) || Number(s.failing) > 0 || s.outcome !== "Passed") process.exit(1);
           '
 
+      # Not a dot directory: once .forceignore exists the CLI ignores `**/.*`, so a retrieve into
+      # one reports "Nothing retrieved" and still exits 0.
       - name: Read back governed MCP definition
         if: github.event_name != 'pull_request'
         run: |
-          sf project retrieve start --metadata McpServerDefinition:NorthstarMarketingWorkbench --target-org "$SF_TARGET_ORG" --output-dir .salesforce-readback --wait 10
-          find .salesforce-readback -name 'NorthstarMarketingWorkbench.mcpServerDefinition-meta.xml' -print -quit | grep -q .
+          sf project retrieve start --metadata McpServerDefinition:NorthstarMarketingWorkbench --target-org "$SF_TARGET_ORG" --output-dir salesforce-readback --wait 10
+          find salesforce-readback -name 'NorthstarMarketingWorkbench.mcpServerDefinition-meta.xml' -print -quit | grep -q .

@@ -9,8 +9,9 @@ import {
 import { type Confirmation, type Principal, PROOF_DEFAULTS } from "@northstar/contracts";
 import type { UIMessage } from "ai";
 import { decodeJwt } from "jose";
-import { USE_CASES, useCaseBrand } from "../../web/src/usecases/catalog";
+import { latestRoute, routeMap } from "../../web/src/turn-route";
 import { executionTrace, toolCalls } from "../../web/src/turn-trace";
+import { USE_CASES, useCaseBrand } from "../../web/src/usecases/catalog";
 import type { AuthBindings } from "./auth";
 
 /**
@@ -128,6 +129,14 @@ export function surfaceMessage(message: UIMessage, live = false) {
     ),
   };
 }
+
+/** The route for a chat's newest turn; `live` is the message still streaming, if any. */
+export function surfaceRoute(messages: UIMessage[], live: UIMessage | null, active: boolean) {
+  return latestRoute(live ? [...messages, live] : messages, active);
+}
+
+/** The route of a turn this surface just sent, before anything else has happened to it. */
+export const surfaceAcceptedRoute = () => routeMap(null, { surface: "lightning", live: true });
 
 /** The pending write for a confirmation card, without its signing material or idempotency key. */
 export function surfaceConfirmation(confirmation: Confirmation | null) {

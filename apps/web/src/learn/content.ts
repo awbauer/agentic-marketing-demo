@@ -443,7 +443,7 @@ Around the loop, the orchestrator also handles the events the model must not: it
 
 **The header's brand and role.** Each chat message carries the brand and role chosen in the header. The server withholds other brands' tools, answers a request about another brand with a note to switch rather than answering from memory, and tells the model the role so it leads with what that person decides. The model is told what each brand sells (Lumera's Cardivance, Glucora and Neurelva; Harborstone's Sweep Account; Coastline's chowder), so a request that names a product is read as its brand's, not as another brand. The brand also decides which claims checks a new draft starts with. The role changes emphasis only; it never changes what Salesforce allows or what needs confirmation.
 
-**The Lightning surface.** The same agent can be used from Salesforce through a Lightning Web Component built on the Lightning Design System. It is another window onto the same workspace, not a second agent. **Log in** opens Cloudflare Access; once Access lets the person in, a Worker page hands their Access token to the Lightning window, and only to a Salesforce origin the Worker names. Apex then relays each call with that token in a \`cf-access-token\` header, so the Worker sees the same person as the browser app, with the same agent, Salesforce connection, and history. Apex can't hold a WebSocket, so a turn starts over HTTP and the component polls its progress about once a second; the tool calls and technical trace it shows come from the same code as the browser's. The turn itself enters through the same \`onChatMessage\`, so routing, the gateway, tools, confirmation, and turn history are unchanged. The surface covers chat, use cases, the brand and role, connections, and history; the workspace panel and the Architecture, Graph, and Learn pages stay in the browser app.`,
+**The Lightning surface.** The same agent can be used from Salesforce through a Lightning Web Component built on the Lightning Design System. It is another window onto the same workspace, not a second agent. **Log in** opens Cloudflare Access; once Access lets the person in, a Worker page hands their Access token to the Lightning window, and only to a Salesforce origin the Worker names. Apex then relays each call with that token in a \`cf-access-token\` header, so the Worker sees the same person as the browser app, with the same agent, Salesforce connection, and history. Apex can't hold a WebSocket, so a turn starts over HTTP and the component polls its progress about once a second; the tool calls, technical trace, and route map it shows come from the same code as the browser's. The turn itself enters through the same \`onChatMessage\`, so routing, the gateway, tools, confirmation, and turn history are unchanged. The surface covers chat, use cases, the brand and role, connections, and history; the workspace panel and the Architecture, Graph, and Learn pages stay in the browser app.`,
         inDemo: [
           "apps/edge/src/orchestrator.ts",
           "apps/edge/src/surface.ts",
@@ -723,9 +723,10 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
       },
       {
         id: "observability",
-        title: "Observability: technical trace, turn history, and audit export",
+        title: "Observability: route map, technical trace, turn history, and audit export",
         summary: "See exactly what happened in every turn.",
-        body: `- **Live tool calls** under the trace while an answer streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
+        body: `- **Route map** above the message box, in the browser and in Lightning: the components a turn passes through, lit as it runs, with a pulse on whichever is working now. The path runs from the page through Cloudflare Access to the policy router, then AI Gateway and Workers AI, and out through the agentic gateway to each MCP server. A turn sent from Lightning also shows the Apex relay. It is read from the same trace as the view below, not from a script of what should happen, so a turn the policy router answers leaves the model dark, a tool the gateway denies marks the gateway and not the system behind it, and a failed tool marks that system. The first hops are implied, because a request can't reach the Worker without them; the router, model, and tools are recorded. The map keeps the finished route until the next message. It follows the query only: a confirmed write runs after the turn, and the write's own progress shows on its confirmation card. Lightning polls about once a second, so a hop shorter than that can appear already passed.
+- **Live tool calls** under the trace while an answer streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
 - **Technical trace** at the top of each answer, so the answer streaming in below doesn't move it: every lifecycle event in order, with timing. It opens while the answer streams (or when something went wrong) and stays open after it finishes, until you close it.
   - turn start, step start and finish (finish reason, token counts)
   - reasoning start and end, with the model's reasoning, redacted
@@ -740,6 +741,7 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
 
 History shows the brand and role each turn ran under.`,
         inDemo: [
+          "Chat → the Route panel above the message box",
           "Any answer → “Behind the scenes · technical trace”",
           "Chat → History → Export audit (JSON)",
           "Chat → History → Memory",

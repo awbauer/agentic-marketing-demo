@@ -28,8 +28,49 @@ Status: in review
 
 ## Not yet demonstrated
 
-The Worker routes aren't deployed, so these wait for the merge and deploy:
+The Worker routes are deployed: Workers Build `a75967bd-2066-4ce7-ac6c-b83f77cc98cd` shipped merge commit `3857dd4` as version `46ce9cbc-59b2-47ad-aea7-9869d59cf51f`, with `SURFACE_ALLOWED_ORIGINS` read back on that version.
 
-- Access accepting the hand-off token in `cf-access-token` from Apex.
-- `window.opener` surviving the Access sign-in window. If it doesn't, the page asks the person to press Login again, which skips the identity provider.
-- A real turn, Salesforce connection, and write from Lightning.
+A person signed in and used the page from their own browser on 2026-11-06. Production Worker logs from 17:01 to 18:05 UTC show:
+
+- 91 requests carrying `cf-access-token`, which only the Apex relay sends, all successful: `bootstrap` 2, `POST turn` 202 × 4, turn polls 46, `messages` 10, `clear` 2, `turns` 7, `operations` 4, `salesforce/status` 14, `salesforce/connect` 2. This shows Access accepting the token from Apex, so the `CF_Authorization` fallback isn't needed.
+- `/api/surface/login` served once with `200`. A token could reach Apex only through that hand-off, so `window.opener` survived the Access sign-in.
+- All 91 logged `cf-access-token` values are `REDACTED`.
+- Two OAuth callbacks in the same 17:45 to 18:06 window as the two connects from Lightning.
+- Two gateway `allow` decisions at 17:59, in the same window as the turns: `ext_get_fed_announcements` and `graph_match_news_to_approved_content`.
+
+Then, in the Lightning org on 2026-11-06, with the person signed in through the browser pane:
+
+- **A Salesforce MCP tool call.** `Check Campaign Readiness` ran through the Agentforce agent and returned `isError: false`. With campaign `701jV00000CUSj7QAH` it returned "Start Your Day Right Campaign", its type and status, and its blockers, matching a direct query of the proof org. Without an ID, the agent asked for one.
+- **The brand reaches the backend.** Coastline Kitchen offered 30 governed tools and All brands 47.
+- **The rendered page.** Identity, the Brand and Run as selectors, the 20 use cases, connections, History with scope, outcome, and timing, and the tool trace with sanitized inputs and outputs. History matched the browser app's, and the brand survived a reload. Run as was shown but not switched.
+- An `ok` turn ended with no text from the model and showed the recovery message. That is model behaviour, not the surface.
+
+Still not demonstrated:
+
+- A confirmed write from Lightning. No `confirmations/execute` request has reached the Worker from it.
+
+## Fixes from the live check
+
+| Defect seen in Lightning | Fix | Seen live after deploy |
+| --- | --- | --- |
+| Salesforce stayed on "Authorizing" after a waking agent restored its connection | The page rechecks the status after loading and after each turn | Yes: Authorizing at 3 s, Connected at 8 s |
+| History's Prompt column was a sliver | Fixed column widths | Prompt yes; the tightened Time, Tools, and Details widths not yet |
+| The header overlapped the selectors at narrow widths | The title and selectors wrap | The first version yes; the second, which keeps them on one row when they fit, not yet |
+| A table straight after a line of text showed raw pipes | The Markdown parser starts a table without a blank line, with a regression test | Not yet |
+| Chat didn't follow new messages | It follows the newest unless the person has scrolled up | Not yet |
+
+Deploys: `0Afg800000KzhuACAR`, `0Afg800000L0DcICAV`, `0Afg800000L0XCnCAN`, `0Afg800000L0ZphCAF`. The org showed each component's new modification time, but the browser pane kept serving Lightning's cached component builds, so the rows marked "Not yet" are deployed and unseen. Org settings such as component caching were left unchanged.
+
+## Post-merge regression
+
+Merging added `.forceignore`, and the `Salesforce metadata` run on `3857dd4` then failed its last step. Its deploy and Apex test steps passed. Salesforce CLI's default `**/.*` ignore applies only when a `.forceignore` exists, so the retrieve into `.salesforce-readback` reported "Nothing retrieved" and the workflow's `find` failed.
+
+Read-only retrieves against the proof org on the merged tree, using the pinned CLI 2.128.5:
+
+| Tree | Output directory | Result |
+| --- | --- | --- |
+| With `.forceignore` | `.salesforce-readback` | Nothing retrieved |
+| With `.forceignore` | `salesforce-readback` | Retrieved |
+| Without `.forceignore` | `.salesforce-readback` | Retrieved |
+
+The workflow now uses `salesforce-readback`. That step runs only on pushes to `main`, so its first real run is the merge of this fix.

@@ -133,7 +133,13 @@ import {
   wantsSalesforceRecord,
 } from "./turn-policy";
 import { createTurnTracer, describeTurnError, type TurnRoute } from "./turn-trace";
-import { parseSurfaceTurn, surfaceConfirmation, surfaceMessage } from "./surface";
+import {
+  parseSurfaceTurn,
+  surfaceAcceptedRoute,
+  surfaceConfirmation,
+  surfaceMessage,
+  surfaceRoute,
+} from "./surface";
 import {
   addCreatedRecord,
   baseToolName,
@@ -3452,10 +3458,12 @@ export class MarketingOrchestrator extends AIChatAgent<
   /** What a poll needs: whether a turn runs, its answer so far, and any write awaiting a person. */
   private surfaceProgress() {
     const live = this.streamingMessage();
+    const active = this.surfaceTurnActive();
     return {
-      active: this.surfaceTurnActive(),
+      active,
       message: live ? surfaceMessage(live, true) : null,
       confirmation: surfaceConfirmation(this.state.pendingConfirmation),
+      route: surfaceRoute(this.messages, live, active),
     };
   }
 
@@ -3508,6 +3516,8 @@ export class MarketingOrchestrator extends AIChatAgent<
       const message: UIMessage = {
         id: crypto.randomUUID(),
         role: "user",
+        // The route map reads where a turn came from here, since every surface shares this chat.
+        metadata: { surface: "lightning" },
         parts: [{ type: "text", text: turn.text }],
       };
       this.ctx.waitUntil(
@@ -3517,7 +3527,7 @@ export class MarketingOrchestrator extends AIChatAgent<
             if (this.surfaceAbort === abort) this.surfaceAbort = null;
           }),
       );
-      return json({ turnId: message.id }, { status: 202 });
+      return json({ turnId: message.id, route: surfaceAcceptedRoute() }, { status: 202 });
     }
     return json(
       { error: { code: "NOT_FOUND", message: "Surface endpoint not found." } },

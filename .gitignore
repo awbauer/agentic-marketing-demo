@@ -4,7 +4,7 @@
 node_modules/
 dist/
 .wrangler/
-.salesforce-readback/
+salesforce-readback/
 /playwright-report/
 /test-results/
 

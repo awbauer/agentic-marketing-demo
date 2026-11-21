@@ -34,8 +34,10 @@ import { Markdown } from "./Markdown";
 import { SalesforceAgentsPanel } from "./SalesforceAgents";
 import { ScopeBar } from "./ScopeBar";
 import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
+import { RouteMapPanel } from "./RouteMapPanel";
 import { TechnicalTrace } from "./TechnicalTrace";
 import { ToolActivity } from "./ToolActivity";
+import { latestRoute } from "./turn-route";
 import { executionTrace } from "./turn-trace";
 import { TeamView } from "./team/TeamView";
 import { UseCasesView } from "./usecases/UseCasesView";
@@ -1190,6 +1192,7 @@ export function App() {
               </section>
             )}
           </div>
+          <RouteMapPanel route={latestRoute(messages, busy)} />
           <form
             className="composer"
             onSubmit={(event) => {
