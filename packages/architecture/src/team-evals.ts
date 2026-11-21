@@ -109,7 +109,7 @@ export function scoreChecks(events: readonly TeamEvent[], brief: CampaignBrief):
     id: "coordination",
     label: "Coordination without waste",
     group: "process",
-    score: clamp(1 - 0.1 * nudges - 0.25 * denied - 0.1 * sentBack),
+    score: tools.length ? clamp(1 - 0.1 * nudges - 0.25 * denied - 0.1 * sentBack) : null,
     detail: `${nudges} nudge${nudges === 1 ? "" : "s"} to call a tool, ${denied} gateway denial${denied === 1 ? "" : "s"}, ${sentBack} send-back${sentBack === 1 ? "" : "s"} by the lead.`,
   });
 
@@ -264,7 +264,11 @@ export function lifecycleChecks(events: readonly TeamEvent[]): EvalCheck[] {
       id: "governance",
       label: "No agent reached for a tool it isn't granted",
       group: "process",
-      score: denied === 0 ? 1 : clamp(1 - 0.2 * denied),
+      score: !events.some((event) => event.type === "tool")
+        ? null
+        : denied === 0
+          ? 1
+          : clamp(1 - 0.2 * denied),
       detail: `${denied} call${denied === 1 ? "" : "s"} denied by the gateway.`,
     },
   ];
@@ -290,7 +294,11 @@ export function scoreRun(input: {
     ? input.judge.scores.reduce((sum, item) => sum + (item.score - 1) / 4, 0) /
       input.judge.scores.length
     : null;
-  const overall = judgeAvg === null ? checksAvg : 0.7 * checksAvg + 0.3 * judgeAvg;
+  const blended = judgeAvg === null ? checksAvg : 0.7 * checksAvg + 0.3 * judgeAvg;
+  // A run that failed with an error is scored by how far it got, not by how tidily it failed.
+  const failed = input.events.some((event) => event.type === "error");
+  const outcome = checks.find((check) => check.id === "outcome")?.score ?? 0;
+  const overall = failed ? Math.min(blended, outcome) : blended;
   const tokens = models.reduce((sum, event) => sum + event.tokens, 0);
   return {
     runId: input.runId,

@@ -497,8 +497,9 @@ export function explainModelError(error: unknown, provider: TeamProvider): Error
     return new Error(
       `${TEAM_PROVIDER_LABELS[provider]} rejected the key stored on the AI Gateway: ${message}`,
     );
+  const body = String((error as { responseBody?: unknown })?.responseBody ?? "").slice(0, 400);
   return new Error(
-    `${TEAM_PROVIDER_LABELS[provider]} call failed through the AI Gateway: ${message}`,
+    `${TEAM_PROVIDER_LABELS[provider]} call failed through the AI Gateway: ${message}${body ? ` (${body})` : ""}`,
   );
 }
 
