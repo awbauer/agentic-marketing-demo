@@ -14,7 +14,12 @@ import { scenarioRubrics } from "../../packages/evals/src/rubric.ts";
 
 export const JUDGES = [
   { id: "@cf/zai-org/glm-5.3", label: "GLM-5.3", family: "zai" },
-  { id: "@cf/deepseek-ai/deepseek-v4-pro-0813", label: "DeepSeek V4 Pro", family: "deepseek" },
+  // DeepSeek V4 Pro was retired on 2026-11-20; V4.1 Flash keeps a DeepSeek-family judge.
+  {
+    id: "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
+    label: "DeepSeek V4.1 Flash",
+    family: "deepseek",
+  },
 ];
 
 const EVIDENCE_LIMIT = 1500;

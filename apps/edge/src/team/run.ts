@@ -191,9 +191,9 @@ export type ProviderEnv = {
   OPENAI_TEAM_MODEL?: string;
   /** The workers' model on OpenAI; overrides gpt-5.4-mini. */
   OPENAI_WORKER_MODEL?: string;
-  /** The coordinators' model on Workers AI; overrides kimi-k2.6. */
+  /** The coordinators' model on Workers AI; overrides glm-5.3. */
   CLOUDFLARE_TEAM_MODEL?: string;
-  /** The workers' model on Workers AI; overrides gpt-oss-120b. */
+  /** The workers' model on Workers AI; overrides deepseek-v4.1-flash-1017. */
   CLOUDFLARE_WORKER_MODEL?: string;
   /** An AI Gateway token, only needed if the AI binding cannot send vendor requests itself. */
   CF_AIG_TOKEN?: string;
@@ -207,7 +207,10 @@ export const DEFAULT_OPENAI_MODEL = "gpt-6-astra";
  * bounded pieces of work checked by rules, so they get a smaller, cheaper one.
  */
 export const MODEL_TIERS = {
-  cloudflare: { coordinator: "@cf/moonshotai/kimi-k2.6", worker: "@cf/openai/gpt-oss-120b" },
+  cloudflare: {
+    coordinator: "@cf/zai-org/glm-5.3",
+    worker: "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
+  },
   anthropic: { coordinator: DEFAULT_ANTHROPIC_MODEL, worker: "claude-sonnet-5-5" },
   openai: { coordinator: DEFAULT_OPENAI_MODEL, worker: "gpt-5.4-mini" },
 } as const satisfies Record<TeamProvider, { coordinator: string; worker: string }>;

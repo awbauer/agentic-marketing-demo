@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-21T02:57:43.313Z",
+  "generatedAt": "2026-11-21T03:08:34.840Z",
   "status": "passed",
   "baseRef": "origin/main",
-  "mergeBase": "fd6c52b2fcfa65a2dc4f14fcb89505dcf06087ae",
+  "mergeBase": "cc34cdf9bebe8bc48ecfbecf0da22de570081fba",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,62 +13,26 @@
   },
   "drift": [
     {
-      "section": "gateway",
+      "section": "campaign-squad",
       "status": "reviewed",
       "paths": [
-        "apps/edge/src/architecture/store.ts"
-      ]
-    },
-    {
-      "section": "campaign-squad",
-      "status": "updated",
-      "paths": [
-        "apps/edge/src/team/api.ts",
-        "apps/edge/src/team/director.ts",
-        "apps/edge/src/team/evals.ts",
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts",
-        "apps/edge/src/team/run.ts",
-        "apps/edge/src/team/scripted.ts",
-        "apps/edge/src/team/specialists.ts",
-        "apps/web/src/team/TeamHierarchy.tsx",
-        "apps/web/src/team/TeamLifecycle.tsx",
-        "apps/web/src/team/TeamPeople.tsx",
-        "apps/web/src/team/TeamPlatform.tsx",
-        "apps/web/src/team/TeamView.tsx",
-        "apps/web/src/team/TeamWork.tsx",
-        "apps/web/src/team/team-state.ts",
-        "apps/web/src/team/team.css",
-        "docs/decisions/ADR-014-squad-people-and-evals.md",
-        "packages/architecture/src/team-evals.ts",
-        "packages/architecture/src/team-services.ts",
-        "packages/architecture/src/team.ts",
-        "scripts/run-team-evals.mjs"
+        "apps/edge/src/team/run.ts"
       ]
     },
     {
       "section": "pharma-lifecycle",
       "status": "updated",
       "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts",
-        "apps/web/src/team/TeamLifecycle.tsx",
-        "docs/decisions/ADR-015-pharma-campaign-lifecycle.md",
-        "packages/architecture/src/team-pharma.ts"
+        "docs/decisions/ADR-015-pharma-campaign-lifecycle.md"
       ]
     },
     {
-      "section": "object-model",
-      "status": "reviewed",
-      "paths": [
-        "packages/architecture/src/index.ts"
-      ]
-    },
-    {
-      "section": "lifecycle",
+      "section": "evaluations",
       "status": "updated",
       "paths": [
-        "packages/architecture/src/language.ts"
+        "scripts/lib/eval-judge.mjs",
+        "scripts/lib/eval-throttle.mjs",
+        "scripts/run-live-evals.mjs"
       ]
     }
   ],

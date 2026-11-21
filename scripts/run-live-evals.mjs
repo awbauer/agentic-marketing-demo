@@ -91,26 +91,15 @@ const TOOL_PREFIX = "tool_salesforce_northstar-marketing-salesforce_";
 const CALIBRATION_PATH = "artifacts/reports/eval-calibration.json";
 
 // The two gpt-oss baselines run by default. The paid-access models are opt-in (--tier frontier).
-// GLM-4.7-Flash and Llama 4 Scout were retired from the live roster in ADR-011.
+// GLM-4.7-Flash and Llama 4 Scout were retired from the live roster in ADR-011. Kimi K2.6,
+// GLM-5.3-Flash and DeepSeek V4 Pro were removed when Workers AI retired them on 2026-11-20; their
+// prices stay in pricing.ts so earlier reports still cost out.
 const MODELS = [
   { id: "@cf/openai/gpt-oss-120b", label: "gpt-oss-120b", family: "openai", tier: "default" },
   { id: "@cf/openai/gpt-oss-20b", label: "gpt-oss-20b", family: "openai", tier: "default" },
-  { id: "@cf/moonshotai/kimi-k2.6", label: "Kimi K2.6", family: "moonshot", tier: "frontier" },
-  {
-    id: "@cf/zai-org/glm-5.3-flash",
-    label: "GLM-5.3-Flash",
-    family: "zai",
-    tier: "frontier",
-  },
   {
     id: "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
     label: "DeepSeek V4.1 Flash",
-    family: "deepseek",
-    tier: "frontier",
-  },
-  {
-    id: "@cf/deepseek-ai/deepseek-v4-pro-0813",
-    label: "DeepSeek V4 Pro",
     family: "deepseek",
     tier: "frontier",
   },
