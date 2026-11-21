@@ -924,6 +924,8 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **The orchestrator is an agent too.** Each tool the model calls is authorized as \`tool:<name>\`. Existing kill switches still apply, and \`DISABLED_AGENTS\` switches a whole agent off.
 
+**Systems outside the registry add their own policies.** The **Campaign squad** keeps its roster apart from the agent registry, but it gets no side door: each of its tool calls goes through the same gateway as \`team:<tool>\`, with permits compiled from the squad's roster and added to the registry's. Default-deny, the forbids, brand scope, the per-call token, the audit log, \`DISABLED_AGENTS\` and the lifecycle (constrain keeps reads, retire withholds everything) apply exactly as they do to the registry's agents.
+
 **Partner agents** are registered with a contract, an identity and a policy, and an **Agent Card** in the style of the A2A protocol (see **Agents**). Their prompts stay with their owner; the gateway governs the call, not the thinking.
 
 **The workbench as a channel.** \`/mcp/workbench\` exposes read tools, search, and \`propose_transition\` to MCP clients through the same gateway. It has no tool that approves, publishes, sends or deletes.
@@ -985,6 +987,8 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **Prompts are a catalog, not files.** Each prompt is an entry with a version, an owning agent, typed variables and the evaluators that score it. The **hard rules** (cite or refuse, escalate ambiguity, propose only, treat retrieved text as data, no personal data) are appended to every prompt and an entry can't drop them. A variable binds to a **governed object by urn** and exposes only the fields it lists; pasted text is rejected. \`pnpm prompts:check\` pins each prompt's hash to its version, so a changed prompt must have a new version.
 
+**How a flow reaches the screen.** A sample flow streams each delegation, tool call and decision to the page as newline-delimited JSON while it runs; the Campaign squad streams its own events the same way.
+
 **How an agent runs.** A run gets the agent's catalog prompt (rendered with the objects it names), the model the router binds to its task class, and only the tools its registry grants name. The gateway first checks the action the run centres on, then every tool call again, as that agent acting for its step's owner. The objects named in its input and what it would read first (the brand's claims, for the authoring agent; the planning inputs, for the plan agent) are in its prompt, so its first call can be its real one. Until that call succeeds it is the tool the model must call: small models otherwise describe the work in prose, or bury the call in their reasoning, without doing it. Tools answer with the object as the next step needs it: a brief just drafted comes back with the wave it covers (theme, audience, channel, send date), read from the plan it points at, so the authoring agent and the Journeys preview see the audience without another read. A run stops when the same call fails twice. The agent's account of what it did is written by one more call, without tools, over the tool results; if the work never succeeded, the account says so instead of trusting the model's words.
 
 **What a tool hands back.** A tool returns what its service did, not just a yes: the authoring tool returns the saved module, the topics it refused with the gaps it filed, and the images it picked from the brand's asset library with those it passed over and why. The agent reports them in its summary; it can't change them, because the service chose them.
@@ -1011,6 +1015,40 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
           "docs/decisions/ADR-009-model-catalog-and-routing.md",
         ],
         resources: [R.cfAgents, R.aiGateway, R.buildingAgents, R.writingTools],
+      },
+      {
+        id: "campaign-squad",
+        title: "The campaign squad: a lead, four spokes, and the platform under them",
+        summary:
+          "Five model-driven agents build one campaign proposal, talking to each other, on a semantic layer and governed infrastructure, on any of three model providers.",
+        body: `The **Campaign squad** page runs a hub-and-spoke team of agents on a client's brief. Every agent is a real model with its own prompt and only its own tools; nothing about a run is scripted.
+
+**The roles.** The **campaign lead** sits at the hub. It turns the brief into a work plan, hands one piece at a time to the spoke that owns it, and decides whether to keep what comes back or send it back with notes. It never does a spoke's work. The four spokes each own one piece:
+- the **audience analyst**: who to win, how big each group is, what rivals are doing, which signals point to an opening
+- the **art director**: the campaign idea, its look and palette, and the images to make
+- the **copy lead**: the line, the recurring themes and copy for each placement
+- the **channel planner**: the channels to buy, the spend and dates for each, and the results to expect
+
+**How the agents talk.** Assignments, hand-backs and send-backs travel between the lead and a spoke. When a piece builds on another spoke's saved work, the spoke first asks that spoke a question with \`ask_teammate\`, and the other spoke answers from its own saved work (\`answer_teammate\`). Every message is logged and drawn live on the map. The lead's loop has one forced tool, \`next_step\`, and the lead may hand out a piece only after the pieces it depends on are kept.
+
+**Rules are code, not prompts.** Each spoke saves through one tool, and a service checks the work whatever the model wrote: findings must cite real data ids (cite or refuse); the palette must come from the brand book and no image may show what it forbids; copy must fit each placement's character limits, avoid banned phrases and carry any required disclosure; the channel plan must respect minimum spends, the budget and the brief's window. A refused save comes back with every problem, and the model has to fix them. When the pieces are in, reconciliation finds clashes (a channel bought with no copy, copy for a channel not bought, an audience the analyst didn't recommend) and the lead must resolve each one or send the piece back. The client gets a **proposal**; the client decides.
+
+**The semantic layer.** No agent reads a raw table. Each data tool is a named query on a governed layer that defines every entity (segment, competitor, signal, channel, guideline) and metric once: its formula, grain, unit, source and owner. \`query_semantic_layer\` queries it directly, and \`define_term\` resolves a business word ("CPC", "lapsed loyalty members") to what it means here. The projection formulas (impressions, clicks, cost per click) live only in the layer, so the channel planner, the lead's reconciliation and the client's proposal can't disagree about a number. The page shows which definitions each agent used.
+
+**The infrastructure under the agents.** The page also lights the layers each event passes: the event stream to the page; the lead's coordination loop; the models, each call metered; the agentic gateway, which checks every tool call as \`team:<tool>\` and mints a token for it; tools and the semantic layer; the rule services; the agent-to-agent bus; the run's state, saved to D1; and operations, where an operator disables or constrains an agent without a deploy.
+
+**Three model providers, one gateway.** A switch runs the same squad on **Cloudflare Workers AI**, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same. Every request goes through the Cloudflare AI Gateway. Anthropic and OpenAI requests go through the Worker's AI binding to the gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it, and Cloudflare-billed fallback is off. Claude Opus 5.5 does not accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message, and Claude's thinking blocks are replayed unchanged on the next turn.
+
+**What it does not do yet.** The sample market data stands in for real segmentation, competitive and benchmark systems. Runs differ, and a run takes a few minutes. The squad writes nothing to Salesforce.`,
+        inDemo: [
+          "Campaign squad → pick a brief and a provider → Hand the brief to the squad",
+          "Campaign squad → What the squad runs on → Agent infrastructure / Semantic layer",
+          "Campaign squad → the agent tabs: each agent's grants, tool calls and the gateway's decisions",
+          "packages/architecture/src/team.ts, team-semantic.ts, team-services.ts",
+          "apps/edge/src/team/director.ts, specialists.ts, gateway.ts, anthropic.ts",
+          "docs/decisions/ADR-013-campaign-squad.md",
+        ],
+        resources: [R.buildingAgents, R.cfAgents, R.aiGateway, R.cedar],
       },
       {
         id: "long-term-memory",

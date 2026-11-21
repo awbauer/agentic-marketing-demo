@@ -444,12 +444,17 @@ export async function orchestrationOp(ctx: Ctx, id: string) {
   return { id: saved.id, flowId: saved.flowId, status: saved.status, events: saved.events };
 }
 
-/** A response that streams flow events as newline-delimited JSON while the work runs. */
-export function streamFlow(work: (emit: Emit) => Promise<void>): Response {
+/**
+ * A response that streams events as newline-delimited JSON while the work runs. The sample flows
+ * and the campaign team both stream this way; a failure ends the stream with an error event.
+ */
+export function streamFlow<E extends { type: string } = FlowEvent>(
+  work: (emit: (event: E) => void) => Promise<void>,
+): Response {
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
-  const emit: Emit = (event) => {
+  const emit = (event: E) => {
     writer.write(encoder.encode(`${JSON.stringify(event)}\n`)).catch(() => undefined);
   };
   work(emit)
@@ -457,7 +462,7 @@ export function streamFlow(work: (emit: Emit) => Promise<void>): Response {
       emit({
         type: "error",
         message: failure instanceof Error ? failure.message : String(failure),
-      }),
+      } as unknown as E),
     )
     .finally(() => writer.close().catch(() => undefined));
   return new Response(readable, {

@@ -14,7 +14,7 @@ A hands-on course in how an agent uses context, how GraphRAG grounds answers in 
   - [2.1 RAG in one page](#21-rag-in-one-page)
   - [2.2 GraphRAG](#22-graphrag)
   - [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag)
-- [Part 3: Every concept in the demo](#part-3-every-concept-in-the-demo): Every moving part of the workbench (20 lessons, 20 min)
+- [Part 3: Every concept in the demo](#part-3-every-concept-in-the-demo): Every moving part of the workbench (21 lessons, 20 min)
   - [3.1 The orchestrator agent](#31-the-orchestrator-agent)
   - [3.2 The workspace: focus, context, and records](#32-the-workspace-focus-context-and-records)
   - [3.3 The model: gpt-oss-20b on Workers AI](#33-the-model-gpt-oss-20b-on-workers-ai)
@@ -34,7 +34,8 @@ A hands-on course in how an agent uses context, how GraphRAG grounds answers in 
   - [3.17 The agentic gateway](#317-the-agentic-gateway)
   - [3.18 The content lifecycle: plan to learn](#318-the-content-lifecycle-plan-to-learn)
   - [3.19 Agents, prompts, models, and drift](#319-agents-prompts-models-and-drift)
-  - [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats)
+  - [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them)
+  - [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats)
 - [Glossary](#glossary)
 - [Reference: every concept in the code](#reference-every-concept-in-the-code)
 
@@ -385,7 +386,7 @@ Which question needs GraphRAG rather than plain vector RAG?
 
 ## Part 3: Every concept in the demo
 
-*Every moving part of the workbench* · 20 lessons · 20 min
+*Every moving part of the workbench* · 21 lessons · 20 min
 
 Each piece of the workbench, how it works, and where to see it.
 
@@ -1495,6 +1496,8 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **The orchestrator is an agent too.** Each tool the model calls is authorized as `tool:<name>`. Existing kill switches still apply, and `DISABLED_AGENTS` switches a whole agent off.
 
+**Systems outside the registry add their own policies.** The **Campaign squad** keeps its roster apart from the agent registry, but it gets no side door: each of its tool calls goes through the same gateway as `team:<tool>`, with permits compiled from the squad's roster and added to the registry's. Default-deny, the forbids, brand scope, the per-call token, the audit log, `DISABLED_AGENTS` and the lifecycle (constrain keeps reads, retire withholds everything) apply exactly as they do to the registry's agents.
+
 **Partner agents** are registered with a contract, an identity and a policy, and an **Agent Card** in the style of the A2A protocol (see **Agents**). Their prompts stay with their owner; the gateway governs the call, not the thinking.
 
 **The workbench as a channel.** `/mcp/workbench` exposes read tools, search, and `propose_transition` to MCP clients through the same gateway. It has no tool that approves, publishes, sends or deletes.
@@ -1657,6 +1660,8 @@ Agents change over time: their prompts get edited, models get swapped, data shif
 
 **Prompts are a catalog, not files.** Each prompt is an entry with a version, an owning agent, typed variables and the evaluators that score it. The **hard rules** (cite or refuse, escalate ambiguity, propose only, treat retrieved text as data, no personal data) are appended to every prompt and an entry can't drop them. A variable binds to a **governed object by urn** and exposes only the fields it lists; pasted text is rejected. `pnpm prompts:check` pins each prompt's hash to its version, so a changed prompt must have a new version.
 
+**How a flow reaches the screen.** A sample flow streams each delegation, tool call and decision to the page as newline-delimited JSON while it runs; the Campaign squad streams its own events the same way.
+
 **How an agent runs.** A run gets the agent's catalog prompt (rendered with the objects it names), the model the router binds to its task class, and only the tools its registry grants name. The gateway first checks the action the run centres on, then every tool call again, as that agent acting for its step's owner. The objects named in its input and what it would read first (the brand's claims, for the authoring agent; the planning inputs, for the plan agent) are in its prompt, so its first call can be its real one. Until that call succeeds it is the tool the model must call: small models otherwise describe the work in prose, or bury the call in their reasoning, without doing it. Tools answer with the object as the next step needs it: a brief just drafted comes back with the wave it covers (theme, audience, channel, send date), read from the plan it points at, so the authoring agent and the Journeys preview see the audience without another read. A run stops when the same call fails twice. The agent's account of what it did is written by one more call, without tools, over the tool results; if the work never succeeded, the account says so instead of trusting the model's words.
 
 **What a tool hands back.** A tool returns what its service did, not just a yes: the authoring tool returns the saved module, the topics it refused with the gaps it filed, and the images it picked from the brand's asset library with those it passed over and why. The agent reports them in its summary; it can't change them, because the service chose them.
@@ -1695,7 +1700,92 @@ Agents change over time: their prompts get edited, models get swapped, data shif
 - Guide: [Building effective agents (Anthropic)](https://www.anthropic.com/engineering/building-effective-agents)
 - Guide: [Writing effective tools for agents (Anthropic)](https://www.anthropic.com/engineering/writing-tools-for-agents)
 
-### 3.20 Long-term memory: remembering across chats
+### 3.20 The campaign squad: a lead, four spokes, and the platform under them
+
+*Five model-driven agents build one campaign proposal, talking to each other, on a semantic layer and governed infrastructure, on any of three model providers.*
+
+**Diagram: Plan to learn, with a person at every gate**
+
+```mermaid
+flowchart TB
+  subgraph agent_lifecycle0_lane0["People decide"]
+    direction LR
+    agent_lifecycle0_0_0["? Brand planner<br/>approves the plan"]
+    agent_lifecycle0_0_1["? Marketer<br/>validates brief and reuse"]
+    agent_lifecycle0_0_2["? Content Lab<br/>approves every module"]
+    agent_lifecycle0_0_3["? Compliance<br/>owns the evidence"]
+    agent_lifecycle0_0_4["? Reviewer<br/>decides, by state machine"]
+    agent_lifecycle0_0_5["? Brand lead<br/>disposes on optimization"]
+    agent_lifecycle0_0_0 --> agent_lifecycle0_0_1 --> agent_lifecycle0_0_2 --> agent_lifecycle0_0_3 --> agent_lifecycle0_0_4 --> agent_lifecycle0_0_5
+  end
+  subgraph agent_lifecycle0_lane1["Agents work"]
+    direction LR
+    agent_lifecycle0_1_0["▸ Plan and scenario<br/>plan → structured demand"]
+    agent_lifecycle0_1_1["▸ Brief and reuse<br/>inherits the plan"]
+    agent_lifecycle0_1_2["▸ Module authoring<br/>cites or refuses"]
+    agent_lifecycle0_1_3["▸ Substantiation<br/>evidence per claim"]
+    agent_lifecycle0_1_4["◆ Readiness and farm<br/>block until it passes"]
+    agent_lifecycle0_1_5["▸ Attribution and optimization<br/>signal → module → claim"]
+    agent_lifecycle0_1_0 --> agent_lifecycle0_1_1 --> agent_lifecycle0_1_2 --> agent_lifecycle0_1_3 --> agent_lifecycle0_1_4 --> agent_lifecycle0_1_5
+  end
+  subgraph agent_lifecycle0_lane2["Governed by"]
+    direction LR
+    agent_lifecycle0_2_0["⋈ Governed objects<br/>one id for life"]
+    agent_lifecycle0_2_1["◆ Gateway<br/>default-deny · identity"]
+    agent_lifecycle0_2_2["▤ Registry<br/>versioned · scoped"]
+    agent_lifecycle0_2_3["◆ State machine<br/>11 transitions"]
+    agent_lifecycle0_2_4["✓ Evaluators<br/>13 · drift watch"]
+    agent_lifecycle0_2_5["✎ Channels<br/>one card, four surfaces"]
+    agent_lifecycle0_2_0 --> agent_lifecycle0_2_1 --> agent_lifecycle0_2_2 --> agent_lifecycle0_2_3 --> agent_lifecycle0_2_4 --> agent_lifecycle0_2_5
+  end
+  agent_lifecycle0_lane0 ~~~ agent_lifecycle0_lane1 ~~~ agent_lifecycle0_lane2
+```
+
+*People decide at each stage, agents do the narrow work, and every call between them passes the gateway. Performance re-enters planning inside the quarter.*
+
+> **Key idea:** A lead coordinates and judges; spokes do the work and talk to each other. Code, not prompts, enforces the rules, one semantic layer defines every number, and the gateway governs every call, whichever provider's model runs.
+
+The **Campaign squad** page runs a hub-and-spoke team of agents on a client's brief. Every agent is a real model with its own prompt and only its own tools; nothing about a run is scripted.
+
+**The roles.** The **campaign lead** sits at the hub. It turns the brief into a work plan, hands one piece at a time to the spoke that owns it, and decides whether to keep what comes back or send it back with notes. It never does a spoke's work. The four spokes each own one piece:
+- the **audience analyst**: who to win, how big each group is, what rivals are doing, which signals point to an opening
+- the **art director**: the campaign idea, its look and palette, and the images to make
+- the **copy lead**: the line, the recurring themes and copy for each placement
+- the **channel planner**: the channels to buy, the spend and dates for each, and the results to expect
+
+**How the agents talk.** Assignments, hand-backs and send-backs travel between the lead and a spoke. When a piece builds on another spoke's saved work, the spoke first asks that spoke a question with `ask_teammate`, and the other spoke answers from its own saved work (`answer_teammate`). Every message is logged and drawn live on the map. The lead's loop has one forced tool, `next_step`, and the lead may hand out a piece only after the pieces it depends on are kept.
+
+**Rules are code, not prompts.** Each spoke saves through one tool, and a service checks the work whatever the model wrote: findings must cite real data ids (cite or refuse); the palette must come from the brand book and no image may show what it forbids; copy must fit each placement's character limits, avoid banned phrases and carry any required disclosure; the channel plan must respect minimum spends, the budget and the brief's window. A refused save comes back with every problem, and the model has to fix them. When the pieces are in, reconciliation finds clashes (a channel bought with no copy, copy for a channel not bought, an audience the analyst didn't recommend) and the lead must resolve each one or send the piece back. The client gets a **proposal**; the client decides.
+
+**The semantic layer.** No agent reads a raw table. Each data tool is a named query on a governed layer that defines every entity (segment, competitor, signal, channel, guideline) and metric once: its formula, grain, unit, source and owner. `query_semantic_layer` queries it directly, and `define_term` resolves a business word ("CPC", "lapsed loyalty members") to what it means here. The projection formulas (impressions, clicks, cost per click) live only in the layer, so the channel planner, the lead's reconciliation and the client's proposal can't disagree about a number. The page shows which definitions each agent used.
+
+**The infrastructure under the agents.** The page also lights the layers each event passes: the event stream to the page; the lead's coordination loop; the models, each call metered; the agentic gateway, which checks every tool call as `team:<tool>` and mints a token for it; tools and the semantic layer; the rule services; the agent-to-agent bus; the run's state, saved to D1; and operations, where an operator disables or constrains an agent without a deploy.
+
+**Three model providers, one gateway.** A switch runs the same squad on **Cloudflare Workers AI**, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same. Every request goes through the Cloudflare AI Gateway. Anthropic and OpenAI requests go through the Worker's AI binding to the gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it, and Cloudflare-billed fallback is off. Claude Opus 5.5 does not accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message, and Claude's thinking blocks are replayed unchanged on the next turn.
+
+**What it does not do yet.** The sample market data stands in for real segmentation, competitive and benchmark systems. Runs differ, and a run takes a few minutes. The squad writes nothing to Salesforce.
+
+**Try it**
+
+- Open the Campaign squad (opens the team view)
+
+**In this demo**
+
+- Campaign squad → pick a brief and a provider → Hand the brief to the squad
+- Campaign squad → What the squad runs on → Agent infrastructure / Semantic layer
+- Campaign squad → the agent tabs: each agent's grants, tool calls and the gateway's decisions
+- packages/architecture/src/team.ts, team-semantic.ts, team-services.ts
+- apps/edge/src/team/director.ts, specialists.ts, gateway.ts, anthropic.ts
+- docs/decisions/ADR-013-campaign-squad.md
+
+**Learn more**
+
+- Guide: [Building effective agents (Anthropic)](https://www.anthropic.com/engineering/building-effective-agents)
+- Docs: [Cloudflare Agents SDK](https://developers.cloudflare.com/agents/)
+- Docs: [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/)
+- Docs: [Cedar policy language](https://www.cedarpolicy.com/)
+
+### 3.21 Long-term memory: remembering across chats
 
 *Drafts and decisions stored in the graph by the server, recalled by tools, and forgotten on request.*
 
@@ -1816,10 +1906,30 @@ Who decides whether you may create a campaign from the workbench?
 
 ## Reference: every concept in the code
 
-### Tools (73)
+### Tools (93)
 
 | Name | What it is | Taught in |
 | --- | --- | --- |
+| `plan_campaign` | The campaign lead's work plan: what the client gets, and one assignment per spoke with the spokes it depends on. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `delegate_task` | The lead hands one assignment to a spoke, refused until the pieces it depends on are kept. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `review_work` | The lead keeps a spoke's work or sends it back with notes, at most twice per spoke. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `reconcile_plan` | The lead fits the four pieces into one proposal, refused until every clash is resolved or sent back. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `send_proposal` | The lead sends the reconciled proposal to the client, who decides whether to run it. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `read_team_output` | A spoke reads another spoke's latest saved work. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `ask_teammate` | A spoke puts one question straight to another spoke; at most two per piece of work. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `answer_teammate` | A spoke answers another spoke's question from its own saved work, without tools. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `get_audience_segments` | Segments from the semantic layer: segment_size and channel_affinity, with their definitions. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `get_competitors` | Tracked competitors from the semantic layer: positioning, share_of_voice and recent move. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `get_market_signals` | Market signals from the semantic layer, each with an id a finding can cite. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `get_brand_guidelines` | The brand book: voice, palette, imagery to use and avoid, banned phrases and any required disclosure. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `get_channel_specs` | The channels a brand buys, with headline_limit and body_limit from the semantic layer. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `get_channel_benchmarks` | cpm, ctr and min_spend per channel from the semantic layer, with the brief's budget and window. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `query_semantic_layer` | Queries the semantic layer for one governed entity, returning rows and each metric's definition and formula. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `define_term` | Resolves a business term to the governed metric or entity it means for this brand. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `report_research` | Saves the audience analyst's findings; refused unless every finding cites real data ids. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `propose_creative` | Saves the art director's concept; refused for a color outside the brand palette or a forbidden image. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `write_copy` | Saves the copy lead's line, themes and copy; refused over a character limit, for a banned phrase, or without a required disclosure. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `plan_media` | Saves the channel planner's plan and returns projections; refused under a minimum spend, over budget, or outside the window. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
 | `next_step` | The sample-flow orchestrator's one tool: delegate a step to a subagent, ask a person to decide, or finish. It is forced on every step, and passes the gateway as the orchestrator each time. | [3.19 Agents, prompts, models, and drift](#319-agents-prompts-models-and-drift) |
 | `read_object` | Reads one governed object by urn for an agent, limited to the run's brand. | [3.18 The content lifecycle: plan to learn](#318-the-content-lifecycle-plan-to-learn) |
 | `list_objects` | Lists the run's brand's governed objects of one kind, with their urns and states. | [3.18 The content lifecycle: plan to learn](#318-the-content-lifecycle-plan-to-learn) |
@@ -1890,9 +2000,9 @@ Who decides whether you may create a campaign from the workbench?
 | `check_clinical_claims` | Each clinical claim for a drug: the trial behind it, whether its indication is on the label, and the MLR-approved content that carries it, with blockers. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `plan_hospital_engagement` | A hospital's formulary status and P&T timing for each Lumera drug, the value dossier to send (usable or blocked), its prescriber groups and consent, and ordered next steps. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `trace_content_lineage` | Traces a campaign's content back to its brief and brand-rule results. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `recall_decisions` | Recalls remembered drafts and decisions about a subject in this workspace, dated and sourced. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `recall_recent_work` | Lists this workspace's most recent remembered drafts and decisions. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `explain_memory` | Shows where one memory came from: its record, the draft versions it replaced, and its subjects. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `recall_decisions` | Recalls remembered drafts and decisions about a subject in this workspace, dated and sourced. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `recall_recent_work` | Lists this workspace's most recent remembered drafts and decisions. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `explain_memory` | Shows where one memory came from: its record, the draft versions it replaced, and its subjects. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
 
 ### Write actions (5)
 
@@ -1944,11 +2054,11 @@ Who decides whether you may create a campaign from the workbench?
 | `Hospital` | A fictional hospital or health system, with its formulary and patient volumes. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `Specialty` | A prescriber specialty, such as cardiology, and the conditions it treats. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `PrescriberGroup` | A segment of prescribers at one hospital in one specialty; a count and a decile, never a person. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
-| `Workspace` | The workspace that owns a memory. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `MemoryEvent` | The server event that created a memory, with a hashed actor. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `Draft` | One remembered version of a focus draft. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `Decision` | A confirmed save, review, or image attachment. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `RecordRef` | The Salesforce record a decision was recorded in. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `Workspace` | The workspace that owns a memory. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `MemoryEvent` | The server event that created a memory, with a hashed actor. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `Draft` | One remembered version of a focus draft. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `Decision` | A confirmed save, review, or image attachment. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `RecordRef` | The Salesforce record a decision was recorded in. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
 
 ### Graph relationships (65)
 
@@ -2013,12 +2123,12 @@ Who decides whether you may create a campaign from the workbench?
 | `FEATURED` | A push send featuring a menu item. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
 | `SENT_DURING` | A push send made during a daypart. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
 | `UNDER` | A push send made under a weather condition. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `IN_WORKSPACE` | A memory event in its workspace. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `CREATED` | The memory event that created a draft or decision. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `SUPERSEDES` | A draft version replacing the one before it. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `ABOUT` | A memory about a campaign or brand in the demo graph. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `DECIDED_ON` | A decision about the draft version it saved. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
-| `RECORDED_IN` | A decision recorded in a Salesforce record. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `IN_WORKSPACE` | A memory event in its workspace. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `CREATED` | The memory event that created a draft or decision. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `SUPERSEDES` | A draft version replacing the one before it. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `ABOUT` | A memory about a campaign or brand in the demo graph. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `DECIDED_ON` | A decision about the draft version it saved. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `RECORDED_IN` | A decision recorded in a Salesforce record. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
 
 ### Operator controls (4)
 
@@ -2027,7 +2137,7 @@ Who decides whether you may create a campaign from the workbench?
 | `WRITES_ENABLED` | Set to false to pause every Salesforce write without a deploy. | [3.9 Governance: permissions, confirmations, and kill switches](#39-governance-permissions-confirmations-and-kill-switches) |
 | `DISABLED_TOOLS` | A comma-separated list of tools to withhold from the model or block as writes. | [3.9 Governance: permissions, confirmations, and kill switches](#39-governance-permissions-confirmations-and-kill-switches) |
 | `DISABLED_AGENTS` | A comma-separated list of registry agents to switch off; the gateway denies every call they make. | [3.17 The agentic gateway](#317-the-agentic-gateway) |
-| `MEMORY_ENABLED` | Set to false to stop remembering and withhold the recall tools. | [3.20 Long-term memory: remembering across chats](#320-long-term-memory-remembering-across-chats) |
+| `MEMORY_ENABLED` | Set to false to stop remembering and withhold the recall tools. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
 
 ### Salesforce components (10)
 

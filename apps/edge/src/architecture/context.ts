@@ -10,6 +10,7 @@ import {
   identityChain,
   mintAgentToken,
   type Persona,
+  type Policy,
   toolBrand,
   verifyAgentToken,
   type WorkbenchScope,
@@ -101,10 +102,15 @@ export async function invoke<T>(
   ctx: Ctx,
   request: Omit<GatewayRequest, "user">,
   run: () => Promise<T> | T,
+  options: {
+    /** Policies a system outside the registry adds, such as the campaign team's. */
+    extraPolicies?: (overrides: AgentOverrides) => Policy[];
+  } = {},
 ): Promise<Invoked<T>> {
   const started = Date.now();
   const full: GatewayRequest = { ...request, user: ctx.user };
-  const policies = buildPolicies(await overridesFor(ctx));
+  const overrides = await overridesFor(ctx);
+  const policies = [...buildPolicies(overrides), ...(options.extraPolicies?.(overrides) ?? [])];
   const decision = evaluate(policies, full);
   // A failed audit write is reported, never allowed to take the call down with it.
   const log = (latencyMs: number) =>

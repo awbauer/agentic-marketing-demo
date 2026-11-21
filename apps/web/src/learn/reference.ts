@@ -45,6 +45,103 @@ const edge = (name: string, summary: string, section = "graphrag-here"): Referen
 });
 
 export const LEARN_REFERENCE: ReferenceEntry[] = [
+  // Tools the campaign squad's lead and spokes call, each checked by the gateway as team:<tool>.
+  tool(
+    "plan_campaign",
+    "campaign-squad",
+    "The campaign lead's work plan: what the client gets, and one assignment per spoke with the spokes it depends on.",
+  ),
+  tool(
+    "delegate_task",
+    "campaign-squad",
+    "The lead hands one assignment to a spoke, refused until the pieces it depends on are kept.",
+  ),
+  tool(
+    "review_work",
+    "campaign-squad",
+    "The lead keeps a spoke's work or sends it back with notes, at most twice per spoke.",
+  ),
+  tool(
+    "reconcile_plan",
+    "campaign-squad",
+    "The lead fits the four pieces into one proposal, refused until every clash is resolved or sent back.",
+  ),
+  tool(
+    "send_proposal",
+    "campaign-squad",
+    "The lead sends the reconciled proposal to the client, who decides whether to run it.",
+  ),
+  tool("read_team_output", "campaign-squad", "A spoke reads another spoke's latest saved work."),
+  tool(
+    "ask_teammate",
+    "campaign-squad",
+    "A spoke puts one question straight to another spoke; at most two per piece of work.",
+  ),
+  tool(
+    "answer_teammate",
+    "campaign-squad",
+    "A spoke answers another spoke's question from its own saved work, without tools.",
+  ),
+  tool(
+    "get_audience_segments",
+    "campaign-squad",
+    "Segments from the semantic layer: segment_size and channel_affinity, with their definitions.",
+  ),
+  tool(
+    "get_competitors",
+    "campaign-squad",
+    "Tracked competitors from the semantic layer: positioning, share_of_voice and recent move.",
+  ),
+  tool(
+    "get_market_signals",
+    "campaign-squad",
+    "Market signals from the semantic layer, each with an id a finding can cite.",
+  ),
+  tool(
+    "get_brand_guidelines",
+    "campaign-squad",
+    "The brand book: voice, palette, imagery to use and avoid, banned phrases and any required disclosure.",
+  ),
+  tool(
+    "get_channel_specs",
+    "campaign-squad",
+    "The channels a brand buys, with headline_limit and body_limit from the semantic layer.",
+  ),
+  tool(
+    "get_channel_benchmarks",
+    "campaign-squad",
+    "cpm, ctr and min_spend per channel from the semantic layer, with the brief's budget and window.",
+  ),
+  tool(
+    "query_semantic_layer",
+    "campaign-squad",
+    "Queries the semantic layer for one governed entity, returning rows and each metric's definition and formula.",
+  ),
+  tool(
+    "define_term",
+    "campaign-squad",
+    "Resolves a business term to the governed metric or entity it means for this brand.",
+  ),
+  tool(
+    "report_research",
+    "campaign-squad",
+    "Saves the audience analyst's findings; refused unless every finding cites real data ids.",
+  ),
+  tool(
+    "propose_creative",
+    "campaign-squad",
+    "Saves the art director's concept; refused for a color outside the brand palette or a forbidden image.",
+  ),
+  tool(
+    "write_copy",
+    "campaign-squad",
+    "Saves the copy lead's line, themes and copy; refused over a character limit, for a banned phrase, or without a required disclosure.",
+  ),
+  tool(
+    "plan_media",
+    "campaign-squad",
+    "Saves the channel planner's plan and returns projections; refused under a minimum spend, over budget, or outside the window.",
+  ),
   // Tools the architecture agents and the sample-flow orchestrator call.
   tool(
     "next_step",

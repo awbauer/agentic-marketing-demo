@@ -180,6 +180,15 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "scripts/check-prompts.mjs",
     "docs/decisions/ADR-009-model-catalog-and-routing.md",
   ],
+  "campaign-squad": [
+    "packages/architecture/src/team.ts",
+    "packages/architecture/src/team-data.ts",
+    "packages/architecture/src/team-semantic.ts",
+    "packages/architecture/src/team-services.ts",
+    "apps/edge/src/team/",
+    "apps/web/src/team/",
+    "docs/decisions/ADR-013-campaign-squad.md",
+  ],
   "long-term-memory": [
     "packages/knowledge-graph/src/memory.ts",
     "apps/edge/src/memory.ts",

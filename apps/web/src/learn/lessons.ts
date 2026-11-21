@@ -34,7 +34,7 @@ export type TryIt =
   | {
       kind: "view";
       label: string;
-      view: "graph" | "history" | "evaluations" | "journeys" | "architecture";
+      view: "graph" | "history" | "evaluations" | "journeys" | "architecture" | "team";
     };
 
 export type SectionLesson = { diagram: DiagramId; keyIdea: string; tryIt?: TryIt[] };
@@ -314,6 +314,12 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
       { kind: "prompt", label: "Draft the Coastline Kitchen email", prompt: EMAIL_PROMPT },
       { kind: "prompt", label: "Draft the Coastline Kitchen push", prompt: PUSH_PROMPT },
     ],
+  },
+  "campaign-squad": {
+    diagram: "agent-lifecycle",
+    keyIdea:
+      "A lead coordinates and judges; spokes do the work and talk to each other. Code, not prompts, enforces the rules, one semantic layer defines every number, and the gateway governs every call, whichever provider's model runs.",
+    tryIt: [{ kind: "view", label: "Open the Campaign squad", view: "team" }],
   },
   "long-term-memory": {
     diagram: "long-term-memory",

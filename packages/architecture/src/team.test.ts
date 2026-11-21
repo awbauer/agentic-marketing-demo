@@ -1,0 +1,288 @@
+import { describe, expect, it } from "vitest";
+import { evaluate } from "./gateway.ts";
+import {
+  briefProblems,
+  buildTeamPolicies,
+  type CopyPackage,
+  type MediaPlan,
+  type ResearchReport,
+  TEAM_AGENTS,
+  TEAM_BRIEFS,
+  TEAM_TOOL_NAMES,
+  teamBriefById,
+} from "./team.ts";
+import { TEAM_MARKETS } from "./team-data.ts";
+import {
+  costPerClick,
+  defineTerm,
+  projectedClicks,
+  projectedImpressions,
+  semanticQuery,
+} from "./team-semantic.ts";
+import {
+  copyProblems,
+  creativeProblems,
+  findConflicts,
+  reconcileCampaign,
+  projectMedia,
+  researchProblems,
+} from "./team-services.ts";
+
+const must = <T>(value: T | undefined): T => {
+  if (value === undefined) throw new Error("missing");
+  return value;
+};
+const coastline = must(teamBriefById("coastline-winter-warmup"));
+const user = { subject: "u", persona: "marketer" as const, brands: "all" as const };
+
+const research: ResearchReport = {
+  primarySegmentId: "ck-seg-lunch-commuters",
+  secondarySegmentIds: ["ck-seg-loyalty-regulars"],
+  insights: [{ text: "Chowder searches rise in the cold.", sources: ["ck-sig-cold-weather"] }],
+  opportunities: ["Own soup season."],
+  competitorWatch: [{ competitorId: "ck-comp-bowl-bar", implication: "Lead on dine-in." }],
+};
+const copy: CopyPackage = {
+  tagline: "Soup season is here",
+  pillars: ["Warm", "Local"],
+  assets: [
+    {
+      channel: "email",
+      headline: "Soup's on",
+      body: "Our winter menu is here.",
+      cta: "See the menu",
+    },
+    {
+      channel: "paid-search",
+      headline: "Chowder near you",
+      body: "Warm up downtown.",
+      cta: "Find us",
+    },
+  ],
+};
+const media: MediaPlan = {
+  lines: [
+    {
+      channel: "paid-search",
+      budgetUsd: 8000,
+      start: "2026-12-01",
+      end: "2027-01-31",
+      segmentId: "ck-seg-lunch-commuters",
+      objective: "Capture intent",
+    },
+    {
+      channel: "email",
+      budgetUsd: 2000,
+      start: "2026-12-01",
+      end: "2027-01-15",
+      segmentId: "ck-seg-loyalty-regulars",
+      objective: "Win back",
+    },
+  ],
+  kpis: ["Visits"],
+  rationale: "Intent first.",
+};
+const creative = {
+  name: "Warm Up",
+  bigIdea: "Comfort close to home.",
+  visualDirection: "Steam and fog.",
+  palette: ["#1F4E79", "#f1e9da"],
+  mood: "Cozy",
+  keyVisuals: [{ format: "display", description: "Steam rising from a bowl by the window." }],
+  rationale: "Fits the commuters.",
+};
+
+describe("campaign squad", () => {
+  it("gives each agent only its own tools, and every tool belongs to someone", () => {
+    const policies = buildTeamPolicies();
+    const allowed = (agent: string, tool: string) =>
+      evaluate(policies, { user, principal: { type: "agent", id: agent }, action: `team:${tool}` })
+        .decision;
+    expect(allowed("copy-lead", "write_copy")).toBe("allow");
+    expect(allowed("copy-lead", "plan_media")).toBe("deny");
+    expect(allowed("audience-analyst", "delegate_task")).toBe("deny");
+    expect(allowed("campaign-lead", "write_copy")).toBe("deny");
+    const granted = new Set(TEAM_AGENTS.flatMap((agent) => agent.tools));
+    expect([...granted].sort()).toEqual([...TEAM_TOOL_NAMES].sort());
+  });
+
+  it("withholds a disabled or retired agent's tools, and a constrained one keeps reads", () => {
+    const deny = (overrides: Parameters<typeof buildTeamPolicies>[0], tool: string) =>
+      evaluate(buildTeamPolicies(overrides), {
+        user,
+        principal: { type: "agent", id: "channel-planner" },
+        action: `team:${tool}`,
+      }).decision;
+    expect(deny({ disabled: ["channel-planner"] }, "get_channel_benchmarks")).toBe("deny");
+    expect(deny({ lifecycle: { "channel-planner": "retire" } }, "get_channel_benchmarks")).toBe(
+      "deny",
+    );
+    expect(deny({ lifecycle: { "channel-planner": "constrain" } }, "get_channel_benchmarks")).toBe(
+      "allow",
+    );
+    expect(deny({ lifecycle: { "channel-planner": "constrain" } }, "plan_media")).toBe("deny");
+  });
+
+  it("ships briefs that pass their own checks, and refuses broken ones", () => {
+    for (const brief of TEAM_BRIEFS) expect(briefProblems(brief)).toEqual([]);
+    expect(briefProblems({ ...coastline, budgetUsd: 5 })).toHaveLength(1);
+    expect(briefProblems({ ...coastline, start: "2027-02-01", end: "2027-01-01" })).toEqual([
+      "start must be on or before end.",
+    ]);
+  });
+
+  it("only lets research cite data that exists", () => {
+    expect(researchProblems("Coastline Kitchen", research)).toEqual([]);
+    const invented = researchProblems("Coastline Kitchen", {
+      ...research,
+      insights: [
+        { text: "Everyone loves soup.", sources: [] },
+        { text: "x y z", sources: ["made-up"] },
+      ],
+    });
+    expect(invented).toHaveLength(2);
+  });
+
+  it("holds the creative to the brand palette and its imagery rules", () => {
+    expect(creativeProblems("Coastline Kitchen", creative)).toEqual([]);
+    const off = creativeProblems("Coastline Kitchen", {
+      ...creative,
+      palette: ["#00FF00"],
+      keyVisuals: [{ format: "display", description: "Stock models laughing at a table." }],
+    });
+    expect(off.join(" ")).toContain("#00FF00");
+    expect(off.join(" ")).toContain("stock models");
+  });
+
+  it("checks copy limits, banned phrases as whole words, and required disclosures", () => {
+    expect(copyProblems("Coastline Kitchen", copy)).toEqual([]);
+    const long = copyProblems("Coastline Kitchen", {
+      ...copy,
+      assets: [{ ...must(copy.assets[1]), headline: "x".repeat(31) }],
+    });
+    expect(long[0]).toContain("limit is 30");
+    const harborstone = TEAM_MARKETS["Harborstone Wealth"].guidelines;
+    const missing = copyProblems("Harborstone Wealth", copy);
+    expect(missing.filter((problem) => problem.includes("disclosure"))).toHaveLength(2);
+    const disclosed = copyProblems("Harborstone Wealth", {
+      ...copy,
+      assets: copy.assets.map((asset) => ({
+        ...asset,
+        disclosure: must(harborstone.requiredDisclosure),
+      })),
+    });
+    expect(disclosed).toEqual([]);
+    // "cure" is banned for Lumera; "secure" is not.
+    const lumera = must(TEAM_MARKETS["Lumera Therapeutics"].guidelines.requiredDisclosure);
+    const asset = {
+      channel: "email" as const,
+      headline: "Secure your spot",
+      body: "Data.",
+      cta: "Read",
+    };
+    expect(
+      copyProblems("Lumera Therapeutics", { ...copy, assets: [{ ...asset, disclosure: lumera }] }),
+    ).toEqual([]);
+    expect(
+      copyProblems("Lumera Therapeutics", {
+        ...copy,
+        assets: [{ ...asset, headline: "A cure at last", disclosure: lumera }],
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("projects media from benchmarks and refuses plans over budget or outside the window", () => {
+    const projected = projectMedia(coastline, media);
+    expect(projected.problems).toEqual([]);
+    // $8,000 at a $38 CPM is 210,526 impressions; × 4.5% CTR × 1.3 affinity is 12,316 clicks.
+    expect(projected.lines[0]).toMatchObject({ impressions: 210526, clicks: 12316 });
+    expect(projected.remainingUsd).toBe(8000);
+    const over = projectMedia(coastline, {
+      ...media,
+      lines: [{ ...must(media.lines[0]), budgetUsd: 20000, end: "2027-03-01" }],
+    });
+    expect(over.problems.join(" ")).toContain("over the $18,000 budget");
+    expect(over.problems.join(" ")).toContain("outside the brief's window");
+    const thin = projectMedia(coastline, {
+      ...media,
+      lines: [{ ...must(media.lines[0]), channel: "display", budgetUsd: 500 }],
+    });
+    expect(thin.problems).toEqual([
+      "Line 1 (Display): $500 is under the $1000 minimum worth buying.",
+    ]);
+  });
+
+  it("finds clashes between spokes, and reconciles only once each is resolved", () => {
+    const outputs = {
+      "audience-analyst": research,
+      "art-director": creative,
+      "copy-lead": copy,
+      "channel-planner": {
+        ...media,
+        lines: [
+          ...media.lines,
+          { ...must(media.lines[0]), channel: "display" as const, budgetUsd: 2000 },
+        ],
+      },
+    };
+    expect(findConflicts(outputs).map((conflict) => conflict.id)).toEqual(["uncopied:display"]);
+    const base = {
+      positioning: "Soup season, close to the office.",
+      milestones: [],
+      successMetrics: [],
+    };
+    const refused = reconcileCampaign(coastline, outputs, { ...base, resolutions: [] });
+    expect(refused.ok).toBe(false);
+    const settled = reconcileCampaign(coastline, outputs, {
+      ...base,
+      resolutions: [
+        { conflictId: "uncopied:display", resolution: "Display reuses the search copy." },
+      ],
+    });
+    expect(settled.ok && settled.strategy.status).toBe("proposed");
+    expect(settled.ok && settled.strategy.media.totalUsd).toBe(12000);
+    const missing = reconcileCampaign(
+      coastline,
+      { "audience-analyst": research },
+      { ...base, resolutions: [] },
+    );
+    expect(!missing.ok && missing.problems).toHaveLength(3);
+  });
+});
+
+describe("semantic layer", () => {
+  it("answers entity queries with governed rows and the definitions of their metrics", () => {
+    const channels = semanticQuery("Coastline Kitchen", { entity: "channel", ids: ["email"] });
+    expect(channels.rows).toEqual([
+      expect.objectContaining({ channel: "email", cpm: 2.5, ctr: 0.031, min_spend: 300 }),
+    ]);
+    expect(channels.metrics).toContain("cpm");
+    expect(channels.definitions.cpm).toContain("media cost ÷ impressions × 1,000");
+    expect(channels.source).toBe("Media benchmark set");
+    // Lumera does not buy paid social, so the layer has no such row for it.
+    expect(
+      semanticQuery("Lumera Therapeutics", { entity: "channel" }).rows.map((row) => row.channel),
+    ).not.toContain("paid-social");
+  });
+
+  it("resolves business terms to the metric or entity they mean", () => {
+    const cpc = defineTerm("Coastline Kitchen", "paid search CPC");
+    expect(cpc.find((match) => match.kind === "metric")?.id).toBe("cost_per_click");
+    expect(cpc.some((match) => match.kind === "entity" && match.id === "paid-search")).toBe(true);
+    expect(
+      defineTerm("Coastline Kitchen", "lapsed loyalty members").some(
+        (match) => match.kind === "entity" && match.id === "ck-seg-loyalty-regulars",
+      ),
+    ).toBe(true);
+    expect(defineTerm("Coastline Kitchen", "   ")).toEqual([]);
+  });
+
+  it("is the one source of the projection math", () => {
+    const impressions = projectedImpressions(8000, 38);
+    const clicks = projectedClicks(impressions, 0.045, 1.3);
+    const line = projectMedia(coastline, media).lines[0];
+    expect(line?.impressions).toBe(Math.round(impressions));
+    expect(line?.clicks).toBe(Math.round(clicks));
+    expect(line?.costPerClickUsd).toBe(costPerClick(8000, clicks));
+  });
+});
