@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-21T03:08:34.840Z",
+  "generatedAt": "2026-11-21T03:15:24.201Z",
   "status": "passed",
   "baseRef": "origin/main",
   "mergeBase": "cc34cdf9bebe8bc48ecfbecf0da22de570081fba",
@@ -16,7 +16,9 @@
       "section": "campaign-squad",
       "status": "reviewed",
       "paths": [
-        "apps/edge/src/team/run.ts"
+        "apps/edge/src/team/run.ts",
+        "packages/architecture/src/team-evals.ts",
+        "scripts/run-team-evals.mjs"
       ]
     },
     {

@@ -424,11 +424,23 @@ describe("squad evals", () => {
       costUsd: null,
       at: "2026-11-20T00:00:00Z",
     });
-    // Nothing happened: only the outcome and coordination checks apply.
+    // Nothing happened: only the outcome applies, so an empty run scores 0, not a tidy 50.
     expect(
       withoutJudge.checks.filter((check) => check.score !== null).map((check) => check.id),
-    ).toEqual(["outcome", "coordination"]);
-    expect(withoutJudge.overall).toBe(50);
+    ).toEqual(["outcome"]);
+    expect(withoutJudge.overall).toBe(0);
+    // A run that failed with an error scores no higher than how far it got.
+    const failed = scoreRun({
+      runId: "r",
+      provider: "cloudflare",
+      brief: coastline,
+      events: [...events, { type: "error", message: "Spend limit exceeded" }],
+      judge: null,
+      costUsd: null,
+      at: "2026-11-20T00:00:00Z",
+    });
+    const outcome = failed.checks.find((check) => check.id === "outcome")?.score ?? 0;
+    expect(failed.overall).toBeLessThanOrEqual(Math.round(outcome * 100));
     const judged = scoreRun({
       runId: "r",
       provider: "anthropic",
