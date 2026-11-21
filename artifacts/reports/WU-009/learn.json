@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-21T03:24:18.483Z",
+  "generatedAt": "2026-11-21T03:42:05.143Z",
   "status": "passed",
   "baseRef": "origin/main",
-  "mergeBase": "cc34cdf9bebe8bc48ecfbecf0da22de570081fba",
+  "mergeBase": "0c53abc93b3087cf64a1d97a9328a3682e8b1dff",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -17,13 +17,12 @@
       "status": "updated",
       "paths": [
         "apps/edge/src/team/lifecycle.ts",
-        "apps/web/src/team/TeamLifecycle.tsx",
-        "docs/decisions/ADR-015-pharma-campaign-lifecycle.md"
+        "apps/web/src/team/TeamLifecycle.tsx"
       ]
     },
     {
       "section": "campaign-squad",
-      "status": "reviewed",
+      "status": "updated",
       "paths": [
         "apps/edge/src/team/lifecycle.ts",
         "apps/edge/src/team/run.ts",
@@ -33,15 +32,6 @@
         "apps/web/src/team/team.css",
         "packages/architecture/src/team-evals.ts",
         "scripts/run-team-evals.mjs"
-      ]
-    },
-    {
-      "section": "evaluations",
-      "status": "updated",
-      "paths": [
-        "scripts/lib/eval-judge.mjs",
-        "scripts/lib/eval-throttle.mjs",
-        "scripts/run-live-evals.mjs"
       ]
     }
   ],
