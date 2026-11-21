@@ -282,7 +282,7 @@ function saveTool(
   > = {
     propose_focus_areas: {
       description:
-        "Save two or three business focus areas, each with a title, rationale, the data ids it cites (segments, competitors, signals, past results) and how success would be measured.",
+        "Save two or three business focus areas, each with a short title, a rationale of two or three short sentences, the data ids it cites in sources (segments, competitors, signals, past results; not in the prose), and how success would be measured: one primary metric with its target, and at most one guardrail. A person reads these on a phone.",
       schema: z.object({
         areas: many(
           z.looseObject({
@@ -321,7 +321,7 @@ function saveTool(
     },
     propose_concepts: {
       description:
-        "Save two or three campaign concepts, each with a name, big idea, the claim topics from the claims library that carry it, and the approved assets it uses (assetId and where each is used).",
+        "Save two or three campaign concepts, each with a name, a big idea in one or two sentences, the claim topics from the claims library that carry it, and the approved assets it uses (assetId and where each is used).",
       schema: z.object({
         concepts: many(
           z.object({
