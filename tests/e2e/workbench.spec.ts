@@ -440,7 +440,10 @@ test("shows an honest empty state before any evaluation run is published", async
     route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html><html></html>" }),
   );
   await page.goto("/");
-  await page.getByRole("button", { name: "Evaluations" }).first().click();
+  await page
+    .getByRole("button", { name: /^\W*Evals$/ })
+    .first()
+    .click();
   await expect(page.getByRole("heading", { name: "Evaluations" })).toBeVisible();
   await expect(page.getByText("No evaluation run has been published yet.")).toBeVisible();
   await page.getByRole("button", { name: "Back to workspace" }).click();
@@ -549,7 +552,10 @@ test("renders model comparison, checks, scenarios, failures, and methodology", a
     }),
   );
   await page.goto("/");
-  await page.getByRole("button", { name: "Evaluations" }).first().click();
+  await page
+    .getByRole("button", { name: /^\W*Evals$/ })
+    .first()
+    .click();
   const models = page.locator(".evaluation-card", {
     has: page.getByRole("heading", { name: "Model comparison" }),
   });

@@ -626,7 +626,7 @@ export function App() {
               aria-current={view === "evaluations" ? "page" : undefined}
               onClick={() => setView("evaluations")}
             >
-              <span>✓</span>Evaluations
+              <span>✓</span>Evals
             </button>
             <button
               type="button"
@@ -852,7 +852,7 @@ export function App() {
                 className="text-button compact-nav"
                 onClick={() => setView("evaluations")}
               >
-                Evaluations
+                Evals
               </button>
               <button
                 type="button"
