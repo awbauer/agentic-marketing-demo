@@ -1,0 +1,486 @@
+{
+  "generatedAt": "2026-11-21T04:59:56.893Z",
+  "base": "http://localhost:5174",
+  "feedback": true,
+  "briefs": [
+    "coastline-winter-warmup",
+    "harborstone-cash-at-work",
+    "lumera-hf-awareness"
+  ],
+  "providers": [
+    "cloudflare"
+  ],
+  "modes": [
+    "squad",
+    "lifecycle"
+  ],
+  "summary": [
+    {
+      "provider": "cloudflare",
+      "mode": "squad",
+      "runs": 3,
+      "scored": 3,
+      "overall": 92.33333333333333,
+      "judge": 4.866666666666666,
+      "costUsd": 0.23446808666666671,
+      "modelSeconds": 564.8936666666667,
+      "checks": {
+        "outcome": 1,
+        "first-try": 0.8486772486772486,
+        "coordination": 0.6333333333333333,
+        "collaboration": 1,
+        "grounding": 0.7037037037037037,
+        "budget": 1,
+        "audience-fit": 0.9952991452991453,
+        "consistency": 1,
+        "people": 0.5833333333333334
+      }
+    },
+    {
+      "provider": "cloudflare",
+      "mode": "lifecycle",
+      "runs": 1,
+      "scored": 1,
+      "overall": 98,
+      "judge": null,
+      "costUsd": 0.5437503839999999,
+      "modelSeconds": 607.594,
+      "checks": {
+        "outcome": 1,
+        "first-try": 0.9130434782608695,
+        "mlr-rounds": 0,
+        "people": 0,
+        "governance": 1
+      }
+    }
+  ],
+  "runs": [
+    {
+      "id": "team-mwpwhnwdy7p0",
+      "briefId": "coastline-winter-warmup",
+      "provider": "cloudflare",
+      "mode": "squad",
+      "wallMs": 535195,
+      "scorecard": {
+        "runId": "team-mwpwhnwdy7p0",
+        "briefId": "coastline-winter-warmup",
+        "brand": "Coastline Kitchen",
+        "provider": "cloudflare",
+        "overall": 90,
+        "checks": [
+          {
+            "id": "outcome",
+            "label": "Reached an approved proposal",
+            "group": "outcome",
+            "score": 1,
+            "detail": "The client approved the proposal."
+          },
+          {
+            "id": "first-try",
+            "label": "Saves the rules accepted",
+            "group": "process",
+            "score": 0.8571428571428571,
+            "detail": "6 of 7 saves accepted (86%); the rest were refused and fixed."
+          },
+          {
+            "id": "coordination",
+            "label": "Coordination without waste",
+            "group": "process",
+            "score": 0.8,
+            "detail": "0 nudges to call a tool, 0 gateway denials, 2 send-backs by the lead."
+          },
+          {
+            "id": "collaboration",
+            "label": "Spokes answered each other",
+            "group": "process",
+            "score": 1,
+            "detail": "9 of 9 side questions answered."
+          },
+          {
+            "id": "grounding",
+            "label": "Findings grounded in data",
+            "group": "quality",
+            "score": 0.5,
+            "detail": "7 findings, citing 1.0 data ids each on average (two or more scores full marks)."
+          },
+          {
+            "id": "budget",
+            "label": "Uses the budget well",
+            "group": "quality",
+            "score": 1,
+            "detail": "Plans 100% of the budget (80–100% scores full marks)."
+          },
+          {
+            "id": "audience-fit",
+            "label": "Money goes where the audience is",
+            "group": "quality",
+            "score": 1,
+            "detail": "Spend-weighted channel affinity 1.32 (1 is a typical audience; 1.3 or more scores full marks)."
+          },
+          {
+            "id": "consistency",
+            "label": "Every bought channel has copy",
+            "group": "quality",
+            "score": 1,
+            "detail": "5 of 5 channels are both bought and written for."
+          },
+          {
+            "id": "people",
+            "group": "people",
+            "label": "Acted on people's changes",
+            "score": 1,
+            "detail": "1 request for changes; 1 approved on the next review. 0 of 2 decisions approved the first version."
+          },
+          {
+            "id": "cost",
+            "label": "Cost and time",
+            "group": "cost",
+            "score": null,
+            "detail": "711,990 tokens, about $0.19, 525 s of model time."
+          }
+        ],
+        "judge": {
+          "model": "@cf/openai/gpt-oss-120b",
+          "scores": [
+            {
+              "criterion": "on_brief",
+              "score": 3,
+              "reason": "Meets budget, timing and primary audience, but does not address the lapsed loyalty segment as required."
+            },
+            {
+              "criterion": "insight_to_execution",
+              "score": 5,
+              "reason": "Creative, media mix and messaging flow directly from the detailed audience and weather insights."
+            },
+            {
+              "criterion": "specificity",
+              "score": 5,
+              "reason": "Provides concrete asset IDs, exact budget allocations, dates, CPC targets and visual directions."
+            },
+            {
+              "criterion": "brand_fit",
+              "score": 5,
+              "reason": "Follows brand guidelines on photography, color palette, tone and the no‑discount rule."
+            },
+            {
+              "criterion": "coherence",
+              "score": 5,
+              "reason": "All elements revolve around the single \"Steam Season\" idea and visual motif across channels."
+            }
+          ],
+          "summary": "The proposal is tightly aligned with audience insights and brand rules, delivering a clear, specific, and coherent campaign, but it falls short on the brief’s requirement to win back lapsed loyalty members."
+        },
+        "tokens": 711990,
+        "costUsd": 0.190880608,
+        "modelMs": 525427,
+        "at": "2026-11-21T04:30:06.250Z"
+      }
+    },
+    {
+      "id": "team-mwpwt4ulyfek",
+      "briefId": "harborstone-cash-at-work",
+      "provider": "cloudflare",
+      "mode": "squad",
+      "wallMs": 481793,
+      "scorecard": {
+        "runId": "team-mwpwt4ulyfek",
+        "briefId": "harborstone-cash-at-work",
+        "brand": "Harborstone Wealth",
+        "provider": "cloudflare",
+        "overall": 92,
+        "checks": [
+          {
+            "id": "outcome",
+            "label": "Reached an approved proposal",
+            "group": "outcome",
+            "score": 1,
+            "detail": "The client approved the proposal."
+          },
+          {
+            "id": "first-try",
+            "label": "Saves the rules accepted",
+            "group": "process",
+            "score": 0.8888888888888888,
+            "detail": "8 of 9 saves accepted (89%); the rest were refused and fixed."
+          },
+          {
+            "id": "coordination",
+            "label": "Coordination without waste",
+            "group": "process",
+            "score": 0.5,
+            "detail": "0 nudges to call a tool, 0 gateway denials, 5 send-backs by the lead."
+          },
+          {
+            "id": "collaboration",
+            "label": "Spokes answered each other",
+            "group": "process",
+            "score": 1,
+            "detail": "8 of 8 side questions answered."
+          },
+          {
+            "id": "grounding",
+            "label": "Findings grounded in data",
+            "group": "quality",
+            "score": 0.6111111111111112,
+            "detail": "9 findings, citing 1.2 data ids each on average (two or more scores full marks)."
+          },
+          {
+            "id": "budget",
+            "label": "Uses the budget well",
+            "group": "quality",
+            "score": 1,
+            "detail": "Plans 100% of the budget (80–100% scores full marks)."
+          },
+          {
+            "id": "audience-fit",
+            "label": "Money goes where the audience is",
+            "group": "quality",
+            "score": 1,
+            "detail": "Spend-weighted channel affinity 1.53 (1 is a typical audience; 1.3 or more scores full marks)."
+          },
+          {
+            "id": "consistency",
+            "label": "Every bought channel has copy",
+            "group": "quality",
+            "score": 1,
+            "detail": "4 of 4 channels are both bought and written for."
+          },
+          {
+            "id": "people",
+            "group": "people",
+            "label": "Acted on people's changes",
+            "score": 1,
+            "detail": "2 requests for changes; 2 approved on the next review. 0 of 5 decisions approved the first version."
+          },
+          {
+            "id": "cost",
+            "label": "Cost and time",
+            "group": "cost",
+            "score": null,
+            "detail": "723,122 tokens, about $0.22, 477 s of model time."
+          }
+        ],
+        "judge": {
+          "model": "@cf/openai/gpt-oss-120b",
+          "scores": [
+            {
+              "criterion": "on_brief",
+              "score": 5,
+              "reason": "The proposal directly addresses moving idle cash to the Sweep Account, targets both existing clients and rate shoppers, stays within the $60K budget and the Jan‑Feb 2027 window, and includes the required safety‑first, rate‑last disclosure."
+            },
+            {
+              "criterion": "insight_to_execution",
+              "score": 5,
+              "reason": "Creative execution (calm harbor visuals, safety‑first copy, rate disclosed last) follows the audience insights about email affinity, safety priority, and search‑first rate shoppers."
+            },
+            {
+              "criterion": "specificity",
+              "score": 5,
+              "reason": "The plan lists exact budgets, dates, impressions, CPC targets, copy for each channel, asset IDs, and visual treatment rules, leaving no vague language."
+            },
+            {
+              "criterion": "brand_fit",
+              "score": 5,
+              "reason": "Uses the brand’s palette, tone (calm, precise), mandatory disclosure, and approved assets, adhering to the brand guidelines."
+            },
+            {
+              "criterion": "coherence",
+              "score": 5,
+              "reason": "All elements—big idea, visual system, messaging pillars, and media mix—are unified under the ‘Quiet Work’ concept, creating a single, consistent campaign."
+            }
+          ],
+          "summary": "The proposal flawlessly meets the brief, translating audience insights into a tightly defined, brand‑aligned campaign built around a single ‘Quiet Work’ idea. Every channel, creative detail, and budget allocation is concrete and mutually reinforcing."
+        },
+        "tokens": 723122,
+        "costUsd": 0.2215506120000001,
+        "modelMs": 477284,
+        "at": "2026-11-21T04:38:08.042Z"
+      }
+    },
+    {
+      "id": "team-mwpx3glo92lz",
+      "briefId": "lumera-hf-awareness",
+      "provider": "cloudflare",
+      "mode": "squad",
+      "wallMs": 699257,
+      "scorecard": {
+        "runId": "team-mwpx3glo92lz",
+        "briefId": "lumera-hf-awareness",
+        "brand": "Lumera Therapeutics",
+        "provider": "cloudflare",
+        "overall": 95,
+        "checks": [
+          {
+            "id": "outcome",
+            "label": "Reached an approved proposal",
+            "group": "outcome",
+            "score": 1,
+            "detail": "The client approved the proposal."
+          },
+          {
+            "id": "first-try",
+            "label": "Saves the rules accepted",
+            "group": "process",
+            "score": 0.8,
+            "detail": "8 of 10 saves accepted (80%); the rest were refused and fixed."
+          },
+          {
+            "id": "coordination",
+            "label": "Coordination without waste",
+            "group": "process",
+            "score": 0.6,
+            "detail": "0 nudges to call a tool, 0 gateway denials, 4 send-backs by the lead."
+          },
+          {
+            "id": "collaboration",
+            "label": "Spokes answered each other",
+            "group": "process",
+            "score": 1,
+            "detail": "9 of 9 side questions answered."
+          },
+          {
+            "id": "grounding",
+            "label": "Findings grounded in data",
+            "group": "quality",
+            "score": 1,
+            "detail": "7 findings, citing 2.1 data ids each on average (two or more scores full marks)."
+          },
+          {
+            "id": "budget",
+            "label": "Uses the budget well",
+            "group": "quality",
+            "score": 1,
+            "detail": "Plans 100% of the budget (80–100% scores full marks)."
+          },
+          {
+            "id": "audience-fit",
+            "label": "Money goes where the audience is",
+            "group": "quality",
+            "score": 0.985897435897436,
+            "detail": "Spend-weighted channel affinity 1.28 (1 is a typical audience; 1.3 or more scores full marks)."
+          },
+          {
+            "id": "consistency",
+            "label": "Every bought channel has copy",
+            "group": "quality",
+            "score": 1,
+            "detail": "5 of 5 channels are both bought and written for."
+          },
+          {
+            "id": "people",
+            "group": "people",
+            "label": "Acted on people's changes",
+            "score": 1,
+            "detail": "2 requests for changes; 2 approved on the next review. 0 of 5 decisions approved the first version."
+          },
+          {
+            "id": "cost",
+            "label": "Cost and time",
+            "group": "cost",
+            "score": null,
+            "detail": "1,252,082 tokens, about $0.29, 692 s of model time."
+          }
+        ],
+        "judge": {
+          "model": "@cf/openai/gpt-oss-120b",
+          "scores": [
+            {
+              "criterion": "on_brief",
+              "score": 5,
+              "reason": "The proposal matches the brief’s objectives, audience, $120k budget, and Jan‑Mar 2027 window, and respects HCP‑only, fair‑balance, non‑comparative guidelines."
+            },
+            {
+              "criterion": "insight_to_execution",
+              "score": 5,
+              "reason": "Channel allocations, frequency caps, and creative themes directly follow the detailed audience insights about email affinity, display preferences, and NP titration role."
+            },
+            {
+              "criterion": "specificity",
+              "score": 5,
+              "reason": "All budgets, flight dates, creative specs, copy, rotation frames, and performance metrics are enumerated with exact numbers and constraints."
+            },
+            {
+              "criterion": "brand_fit",
+              "score": 5,
+              "reason": "The visual language, palette, typography, disclosure panels and prohibitions align with Lumera’s brand book and regulatory requirements."
+            },
+            {
+              "criterion": "coherence",
+              "score": 5,
+              "reason": "A single big idea – “Before the Update” – drives the headline, visual trace, phased rollout, and all asset executions consistently."
+            }
+          ],
+          "summary": "The plan meets every brief requirement, translates audience insights into a precise, budget‑balanced media mix, and delivers a tightly unified creative system that adheres to brand and compliance rules. It is concrete, measurable, and ready for execution."
+        },
+        "tokens": 1252082,
+        "costUsd": 0.29097303999999996,
+        "modelMs": 691970,
+        "at": "2026-11-21T04:49:47.299Z"
+      }
+    },
+    {
+      "id": "team-mwpxig5fkwib",
+      "briefId": "lumera-hf-awareness",
+      "provider": "cloudflare",
+      "mode": "lifecycle",
+      "wallMs": 609568,
+      "scorecard": {
+        "runId": "team-mwpxig5fkwib",
+        "briefId": "lumera-hf-awareness",
+        "brand": "Lumera Therapeutics",
+        "provider": "cloudflare",
+        "overall": 98,
+        "checks": [
+          {
+            "id": "outcome",
+            "label": "Went from focus to analytics",
+            "group": "outcome",
+            "score": 1,
+            "detail": "6 of 6 phases finished."
+          },
+          {
+            "id": "first-try",
+            "label": "Work cleared the rules on the first save",
+            "group": "process",
+            "score": 0.9130434782608695,
+            "detail": "21 of 23 saves accepted; 2 refused by the rules and fixed or retried."
+          },
+          {
+            "id": "mlr-rounds",
+            "group": "people",
+            "label": "Acted on MLR reviewers' changes",
+            "score": 1,
+            "detail": "3 requests for changes; 3 approved on the next review. 0 of 9 decisions approved the first version."
+          },
+          {
+            "id": "people",
+            "group": "people",
+            "label": "Acted on the brand team's changes",
+            "score": 1,
+            "detail": "6 requests for changes; 6 approved on the next review. 0 of 13 decisions approved the first version."
+          },
+          {
+            "id": "governance",
+            "label": "No agent reached for a tool it isn't granted",
+            "group": "process",
+            "score": 1,
+            "detail": "0 calls denied by the gateway."
+          },
+          {
+            "id": "cost",
+            "label": "Cost and time",
+            "group": "cost",
+            "score": null,
+            "detail": "1,243,341 tokens, about $0.54, 608 s of model time."
+          }
+        ],
+        "judge": null,
+        "tokens": 1243341,
+        "costUsd": 0.5437503839999999,
+        "modelMs": 607594,
+        "at": "2026-11-21T04:59:56.877Z"
+      }
+    }
+  ],
+  "rescored": "People's change requests scored by whether the next version satisfied them (see team-evals.ts actedOn)."
+}

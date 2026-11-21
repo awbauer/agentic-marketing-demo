@@ -262,9 +262,10 @@ describe("campaign squad", () => {
     );
     const scorecard = final.find((event) => event.type === "evaluation").scorecard;
     const people = scorecard.checks.find((check: Json) => check.id === "people");
-    // Five decisions by people, two asking for changes.
-    expect(people.detail).toContain("5 decisions");
-    expect(people.score).toBe(0.5);
+    // Five decisions by people; both requests for changes were met by the next version.
+    expect(people.detail).toContain("2 requests for changes; 2 approved on the next review");
+    expect(people.detail).toContain("of 5 decisions");
+    expect(people.score).toBe(1);
   });
 
   it("runs the same squad on each provider, and reports which providers can run", async () => {

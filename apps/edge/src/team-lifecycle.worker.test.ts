@@ -175,6 +175,9 @@ describe("pharma campaign lifecycle", () => {
     expect(end.find((event) => event.type === "done").summary).toMatch(/focus to analytics/);
     const scorecard = end.find((event) => event.type === "evaluation").scorecard;
     expect(scorecard.checks.find((check: Json) => check.id === "outcome").score).toBe(1);
-    expect(scorecard.checks.find((check: Json) => check.id === "mlr-rounds").score).toBeLessThan(1);
+    // Medical asked for changes once, and approved the resubmitted job.
+    const mlr = scorecard.checks.find((check: Json) => check.id === "mlr-rounds");
+    expect(mlr.score).toBe(1);
+    expect(mlr.detail).toContain("1 request for changes; 1 approved on the next review");
   });
 });
