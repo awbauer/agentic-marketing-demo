@@ -14,6 +14,8 @@ import {
   type TeamOutputs,
   type TeamParty,
   type TeamPlan,
+  type TeamGate,
+  TEAM_SPECIALISTS,
   TEAM_DIRECTOR,
   TEAM_PROVIDER_LABELS,
   TEAM_PROVIDERS,
@@ -50,6 +52,19 @@ export type TeamRun = {
   reports: Partial<Record<TeamSpecialist, string>>;
   strategy: CampaignStrategy | null;
   delivered: boolean;
+  /** The person the run is waiting for, if any; the lead's loop stops until they decide. */
+  waiting: TeamGate | null;
+  /** What the lead told the person it is waiting for. */
+  waitingWhy?: string;
+  /** The client approved the proposal. */
+  finished: boolean;
+  /** The work versions reconciliation and the compliance approval each describe. */
+  reconciledAt: string | null;
+  complianceApproved: string | null;
+  /** How many times the client sent the proposal back. */
+  clientRounds: number;
+  /** Send-backs per spoke at the last person's decision; the lead's limit counts from here. */
+  revisionBase: Partial<Record<TeamSpecialist, number>>;
   tokens: number;
   started: number;
   messageCount: number;
@@ -76,6 +91,12 @@ export function newTeamRun(
     reports: {},
     strategy: null,
     delivered: false,
+    waiting: null,
+    finished: false,
+    reconciledAt: null,
+    complianceApproved: null,
+    clientRounds: 0,
+    revisionBase: {},
     tokens: 0,
     started: Date.now(),
     messageCount: 0,
@@ -86,6 +107,55 @@ export function newTeamRun(
   };
   return run;
 }
+
+/**
+ * A saved run, rebuilt from its event log so the lead can carry on after a person decides. The
+ * log is the record: every piece of state the run needs is derived from it, nothing else is saved.
+ */
+export function restoreTeamRun(
+  ctx: Ctx,
+  id: string,
+  events: TeamEvent[],
+  emitOut: Emit,
+  provider: TeamProvider,
+): TeamRun {
+  const start = events.find((event) => event.type === "start");
+  if (start?.type !== "start") throw new ArchError(409, "BROKEN_RUN", `Run ${id} has no start.`);
+  const run = newTeamRun(ctx, start.brief, emitOut, provider);
+  run.id = id;
+  run.events = [...events];
+  for (const event of events) {
+    if (event.type === "plan") run.plan = event.plan;
+    else if (event.type === "output") {
+      (run.outputs as Record<string, unknown>)[event.agent] = event.output;
+      run.versions[event.agent] = event.version;
+      run.reviews[event.agent] = "pending";
+    } else if (event.type === "review") {
+      run.reviews[event.agent] = event.verdict === "accept" ? "accepted" : "revising";
+      if (event.verdict === "revise")
+        run.revisions[event.agent] = (run.revisions[event.agent] ?? 0) + 1;
+    } else if (event.type === "message") {
+      run.messageCount += 1;
+      if (event.kind === "report" && isSpecialist(event.from)) run.reports[event.from] = event.text;
+    } else if (event.type === "reconciled") {
+      run.strategy = event.strategy;
+      run.reconciledAt = JSON.stringify(run.versions);
+    } else if (event.type === "delivered") run.delivered = true;
+    else if (event.type === "decided") {
+      run.revisionBase = { ...run.revisions };
+      if (event.gate === "compliance" && event.decision === "approve")
+        run.complianceApproved = JSON.stringify(run.versions);
+      if (event.gate === "client" && event.decision === "changes") {
+        run.clientRounds += 1;
+        run.delivered = false;
+      }
+    } else if (event.type === "model") run.tokens += event.tokens;
+  }
+  return run;
+}
+
+const isSpecialist = (party: string): party is TeamSpecialist =>
+  (TEAM_SPECIALISTS as readonly string[]).includes(party);
 
 export function say(
   run: TeamRun,
@@ -317,6 +387,8 @@ export function metered(
       model: name,
       purpose,
       tokens: total(usage),
+      inputTokens: usage?.inputTokens?.total ?? 0,
+      outputTokens: usage?.outputTokens?.total ?? 0,
       latencyMs: Date.now() - started,
       ok,
     });

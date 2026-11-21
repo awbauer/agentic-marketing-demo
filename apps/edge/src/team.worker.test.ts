@@ -7,6 +7,12 @@ import { createArchitectureTables } from "./worker.test-helpers";
 // biome-ignore lint/suspicious/noExplicitAny: parsed responses are untyped JSON in these tests
 type Json = Record<string, any>;
 
+const decide = (id: string, json: unknown, persona: string) =>
+  SELF.fetch(`http://example.com/api/arch/team/runs/${id}/decide`, {
+    method: "POST",
+    headers: { "x-persona": persona, "content-type": "application/json" },
+    body: JSON.stringify(json),
+  });
 const post = (path: string, json: unknown, headers: Record<string, string> = {}) =>
   SELF.fetch(`http://example.com${path}`, {
     method: "POST",
@@ -104,8 +110,14 @@ describe("campaign squad", () => {
       to: "client",
       kind: "delivery",
     });
-    expect(stream.at(-2)).toMatchObject({ type: "done" });
+    // The proposal waits for the client, a person; nothing is scored until the run ends.
+    expect(stream.at(-2)).toMatchObject({
+      type: "await-person",
+      gate: "client",
+      persona: "brand-lead",
+    });
     expect(stream.at(-1)).toMatchObject({ type: "saved", ok: true, store: "D1" });
+    expect(stream.some((event) => event.type === "evaluation")).toBe(false);
 
     // The spokes read through the semantic layer, and the lead's numbers use its formulas.
     const semantic = stream.filter((event) => event.type === "semantic");
@@ -146,12 +158,111 @@ describe("campaign squad", () => {
         .decision.policyId,
     ).toBe("team-copy-lead");
 
-    // The run is saved, so a screen can reload it.
-    const saved = await get(`/api/arch/team/runs/${stream[0].id}`);
-    const body = (await saved.json()) as Json;
-    expect(body).toMatchObject({ status: "done", briefId: "coastline-winter-warmup" });
+    // The waiting run is saved, so a screen can reload it.
+    const id = stream[0].id as string;
+    const waiting = (await (await get(`/api/arch/team/runs/${id}`)).json()) as Json;
+    expect(waiting).toMatchObject({
+      status: "waiting",
+      waitingOn: "client",
+      briefId: "coastline-winter-warmup",
+    });
     // The saved log holds everything but the save receipt itself.
-    expect(body.events.length).toBe(stream.length - 1);
+    expect(waiting.events.length).toBe(stream.length - 1);
+
+    // Only a person in the client's role may decide, and only on the gate the run waits at.
+    expect((await decide(id, { gate: "client", decision: "approve" }, "marketer")).status).toBe(
+      403,
+    );
+    expect(
+      (await decide(id, { gate: "compliance", decision: "approve" }, "compliance")).status,
+    ).toBe(409);
+
+    // The client approves: the run ends, is scored, and is saved as done.
+    const approved = await events(
+      await decide(id, { gate: "client", decision: "approve", note: "Looks good." }, "brand-lead"),
+    );
+    expect(approved[0]).toMatchObject({ type: "decided", gate: "client", decision: "approve" });
+    expect(approved.find((event) => event.type === "delivered").strategy.status).toBe("approved");
+    const scorecard = approved.find((event) => event.type === "evaluation").scorecard;
+    expect(scorecard.provider).toBe("cloudflare");
+    expect(scorecard.overall).toBeGreaterThan(50);
+    expect(scorecard.checks.find((check: Json) => check.id === "outcome").score).toBe(1);
+    expect(scorecard.judge.scores).toHaveLength(5);
+    expect(scorecard.costUsd).toBeGreaterThan(0);
+    expect(approved.at(-1)).toMatchObject({ type: "saved", ok: true });
+    const done = (await (await get(`/api/arch/team/runs/${id}`)).json()) as Json;
+    expect(done.status).toBe("done");
+    // A decided run cannot be decided again.
+    expect((await decide(id, { gate: "client", decision: "approve" }, "brand-lead")).status).toBe(
+      409,
+    );
+
+    // The evals list holds the scored run.
+    const evals = (await (await get("/api/arch/team/evals")).json()) as Json;
+    expect(evals.runs.find((run: Json) => run.id === id).scorecard.overall).toBe(scorecard.overall);
+  });
+
+  it("holds regulated copy for compliance, and acts on a person's changes", async () => {
+    const stream = await events(
+      await post("/api/arch/team/runs", { briefId: "harborstone-cash-at-work" }),
+    );
+    const id = stream[0].id as string;
+    // Harborstone's copy goes to compliance before any proposal reaches the client.
+    expect(stream.some((event) => event.type === "delivered")).toBe(false);
+    expect(stream.at(-2)).toMatchObject({ type: "await-person", gate: "compliance" });
+    expect(stream.filter((event) => event.type === "message").at(-1)).toMatchObject({
+      from: "campaign-lead",
+      to: "compliance",
+      kind: "approval-request",
+    });
+
+    // The compliance reviewer asks for changes: the lead sends the copy back and asks again.
+    expect(
+      (await decide(id, { gate: "compliance", decision: "changes", note: "x" }, "compliance"))
+        .status,
+    ).toBe(400);
+    const changed = await events(
+      await decide(
+        id,
+        {
+          gate: "compliance",
+          decision: "changes",
+          note: "Say rates are variable in every headline.",
+        },
+        "compliance",
+      ),
+    );
+    const revision = changed.find((event) => event.type === "review" && event.verdict === "revise");
+    expect(revision).toMatchObject({ agent: "copy-lead" });
+    expect(revision.feedback).toContain("rates are variable");
+    expect(changed.at(-2)).toMatchObject({ type: "await-person", gate: "compliance" });
+
+    // Approved: now the proposal goes to the client, who sends feedback once, then approves.
+    const reviewed = await events(
+      await decide(id, { gate: "compliance", decision: "approve" }, "compliance"),
+    );
+    expect(
+      reviewed.find((event) => event.type === "delivered").strategy.messaging.assets[0].disclosure,
+    ).toContain("FDIC insured");
+    expect(reviewed.at(-2)).toMatchObject({ type: "await-person", gate: "client" });
+    const feedback = await events(
+      await decide(
+        id,
+        { gate: "client", decision: "changes", note: "Lead with safety before the rate." },
+        "brand-lead",
+      ),
+    );
+    // Changed copy needs compliance again before the client sees it.
+    expect(feedback.at(-2)).toMatchObject({ type: "await-person", gate: "compliance" });
+    await events(await decide(id, { gate: "compliance", decision: "approve" }, "compliance"));
+    const final = await events(
+      await decide(id, { gate: "client", decision: "approve" }, "brand-lead"),
+    );
+    const scorecard = final.find((event) => event.type === "evaluation").scorecard;
+    const people = scorecard.checks.find((check: Json) => check.id === "people");
+    // Five decisions by people, two asking for changes.
+    expect(people.detail).toContain("5 decisions");
+    expect(people.score).toBe(0.5);
   });
 
   it("runs the same squad on each provider, and reports which providers can run", async () => {
@@ -194,7 +305,7 @@ describe("campaign squad", () => {
     const stream = await events(
       await post("/api/arch/team/runs", { briefId: "harborstone-cash-at-work" }),
     );
-    const copy = stream.find((event) => event.type === "delivered").strategy.messaging;
+    const copy = stream.find((event) => event.type === "reconciled").strategy.messaging;
     expect(copy.assets.every((asset: Json) => asset.disclosure.includes("FDIC insured"))).toBe(
       true,
     );
@@ -237,7 +348,10 @@ describe("campaign squad", () => {
     expect(refused.step.ok).toBe(false);
     expect(refused.step.decision.decision).toBe("deny");
     expect(stream.some((event) => event.type === "delivered")).toBe(false);
-    expect(stream.at(-2)).toMatchObject({ type: "done" });
+    expect(stream.some((event) => event.type === "done")).toBe(true);
+    // A run that stopped is still scored, and the scorecard says it reached no outcome.
+    const scorecard = stream.find((event) => event.type === "evaluation").scorecard;
+    expect(scorecard.checks.find((check: Json) => check.id === "outcome").score).toBe(0);
     await store.setLifecycle("channel-planner", "monitor", "Restored.", at);
   });
 });

@@ -20,6 +20,7 @@
     "eval:calibrate": "node scripts/calibrate-judge.mjs",
     "eval:live": "node scripts/run-live-evals.mjs",
     "eval:rescore": "node scripts/rescore-evals.mjs",
+    "eval:team": "node scripts/run-team-evals.mjs",
     "kg:seed": "node scripts/seed-knowledge-graph.mjs",
     "kg:parity": "node scripts/check-knowledge-graph.mjs",
     "format": "biome format --write .",

@@ -1745,7 +1745,7 @@ flowchart TB
 
 *People decide at each stage, agents do the narrow work, and every call between them passes the gateway. Performance re-enters planning inside the quarter.*
 
-> **Key idea:** A lead coordinates and judges; spokes do the work and talk to each other. Code, not prompts, enforces the rules, one semantic layer defines every number, and the gateway governs every call, whichever provider's model runs.
+> **Key idea:** A lead coordinates and judges; spokes do the work and talk to each other. Code, not prompts, enforces the rules, one semantic layer defines every number, the gateway governs every call, people take the decisions no agent may, and every run is scored the same way whichever provider's model ran.
 
 The **Campaign squad** page runs a hub-and-spoke team of agents on a client's brief. Every agent is a real model with its own prompt and only its own tools; nothing about a run is scripted.
 
@@ -1759,13 +1759,17 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 
 **Rules are code, not prompts.** Each spoke saves through one tool, and a service checks the work whatever the model wrote: findings must cite real data ids (cite or refuse); the palette must come from the brand book and no image may show what it forbids; copy must fit each placement's character limits, avoid banned phrases and carry any required disclosure; the channel plan must respect minimum spends, the budget and the brief's window. A refused save comes back with every problem, and the model has to fix them. When the pieces are in, reconciliation finds clashes (a channel bought with no copy, copy for a channel not bought, an audience the analyst didn't recommend) and the lead must resolve each one or send the piece back. The client gets a **proposal**; the client decides.
 
+**People in the loop.** Some decisions belong to people, and the person at the browser takes them. For a regulated brand (one with a required disclosure), a **compliance reviewer** must approve the copy before any proposal reaches the client: the lead asks with `request_compliance_review`, and the server refuses to send the proposal until a person has approved the current version, so changed copy needs a new review. Every proposal then waits for the **client** (played by the brand lead) to approve it or send feedback, up to two rounds. A waiting run is saved with the lead's conversation and rebuilt from its event log when the person decides, so it survives a reload. The gateway checks that the person acts in the right role, `team:decide_compliance` or `team:decide_proposal`, and no agent is ever granted either. A person's request for changes reaches the lead as their words, and the lead sends the pieces it affects back; the lead's own limit of two send-backs per spoke starts again after each decision.
+
+**Evals.** Every run is scored when it ends. The checks come from the run's own events: whether it reached an approved proposal, how often the rules refused a save, how well the findings are grounded, whether the plan uses the budget well and puts money where the audience responds, whether every bought channel has copy, how the agents coordinated, whether spokes answered each other, and how many rounds people needed. A judge model scores the proposal on five criteria from 1 to 5, and the overall score blends the checks (70%) and the judge (30%). The judge is always the Workers AI judge champion, whichever provider ran the squad, so providers are compared by the same yardstick. The **Evals** tab shows the run's scorecard and past runs averaged per provider; `pnpm eval:team` runs the reference briefs on each provider against a running workbench, plays the people (`--feedback` has each ask for changes once), and writes a comparison report.
+
 **The semantic layer.** No agent reads a raw table. Each data tool is a named query on a governed layer that defines every entity (segment, competitor, signal, channel, guideline) and metric once: its formula, grain, unit, source and owner. `query_semantic_layer` queries it directly, and `define_term` resolves a business word ("CPC", "lapsed loyalty members") to what it means here. The projection formulas (impressions, clicks, cost per click) live only in the layer, so the channel planner, the lead's reconciliation and the client's proposal can't disagree about a number. The page shows which definitions each agent used.
 
 **The infrastructure under the agents.** The page also lights the layers each event passes: the event stream to the page; the lead's coordination loop; the models, each call metered; the agentic gateway, which checks every tool call as `team:<tool>` and mints a token for it; tools and the semantic layer; the rule services; the agent-to-agent bus; the run's state, saved to D1; and operations, where an operator disables or constrains an agent without a deploy.
 
 **Three model providers, one gateway.** A switch runs the same squad on **Cloudflare Workers AI**, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same. Every request goes through the Cloudflare AI Gateway. Anthropic and OpenAI requests go through the Worker's AI binding to the gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it, and Cloudflare-billed fallback is off. Claude Opus 5.5 does not accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message, and Claude's thinking blocks are replayed unchanged on the next turn.
 
-**What it does not do yet.** The sample market data stands in for real segmentation, competitive and benchmark systems. Runs differ, and a run takes a few minutes. The squad writes nothing to Salesforce.
+**What it does not do yet.** The sample market data stands in for real segmentation, competitive and benchmark systems. Runs differ, and a run takes a few minutes. The squad writes nothing to Salesforce. One person plays every role from the same browser, and the judge is generous until it is calibrated against people's scores.
 
 **Try it**
 
@@ -1774,11 +1778,14 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 **In this demo**
 
 - Campaign squad → pick a brief and a provider → Hand the brief to the squad
-- Campaign squad → What the squad runs on → Agent infrastructure / Semantic layer
+- Campaign squad → What the squad runs on → Agent infrastructure / Semantic layer / Evals
+- Campaign squad → a Harborstone brief → approve or ask for changes as the compliance reviewer, then as the client
+- pnpm eval:team (with the workbench running)
 - Campaign squad → the agent tabs: each agent's grants, tool calls and the gateway's decisions
 - packages/architecture/src/team.ts, team-semantic.ts, team-services.ts
 - apps/edge/src/team/director.ts, specialists.ts, gateway.ts, anthropic.ts
 - docs/decisions/ADR-013-campaign-squad.md
+- docs/decisions/ADR-014-squad-people-and-evals.md
 
 **Learn more**
 
@@ -1908,7 +1915,7 @@ Who decides whether you may create a campaign from the workbench?
 
 ## Reference: every concept in the code
 
-### Tools (93)
+### Tools (94)
 
 | Name | What it is | Taught in |
 | --- | --- | --- |
@@ -1916,6 +1923,7 @@ Who decides whether you may create a campaign from the workbench?
 | `delegate_task` | The lead hands one assignment to a spoke, refused until the pieces it depends on are kept. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
 | `review_work` | The lead keeps a spoke's work or sends it back with notes, at most twice per spoke. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
 | `reconcile_plan` | The lead fits the four pieces into one proposal, refused until every clash is resolved or sent back. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `request_compliance_review` | The lead asks the compliance reviewer, a person, to check a regulated brand's copy. The run waits for their decision, and the lead may not propose until they approve the current version. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
 | `send_proposal` | The lead sends the reconciled proposal to the client, who decides whether to run it. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
 | `read_team_output` | A spoke reads another spoke's latest saved work. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
 | `ask_teammate` | A spoke puts one question straight to another spoke; at most two per piece of work. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |

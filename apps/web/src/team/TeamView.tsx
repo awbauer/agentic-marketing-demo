@@ -22,6 +22,7 @@ import { ArchApiError, archFetch, archStream, useArch } from "../architecture/ap
 import { ErrorNote } from "../architecture/Shared";
 import { useScope } from "../scope";
 import { TeamHierarchy } from "./TeamHierarchy";
+import { DecisionCard, DecisionLog } from "./TeamPeople";
 import { TeamPlatform } from "./TeamPlatform";
 import { StrategyView, TeamWorkView } from "./TeamWork";
 import { foldTeam, isPeerMessage, TEAM_PHASES, type TeamMessage } from "./team-state";
@@ -124,6 +125,8 @@ const KIND_LABELS: Record<TeamMessageKind, string> = {
   revision: "Sent back",
   proposal: "Reconciled",
   delivery: "Proposal",
+  "approval-request": "Review request",
+  decision: "Decision",
 };
 
 type Status = "idle" | "running" | "replaying" | "done";
@@ -503,6 +506,31 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     if (working && working !== selected) setSelected(working);
   }, [state, follow, status]);
 
+  /** A person's decision on the waiting run; the squad's next steps stream onto the same page. */
+  async function decide(decision: "approve" | "changes", note: string) {
+    const waiting = state.waiting;
+    if (!waiting || !state.id) return;
+    setError(null);
+    setStatus("running");
+    setFollow(true);
+    startedAt.current = Date.now();
+    lastEventAt.current = Date.now();
+    try {
+      await archStream<TeamEvent>(
+        `/team/runs/${encodeURIComponent(state.id)}/decide`,
+        { persona: waiting.persona, brand: "all" },
+        { gate: waiting.gate, decision, note },
+        (event) => {
+          lastEventAt.current = Date.now();
+          setEvents((current) => [...current, event]);
+        },
+      );
+    } catch (failure) {
+      setError(asError(failure));
+    }
+    setStatus("done");
+  }
+
   async function run() {
     if (timer.current) clearInterval(timer.current);
     setShown(null);
@@ -660,6 +688,17 @@ export function TeamView({ onClose }: { onClose: () => void }) {
 
           {error && <ErrorNote error={error} />}
 
+          {state.waiting && state.brief && shown === null && (
+            <DecisionCard
+              waiting={state.waiting}
+              strategy={state.strategy}
+              brief={state.brief}
+              decisions={state.decisions}
+              busy={busy}
+              onDecide={(decision, note) => void decide(decision, note)}
+            />
+          )}
+
           <ol className="team-steps" aria-label="Progress">
             {TEAM_PHASES.map((phase) => (
               <li
@@ -735,6 +774,8 @@ export function TeamView({ onClose }: { onClose: () => void }) {
               </ul>
             </section>
           )}
+
+          <DecisionLog decisions={state.decisions} />
 
           <AgentInspector
             state={state}

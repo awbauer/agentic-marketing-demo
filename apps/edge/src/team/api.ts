@@ -5,6 +5,7 @@ import {
   briefProblems,
   buildTeamPolicies,
   type CampaignBrief,
+  isTeamGate,
   isTeamProvider,
   TEAM_PROVIDERS,
   type TeamEvent,
@@ -15,10 +16,11 @@ import {
 } from "@northstar/architecture";
 import { ArchError, type Ctx, overridesFor } from "../architecture/context";
 import { streamFlow } from "../architecture/orchestration";
-import { startTeamRun } from "./director";
+import { continueTeamRun, startTeamRun } from "./director";
 import { providerStatus, teamModels } from "./run";
 
 const RUN = /^\/api\/arch\/team\/runs\/([^/]+)$/;
+const DECIDE = /^\/api\/arch\/team\/runs\/([^/]+)\/decide$/;
 
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), {
@@ -78,6 +80,44 @@ export async function handleTeam(
     const brief = briefFrom(input);
     return streamFlow<TeamEvent>(await startTeamRun(ctx, brief, provider));
   }
+  const decide = DECIDE.exec(path);
+  if (decide?.[1] && request.method === "POST") {
+    const input = await readBody();
+    if (!isTeamGate(input.gate))
+      throw new ArchError(400, "BAD_REQUEST", "gate must be compliance or client.");
+    if (input.decision !== "approve" && input.decision !== "changes")
+      throw new ArchError(400, "BAD_REQUEST", "decision must be approve or changes.");
+    return streamFlow<TeamEvent>(
+      await continueTeamRun(ctx, decodeURIComponent(decide[1]), {
+        gate: input.gate,
+        decision: input.decision,
+        note: typeof input.note === "string" ? input.note.slice(0, 1000) : "",
+      }),
+    );
+  }
+  if (path === "/api/arch/team/evals" && request.method === "GET") {
+    const rows = await ctx.store.orchestrationsWithPrefix("team:");
+    return json({
+      runs: rows.flatMap((row) => {
+        const events = row.events as TeamEvent[];
+        const start = events.find((event) => event.type === "start");
+        const evaluation = [...events].reverse().find((event) => event.type === "evaluation");
+        if (start?.type !== "start") return [];
+        return [
+          {
+            id: row.id,
+            briefId: start.brief.id,
+            title: start.brief.title,
+            brand: row.brand,
+            provider: start.infra?.provider ?? "cloudflare",
+            status: row.status,
+            at: row.updatedAt,
+            scorecard: evaluation?.type === "evaluation" ? evaluation.scorecard : null,
+          },
+        ];
+      }),
+    });
+  }
   const saved = RUN.exec(path);
   if (saved?.[1] && request.method === "GET") {
     const row = await ctx.store.orchestration(decodeURIComponent(saved[1]));
@@ -87,6 +127,7 @@ export async function handleTeam(
       id: row.id,
       briefId: row.flowId.slice(5),
       status: row.status,
+      waitingOn: row.waitingOn,
       events: row.events,
     });
   }

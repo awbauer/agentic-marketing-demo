@@ -14,6 +14,9 @@ export default defineConfig({
       "@northstar/knowledge-graph": fileURLToPath(
         new URL("./packages/knowledge-graph/src/index.ts", import.meta.url),
       ),
+      "@northstar/evals/pricing": fileURLToPath(
+        new URL("./packages/evals/src/pricing.ts", import.meta.url),
+      ),
     },
   },
   plugins: [

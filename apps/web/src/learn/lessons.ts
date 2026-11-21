@@ -318,7 +318,7 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
   "campaign-squad": {
     diagram: "agent-lifecycle",
     keyIdea:
-      "A lead coordinates and judges; spokes do the work and talk to each other. Code, not prompts, enforces the rules, one semantic layer defines every number, and the gateway governs every call, whichever provider's model runs.",
+      "A lead coordinates and judges; spokes do the work and talk to each other. Code, not prompts, enforces the rules, one semantic layer defines every number, the gateway governs every call, people take the decisions no agent may, and every run is scored the same way whichever provider's model ran.",
     tryIt: [{ kind: "view", label: "Open the Campaign squad", view: "team" }],
   },
   "long-term-memory": {

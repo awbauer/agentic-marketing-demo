@@ -23,7 +23,7 @@ const saved = (done: Done, tool: string) =>
 
 const SPECIALISTS = ["audience-analyst", "art-director", "copy-lead", "channel-planner"];
 
-function director(input: Json, done: Done): Next {
+function director(input: Json, done: Done, lastUser = ""): Next {
   const n = done.length;
   const call = (args: Json): Next => ({ tool: "next_step", args });
   if (n === 0)
@@ -68,13 +68,39 @@ function director(input: Json, done: Done): Next {
   const scripted = script[n - 1];
   if (scripted) return call({ why: `Step ${n}.`, ...scripted });
   const previous = done[n - 1]?.output ?? {};
-  if (previous.delivered) return { text: "Submitted to the client." };
-  if (previous.reconciled)
+  const propose = call({
+    kind: "propose",
+    why: "Ready for the client.",
+    message: "Here is our proposal for your review.",
+  });
+  // Resumed after a person decided: act on what they said.
+  if (previous.waiting) {
+    if (/approved the copy/.test(lastUser)) return propose;
+    if (/asked for changes|sent feedback/.test(lastUser))
+      return call({
+        kind: "review",
+        why: "A person asked for changes.",
+        agent: "copy-lead",
+        verdict: "revise",
+        feedback: `A person asked: ${lastUser.split(":").slice(1).join(":").trim().split("\n")[0]}`,
+      });
+    return { text: "Waiting for a person." };
+  }
+  if (typeof previous.next === "string" && previous.next.startsWith("Review the revision"))
     return call({
-      kind: "propose",
-      why: "Reconciled.",
-      message: "Here is our proposal for your review.",
+      kind: "review",
+      why: "The revision fits.",
+      agent: "copy-lead",
+      verdict: "accept",
     });
+  if (previous.reconciled)
+    return typeof previous.next === "string" && previous.next.includes("compliance")
+      ? call({
+          kind: "request_review",
+          why: "Regulated copy needs compliance first.",
+          message: "Please check the copy and its disclosures before the client sees it.",
+        })
+      : propose;
   const reconciliation = {
     kind: "reconcile",
     why: "All four pieces are kept.",
@@ -211,7 +237,7 @@ function media(input: Json, done: Done): Next {
   };
 }
 
-const AGENTS: Record<string, (input: Json, done: Done) => Next> = {
+const AGENTS: Record<string, (input: Json, done: Done, lastUser?: string) => Next> = {
   "campaign-lead": director,
   "audience-analyst": research,
   "art-director": creative,
@@ -223,6 +249,7 @@ function read(prompt: Prompt) {
   let agent = "";
   let mode = "work";
   let input: Json = {};
+  let lastUser = "";
   const done: Done = [];
   for (const message of prompt) {
     if (message.role === "system") {
@@ -232,6 +259,7 @@ function read(prompt: Prompt) {
     if (message.role === "user")
       for (const part of message.content)
         if (part.type === "text") {
+          lastUser = part.text;
           const json = /Input: (\{.*\})\s*$/s.exec(part.text)?.[1];
           if (json && Object.keys(input).length === 0) input = JSON.parse(json) as Json;
         }
@@ -243,15 +271,35 @@ function read(prompt: Prompt) {
             output: part.output.type === "json" ? (part.output.value as Json) : {},
           });
   }
-  return { agent, mode, input, done };
+  return { agent, mode, input, done, lastUser };
 }
 
 function respond(prompt: Prompt): Next {
-  const { agent, mode, input, done } = read(prompt);
+  const { agent, mode, input, done, lastUser } = read(prompt);
+  if (agent === "squad-judge")
+    return done.some((item) => item.tool === "score_proposal")
+      ? { text: "Scored." }
+      : {
+          tool: "score_proposal",
+          args: {
+            scores: [
+              { criterion: "on_brief", score: 4, reason: "Meets the objectives and window." },
+              {
+                criterion: "insight_to_execution",
+                score: 4,
+                reason: "Channels follow the audience.",
+              },
+              { criterion: "specificity", score: 3, reason: "Copy is short but generic." },
+              { criterion: "brand_fit", score: 5, reason: "Disclosures and voice are right." },
+              { criterion: "coherence", score: 4, reason: "One idea throughout." },
+            ],
+            summary: "A sound, on-brief plan. The copy could be more specific.",
+          },
+        };
   if (mode === "answer") return { text: `${agent} answers from its saved work.` };
   if (mode === "report") return { text: `${agent} delivered its work.` };
   if (SPECIALISTS.includes(agent) || agent === "campaign-lead")
-    return AGENTS[agent]?.(input, done) ?? { text: "No script." };
+    return AGENTS[agent]?.(input, done, lastUser) ?? { text: "No script." };
   return { text: "No script for this agent." };
 }
 
