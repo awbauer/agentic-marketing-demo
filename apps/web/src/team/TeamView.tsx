@@ -12,6 +12,8 @@ import {
   TEAM_PARTY_LABELS,
   TEAM_GATES,
   isTeamProvider,
+  type PHARMA_PHASES,
+  phaseOfGate,
   isLifecycleWorker,
   isTeamSpecialist,
   teamAgentsFor,
@@ -28,8 +30,8 @@ import { ErrorNote } from "../architecture/Shared";
 import { useScope } from "../scope";
 import { TeamHierarchy } from "./TeamHierarchy";
 import { DecisionCard, DecisionLog } from "./TeamPeople";
-import { ArtifactView, CampaignFile, LifecycleDecisionCard, LifecycleSteps } from "./TeamLifecycle";
-import { TeamPlatform } from "./TeamPlatform";
+import { ArtifactView, LifecycleDecisionCard, PhaseStepper, PhaseWorkspace } from "./TeamLifecycle";
+import { EvalsPanel, InfrastructurePanel, SemanticLayerPanel } from "./TeamPlatform";
 import { StrategyView, TeamWorkView } from "./TeamWork";
 import { foldTeam, isPeerMessage, TEAM_PHASES, type TeamMessage } from "./team-state";
 import "../architecture/architecture.css";
@@ -38,6 +40,8 @@ import "./team.css";
 const LAST_RUN = "northstar.team.lastRun";
 const PROVIDER_KEY = "northstar.team.provider";
 const MODE_KEY = "northstar.team.mode";
+
+type PhaseId = (typeof PHARMA_PHASES)[number]["id"];
 
 type ProviderOption = {
   id: TeamProvider;
@@ -257,7 +261,13 @@ function Party({ id }: { id: string }) {
  * The conversation, in its own scrolling box. New messages scroll the box only when the reader is
  * already at its bottom; otherwise a pill counts what arrived below. The page itself never moves.
  */
-function MessageFeed({ messages }: { messages: TeamMessage[] }) {
+function MessageFeed({
+  messages,
+  title = "Squad conversation",
+}: {
+  messages: TeamMessage[];
+  title?: string;
+}) {
   const [filter, setFilter] = useState<FeedFilter>("all");
   const list = useRef<HTMLOListElement>(null);
   const atBottom = useRef(true);
@@ -295,7 +305,7 @@ function MessageFeed({ messages }: { messages: TeamMessage[] }) {
   return (
     <section className="team-feed" aria-labelledby="team-feed-title">
       <header>
-        <h3 id="team-feed-title">Squad conversation</h3>
+        <h3 id="team-feed-title">{title}</h3>
         <div className="arch-tabs small" role="tablist" aria-label="Filter messages">
           {(
             [
@@ -538,6 +548,8 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   const [selected, setSelected] = useState<TeamAgentId>(TEAM_DIRECTOR);
   // Off unless the reader asks: tabs never switch under them.
   const [follow, setFollow] = useState(false);
+  // The phase the reader picked in the stepper; null follows the run's active phase.
+  const [phasePick, setPhasePick] = useState<PhaseId | null>(null);
   const decisionSlot = useRef<HTMLDivElement>(null);
   /** Only the reader moves the page: the pill brings the decision into view when clicked. */
   const openDecision = () =>
@@ -708,6 +720,114 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     ? `${TEAM_PARTY_LABELS[active]}: ${state.agents[active].activity ?? state.agents[active].note ?? "thinking"}`
     : "";
   const current = TEAM_PHASES.find((phase) => !state.phases.has(phase.id));
+  // Which phase the workspace shows: the reader's pick, or the active phase when they haven't
+  // picked one (and again after they decide, since their decision is what moves the run).
+  const activePhase = (state.lifecycle?.phase ?? "focus") as PhaseId;
+  const phase = phasePick ?? activePhase;
+  const turnPhase = state.waiting
+    ? (phaseOfGate(state.waiting.gate)?.id as PhaseId | undefined)
+    : undefined;
+  const openTurn = () => {
+    if (turnPhase) setPhasePick(turnPhase);
+    requestAnimationFrame(() =>
+      decisionSlot.current?.scrollIntoView({ block: "start", behavior: "smooth" }),
+    );
+  };
+  const lifecycleDecision =
+    state.waiting && state.brief && shown === null && state.lifecycle ? (
+      <div ref={decisionSlot} className="team-decision-slot">
+        <LifecycleDecisionCard
+          key={`${state.waiting.gate}-${state.decisions.length}`}
+          waiting={state.waiting}
+          lifecycle={state.lifecycle}
+          brief={state.brief}
+          decisions={state.decisions}
+          busy={busy}
+          onDecide={(decision, note, choice) => {
+            setPhasePick(null);
+            void decide(decision, note, choice);
+          }}
+        />
+      </div>
+    ) : null;
+  const providerName = PROVIDER_SHORT[provider].name;
+  const chooser = (
+    <>
+      <fieldset className="arch-flow-picker">
+        <legend>Sample briefs</legend>
+        {modeBriefs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            aria-pressed={brief.id === item.id}
+            disabled={busy}
+            onClick={() => setBrief(item)}
+          >
+            <small>{item.brand}</small>
+            <strong>{item.title}</strong>
+            <span>
+              ${item.budgetUsd.toLocaleString("en-US")} · {item.start} → {item.end}
+            </span>
+          </button>
+        ))}
+      </fieldset>
+      <p className="team-brief-summary">
+        <strong>Objectives:</strong> {brief.objectives} <strong>Audience:</strong> {brief.audience}{" "}
+        <strong>Budget:</strong> ${brief.budgetUsd.toLocaleString("en-US")} <strong>Window:</strong>{" "}
+        {brief.start} → {brief.end}
+      </p>
+      <BriefForm brief={brief} onChange={setBrief} disabled={busy} />
+      <ProviderSwitch
+        providers={roster.data?.providers ?? null}
+        value={provider}
+        onChange={chooseProvider}
+        disabled={busy}
+      />
+    </>
+  );
+  const lede =
+    mode === "lifecycle"
+      ? "A prescription brand’s campaign, end to end. The campaign lead takes the brief through business focus, ideation, content and Medical/Legal/Regulatory review, audience selection, publishing and analytics. Agents do every piece of work and code checks it against the claims library, the asset library, consent and the label; you take each decision a real brand team, MLR committee and operations team would, acting as the role it needs."
+      : "Hand the squad a brief and watch it work. The campaign lead in the middle never writes a word of the campaign: it splits the brief into pieces, gives each to the spoke that owns it, decides whether to keep what comes back, and fits the pieces together. Spokes can also message one another directly when one piece depends on another. Each agent is a real model limited to its own tools, the agentic gateway checks every call, and code — not the model — enforces the brand’s rules on every piece.";
+  const diagram = (
+    <div className="team-diagram">
+      <TeamHierarchy state={state} mode={view} />
+      <dl className="team-stats compact" aria-live="polite">
+        <div>
+          <dt>Messages</dt>
+          <dd>{state.messages.length}</dd>
+        </div>
+        <div>
+          <dt>{view === "lifecycle" ? "Decisions" : "Spoke to spoke"}</dt>
+          <dd>
+            {view === "lifecycle"
+              ? state.decisions.length
+              : state.messages.filter(isPeerMessage).length}
+          </dd>
+        </div>
+        <div>
+          <dt>Tool calls</dt>
+          <dd>{state.toolCalls}</dd>
+        </div>
+        <div>
+          <dt>Gateway denials</dt>
+          <dd>{state.denied}</dd>
+        </div>
+        {state.done && (
+          <>
+            <div>
+              <dt>Tokens</dt>
+              <dd>{state.done.tokens.toLocaleString("en-US")}</dd>
+            </div>
+            <div>
+              <dt>Elapsed</dt>
+              <dd>{Math.round(state.done.latencyMs / 1000)} s</dd>
+            </div>
+          </>
+        )}
+      </dl>
+    </div>
+  );
   return (
     <section className="evaluations-view arch-view team-view" aria-labelledby="team-title">
       <div className="section-header">
@@ -724,22 +844,15 @@ export function TeamView({ onClose }: { onClose: () => void }) {
           </h2>
         </div>
         <div className="arch-header-actions">
-          <button type="button" className="text-button" onClick={onClose}>
-            Back to workspace
-          </button>
-        </div>
-      </div>
-      <div className="arch-body">
-        <div className="arch-main">
           <fieldset className="team-mode">
-            <legend>What the team runs</legend>
+            <legend className="sr-only">What the team runs</legend>
             <div className="team-switch" role="radiogroup" aria-label="Run mode">
               {(
                 [
-                  ["squad", "Campaign squad", "Brief to an approved proposal"],
-                  ["lifecycle", "Pharma lifecycle", "Focus to analytics, with MLR"],
+                  ["squad", "Campaign squad"],
+                  ["lifecycle", "Pharma lifecycle"],
                 ] as const
-              ).map(([id, label, detail]) => (
+              ).map(([id, label]) => (
                 <label key={id} className={mode === id ? "on" : ""}>
                   <input
                     type="radio"
@@ -750,64 +863,42 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                     onChange={() => chooseMode(id)}
                   />
                   <strong>{label}</strong>
-                  <small>{detail}</small>
                 </label>
               ))}
             </div>
           </fieldset>
-          {mode === "lifecycle" ? (
-            <p className="arch-lede">
-              A prescription brand’s campaign, end to end. The campaign lead takes the brief through
-              business focus, ideation, content and Medical/Legal/Regulatory review, audience
-              selection, publishing and analytics. Agents do every piece of work and code checks it
-              against the claims library, the asset library, consent and the label; you take each
-              decision a real brand team, MLR committee and operations team would, acting as the
-              role it needs. The MLR coordinator runs the review and the system routes the job from
-              Medical to Legal to Regulatory.
-            </p>
-          ) : (
-            <p className="arch-lede">
-              Hand the squad a brief and watch it work. The campaign lead in the middle never writes
-              a word of the campaign: it splits the brief into pieces, gives each to the spoke that
-              owns it, decides whether to keep what comes back, and fits the pieces together. Spokes
-              can also message one another directly when one piece depends on another. Each agent is
-              a real model limited to its own tools, the agentic gateway checks every call, and code
-              — not the model — enforces the brand’s rules on every piece.
-            </p>
-          )}
-
+          <button type="button" className="text-button" onClick={onClose}>
+            Back to workspace
+          </button>
+        </div>
+      </div>
+      <div className="arch-body">
+        <div className="arch-main">
           <section className="team-brief" aria-labelledby="team-brief-title">
-            <h3 id="team-brief-title">Choose a brief</h3>
-            <fieldset className="arch-flow-picker">
-              <legend>Sample briefs</legend>
-              {modeBriefs.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-pressed={brief.id === item.id}
-                  disabled={busy}
-                  onClick={() => setBrief(item)}
-                >
-                  <small>{item.brand}</small>
-                  <strong>{item.title}</strong>
-                  <span>
-                    ${item.budgetUsd.toLocaleString("en-US")} · {item.start} → {item.end}
+            {state.id ? (
+              <details className="team-setup">
+                <summary>
+                  <span id="team-brief-title" className="team-setup-title">
+                    {state.brief?.title ?? brief.title}
                   </span>
-                </button>
-              ))}
-            </fieldset>
-            <p className="team-brief-summary">
-              <strong>Objectives:</strong> {brief.objectives} <strong>Audience:</strong>{" "}
-              {brief.audience} <strong>Budget:</strong> ${brief.budgetUsd.toLocaleString("en-US")}{" "}
-              <strong>Window:</strong> {brief.start} → {brief.end}
-            </p>
-            <BriefForm brief={brief} onChange={setBrief} disabled={busy} />
-            <ProviderSwitch
-              providers={roster.data?.providers ?? null}
-              value={provider}
-              onChange={chooseProvider}
-              disabled={busy}
-            />
+                  <span className="team-setup-meta">
+                    {state.brief?.brand ?? brief.brand} · $
+                    {(state.brief?.budgetUsd ?? brief.budgetUsd).toLocaleString("en-US")} ·{" "}
+                    {state.brief?.start ?? brief.start} → {state.brief?.end ?? brief.end} · on{" "}
+                    {PROVIDER_SHORT[state.infra?.provider ?? provider].name}
+                  </span>
+                  <span className="team-setup-open">Change brief or provider</span>
+                </summary>
+                <p className="arch-lede">{lede}</p>
+                {chooser}
+              </details>
+            ) : (
+              <>
+                <p className="arch-lede">{lede}</p>
+                <h3 id="team-brief-title">Choose a brief</h3>
+                {chooser}
+              </>
+            )}
             <div className="team-actions">
               <button
                 type="button"
@@ -817,13 +908,18 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                   chosen?.available === false ||
                   (mode === "lifecycle" && !runsPharmaLifecycle(brief.brand))
                 }
-                onClick={() => void run()}
+                onClick={() => {
+                  setPhasePick(null);
+                  void run();
+                }}
               >
                 {status === "running"
                   ? "The team is working…"
-                  : mode === "lifecycle"
-                    ? "Start the campaign lifecycle"
-                    : "Hand the brief to the squad"}
+                  : state.id
+                    ? "Start a new run"
+                    : mode === "lifecycle"
+                      ? "Start the campaign lifecycle"
+                      : "Hand the brief to the squad"}
               </button>
               {events.length > 0 && status !== "running" && (
                 <button
@@ -840,81 +936,81 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                   {Math.max(0, Math.round((now - (lastEventAt.current ?? now)) / 1000))} s ago
                   {working ? ` · ${working}` : ""}
                 </small>
+              ) : state.done ? (
+                <small
+                  className={`team-done-inline ${state.strategy || state.lifecycle?.finished ? "" : "stopped"}`}
+                  role="status"
+                >
+                  {state.done.summary}
+                </small>
               ) : (
                 <small>
-                  Real models on {PROVIDER_SHORT[provider].name}; a run takes a few minutes and
-                  differs each time.
+                  Real models on {providerName}; a run takes a few minutes and differs each time.
                 </small>
               )}
             </div>
           </section>
 
           {error && <ErrorNote error={error} />}
-
-          {view === "lifecycle" ? (
-            <LifecycleSteps lifecycle={state.lifecycle} />
-          ) : (
-            <ol className="team-steps" aria-label="Progress">
-              {TEAM_PHASES.map((phase) => (
-                <li
-                  key={phase.id}
-                  className={
-                    state.phases.has(phase.id)
-                      ? "reached"
-                      : busy && current?.id === phase.id
-                        ? "current"
-                        : ""
-                  }
-                  aria-current={busy && current?.id === phase.id ? "step" : undefined}
-                >
-                  <span aria-hidden="true" />
-                  {phase.label}
-                  {phase.id === "pieces" ? ` (${state.kept}/4)` : ""}
-                </li>
-              ))}
-            </ol>
+          {state.error && (
+            <p className="team-error" role="alert">
+              {state.error}
+            </p>
           )}
 
-          <div className="team-grid">
-            <div className="team-diagram">
-              <TeamHierarchy state={state} mode={view} />
-              <dl className="team-stats compact" aria-live="polite">
-                <div>
-                  <dt>Messages</dt>
-                  <dd>{state.messages.length}</dd>
-                </div>
-                <div>
-                  <dt>Spoke to spoke</dt>
-                  <dd>{state.messages.filter(isPeerMessage).length}</dd>
-                </div>
-                <div>
-                  <dt>Tool calls</dt>
-                  <dd>{state.toolCalls}</dd>
-                </div>
-                <div>
-                  <dt>Gateway denials</dt>
-                  <dd>{state.denied}</dd>
-                </div>
-                {state.done && (
-                  <>
-                    <div>
-                      <dt>Tokens</dt>
-                      <dd>{state.done.tokens.toLocaleString("en-US")}</dd>
-                    </div>
-                    <div>
-                      <dt>Elapsed</dt>
-                      <dd>{Math.round(state.done.latencyMs / 1000)} s</dd>
-                    </div>
-                  </>
-                )}
-              </dl>
-            </div>
-            <MessageFeed messages={state.messages} />
-          </div>
+          {view === "lifecycle" ? (
+            <>
+              <PhaseStepper
+                lifecycle={state.lifecycle}
+                selected={phase}
+                waiting={shown === null ? state.waiting : null}
+                following={phase === activePhase}
+                onSelect={(id) => setPhasePick(id)}
+              />
+              <div className="team-life">
+                <PhaseWorkspace
+                  phase={phase}
+                  lifecycle={state.lifecycle}
+                  artifacts={state.artifacts}
+                  waiting={shown === null ? state.waiting : null}
+                  decision={lifecycleDecision}
+                  onOpenTurn={(id) => setPhasePick(id)}
+                />
+                <aside className="team-rail" aria-label="Live activity">
+                  {diagram}
+                  <MessageFeed messages={state.messages} title="Team conversation" />
+                </aside>
+              </div>
+            </>
+          ) : (
+            <>
+              <ol className="team-steps" aria-label="Progress">
+                {TEAM_PHASES.map((item) => (
+                  <li
+                    key={item.id}
+                    className={
+                      state.phases.has(item.id)
+                        ? "reached"
+                        : busy && current?.id === item.id
+                          ? "current"
+                          : ""
+                    }
+                    aria-current={busy && current?.id === item.id ? "step" : undefined}
+                  >
+                    <span aria-hidden="true" />
+                    {item.label}
+                    {item.id === "pieces" ? ` (${state.kept}/4)` : ""}
+                  </li>
+                ))}
+              </ol>
+              <div className="team-grid">
+                {diagram}
+                <MessageFeed messages={state.messages} />
+              </div>
+            </>
+          )}
 
-          <TeamPlatform state={state} />
-
-          <AgentInspector
+          <UnderTheHood
             state={state}
             selected={selected}
             follow={follow}
@@ -925,74 +1021,130 @@ export function TeamView({ onClose }: { onClose: () => void }) {
             }}
           />
 
-          {/* Everything a run adds from here on is added below what's above, so nothing the
-              reader is looking at moves. */}
-          <DecisionLog decisions={state.decisions} />
-          <div ref={decisionSlot}>
-            {state.waiting && state.brief && shown === null && state.lifecycle && (
-              <LifecycleDecisionCard
-                key={`${state.waiting.gate}-${state.decisions.length}`}
-                waiting={state.waiting}
-                lifecycle={state.lifecycle}
-                brief={state.brief}
-                decisions={state.decisions}
-                busy={busy}
-                onDecide={(decision, note, choice) => void decide(decision, note, choice)}
-              />
-            )}
-            {state.waiting && state.brief && shown === null && !state.lifecycle && (
-              <DecisionCard
-                waiting={state.waiting}
-                strategy={state.strategy}
-                brief={state.brief}
-                decisions={state.decisions}
-                busy={busy}
-                onDecide={(decision, note) => void decide(decision, note)}
-              />
-            )}
-          </div>
-          {view === "lifecycle" && (
-            <CampaignFile artifacts={state.artifacts} lifecycle={state.lifecycle} />
-          )}
-          {state.conflicts.length > 0 && (
-            <section className="team-conflicts" aria-labelledby="team-conflicts-title">
-              <h3 id="team-conflicts-title">Clashes the lead had to resolve</h3>
-              <ul>
-                {state.conflicts.map((conflict) => (
-                  <li key={conflict.id}>
-                    <code>{conflict.id}</code> {conflict.detail}{" "}
-                    <small>
-                      ({TEAM_PARTY_LABELS[conflict.between[0]]} and{" "}
-                      {TEAM_PARTY_LABELS[conflict.between[1]]})
-                    </small>
-                  </li>
-                ))}
-              </ul>
-            </section>
+          {/* The squad's decision is added below what's above, so nothing the reader is looking
+              at moves; the lifecycle's sits in its phase's workspace. */}
+          {view !== "lifecycle" && (
+            <div ref={decisionSlot}>
+              {state.waiting && state.brief && shown === null && !state.lifecycle && (
+                <DecisionCard
+                  waiting={state.waiting}
+                  strategy={state.strategy}
+                  brief={state.brief}
+                  decisions={state.decisions}
+                  busy={busy}
+                  onDecide={(decision, note) => void decide(decision, note)}
+                />
+              )}
+            </div>
           )}
 
           {state.waiting && shown === null && !busy && (
-            <button type="button" className="team-turn-pill" onClick={openDecision}>
+            <button
+              type="button"
+              className="team-turn-pill"
+              onClick={view === "lifecycle" ? openTurn : openDecision}
+            >
               Your turn: {TEAM_GATES[state.waiting.gate].label} →
             </button>
-          )}
-          {state.error && (
-            <p className="team-error" role="alert">
-              {state.error}
-            </p>
-          )}
-          {state.done && (
-            <p
-              className={`team-done ${state.strategy || state.lifecycle?.finished ? "" : "stopped"}`}
-              role="status"
-            >
-              {state.done.summary}
-            </p>
           )}
           {state.strategy && state.brief && (
             <StrategyView strategy={state.strategy} brief={state.brief} />
           )}
         </div>
+      </div>
+    </section>
+  );
+}
+
+type HoodTab = "agents" | "infra" | "semantic" | "evals" | "decisions";
+
+/**
+ * Everything under the agents, in one panel: each agent's grants and calls, the infrastructure,
+ * the semantic layer, the scorecard, and the decisions people took. The tab changes only when the
+ * reader picks one.
+ */
+function UnderTheHood({
+  state,
+  selected,
+  follow,
+  onFollow,
+  onSelect,
+}: {
+  state: ReturnType<typeof foldTeam>;
+  selected: TeamAgentId;
+  follow: boolean;
+  onFollow: (follow: boolean) => void;
+  onSelect: (id: TeamAgentId) => void;
+}) {
+  const [tab, setTab] = useState<HoodTab>("agents");
+  const tabs: Array<[HoodTab, string]> = [
+    ["agents", "Agents"],
+    ["infra", "Agent infrastructure"],
+    ["semantic", "Semantic layer"],
+    ["evals", `Evals${state.scorecard ? ` · ${state.scorecard.overall}` : ""}`],
+    [
+      "decisions",
+      `Decisions${state.decisions.length ? ` (${state.decisions.length})` : ""}${state.conflicts.length ? ` · ${state.conflicts.length} clashes` : ""}`,
+    ],
+  ];
+  return (
+    <section className="team-hood" aria-labelledby="team-hood-title">
+      <header>
+        <h3 id="team-hood-title">Under the hood</h3>
+        <div className="arch-tabs small" role="tablist" aria-label="Under the hood">
+          {tabs.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </header>
+      <div role="tabpanel">
+        {tab === "agents" ? (
+          <AgentInspector
+            state={state}
+            selected={selected}
+            follow={follow}
+            onFollow={onFollow}
+            onSelect={onSelect}
+          />
+        ) : tab === "infra" ? (
+          <InfrastructurePanel state={state} />
+        ) : tab === "semantic" ? (
+          <SemanticLayerPanel state={state} />
+        ) : tab === "evals" ? (
+          <EvalsPanel state={state} />
+        ) : (
+          <>
+            {state.decisions.length === 0 ? (
+              <p className="arch-note">No person has decided anything on this run yet.</p>
+            ) : (
+              <DecisionLog decisions={state.decisions} />
+            )}
+            {state.conflicts.length > 0 && (
+              <div className="team-conflicts">
+                <h4>Clashes the lead had to resolve</h4>
+                <ul>
+                  {state.conflicts.map((conflict) => (
+                    <li key={conflict.id}>
+                      <code>{conflict.id}</code> {conflict.detail}{" "}
+                      <small>
+                        ({TEAM_PARTY_LABELS[conflict.between[0]]} and{" "}
+                        {TEAM_PARTY_LABELS[conflict.between[1]]})
+                      </small>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </section>
   );

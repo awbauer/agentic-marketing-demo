@@ -1064,7 +1064,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
         title: "A pharma campaign, focus to analytics, with MLR",
         summary:
           "Seven agents take a prescription brand's campaign through six phases; people decide at nine points, including Medical, Legal and Regulatory review.",
-        body: `The **Pharma lifecycle** mode of the Campaign squad page runs a prescription brand's campaign end to end: business focus, ideation, content and MLR review, audience selection, publishing and analytics. Agents do every piece of work; people take the decisions a brand team, an MLR committee and an operations team would. The page lists every step, agent or person, and marks where the run is.
+        body: `The **Pharma lifecycle** mode of the Campaign squad page runs a prescription brand's campaign end to end: business focus, ideation, content and MLR review, audience selection, publishing and analytics. Agents do every piece of work; people take the decisions a brand team, an MLR committee and an operations team would. The page shows one phase at a time. A stepper across the top lists all six phases, with a mark for each agent step and each of your decisions, and stays in view as you scroll. Below it, the chosen phase shows its documented steps, your decision when it's your turn there, and what the phase produced: each output is a one-line summary that opens to the full detail, with earlier versions kept. The team map and the conversation sit beside it. You can open any phase, before or during a run; the page moves to the active phase only after you decide something. Agents, infrastructure, the semantic layer, evals and the decision log share one tabbed panel underneath.
 
 **The path, step by step.**
 - **Business focus.** The audience analyst reads the segments, competitors, signals and last year's results and proposes two or three focus areas, each citing data ids and a success measure (\`propose_focus_areas\`). The **brand lead** chooses one.
@@ -1085,8 +1085,9 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 **What it does not do.** No channel is called and no Form 2253 is filed; the results, the HCP universe and its consent rates are fictional. One person plays every role.`,
         inDemo: [
           "Campaign squad → What the team runs → Pharma lifecycle → Start the campaign lifecycle",
-          "Campaign squad → The lifecycle, step by step (each agent and person step, and where the run is)",
-          "Campaign squad → Campaign file (one tab per phase)",
+          "Campaign squad → the phase stepper (each agent step and decision, and where the run is)",
+          "Campaign squad → a phase's workspace: its steps, your decision, and what it produced",
+          "Campaign squad → Under the hood (agents, infrastructure, semantic layer, evals, decisions)",
           "packages/architecture/src/team-pharma.ts",
           "apps/edge/src/team/lifecycle.ts, lifecycle-workers.ts",
           "docs/decisions/ADR-015-pharma-campaign-lifecycle.md",

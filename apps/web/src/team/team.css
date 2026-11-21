@@ -1343,3 +1343,397 @@
   overflow: auto;
   font-size: 11px;
 }
+
+/* The consolidated layout: compact setup, a sticky phase stepper, the phase workspace beside a
+   live rail, and one tabbed panel for everything under the hood. */
+.team-view .arch-main {
+  container-type: inline-size;
+  container-name: team;
+}
+.team-view .section-header .arch-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.team-view .section-header .team-mode {
+  margin: 0;
+}
+.team-view .section-header .team-switch label {
+  padding: 6px 12px;
+}
+.team-setup > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.team-setup > summary::-webkit-details-marker {
+  display: none;
+}
+.team-setup-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+.team-setup-meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+.team-setup-open {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--forest);
+  text-decoration: underline;
+}
+.team-setup[open] > summary {
+  margin-bottom: 10px;
+}
+.team-setup[open] .team-setup-open {
+  visibility: hidden;
+}
+.team-done-inline {
+  color: var(--forest);
+  font-weight: 600;
+}
+.team-done-inline.stopped {
+  color: #8a5a12;
+}
+
+/* The stepper: the whole path in one row, kept in view while the reader scrolls. */
+.team-stepper {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.team-stepper ol {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(112px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+}
+.team-stepper button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--paper);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+.team-stepper button:hover {
+  border-color: var(--line);
+}
+.team-stepper button:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+.team-stepper button[aria-pressed="true"] {
+  border-color: var(--forest);
+  background: #f4fae0;
+  box-shadow: inset 0 0 0 1px var(--forest);
+}
+.team-stepper-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.team-stepper-title {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.team-stepper .is-done .team-phase-number {
+  background: var(--forest);
+  color: #fff;
+}
+.team-stepper .is-active .team-phase-number {
+  background: var(--amber);
+  color: #fff;
+}
+.team-stepper-dots {
+  display: flex;
+  gap: 4px;
+}
+.team-stepper-dots i,
+.team-stepper-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--team-director);
+  border-radius: 2px;
+  background: transparent;
+}
+.team-stepper-dots i.person,
+.team-stepper-legend i.person {
+  border-color: var(--amber);
+  border-radius: 50%;
+}
+.team-stepper-dots i.is-done.agent {
+  background: var(--team-director);
+}
+.team-stepper-dots i.is-done.person {
+  background: var(--amber);
+}
+.team-stepper-dots i.is-now {
+  background: var(--team-live);
+  animation: team-pulse 1.4s ease-in-out infinite;
+}
+.team-stepper-note {
+  font-size: 11px;
+  color: var(--muted);
+}
+.team-stepper .is-turn button {
+  border-color: var(--amber);
+  background: #fff6e0;
+}
+.team-stepper .is-turn .team-stepper-note {
+  color: #7a4d12;
+  font-weight: 700;
+}
+.team-stepper-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 6px 4px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.team-stepper-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.team-stepper-legend .text-button {
+  margin-left: auto;
+  font-size: 12px;
+}
+@keyframes team-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* The phase workspace and the live rail. */
+.team-life {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+@container team (min-width: 880px) {
+  .team-life {
+    grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr);
+  }
+  .team-rail {
+    position: sticky;
+    top: 112px;
+    max-height: calc(100dvh - 190px);
+  }
+  .team-rail .team-feed {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+}
+.team-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.team-rail .team-diagram {
+  padding: 10px;
+}
+.team-rail .team-stats {
+  margin-top: 6px;
+}
+.team-rail .team-feed {
+  max-height: 420px;
+}
+.team-workspace {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  min-width: 0;
+}
+.team-workspace > header .kicker {
+  margin: 0;
+}
+.team-workspace > header h3 {
+  margin: 2px 0 0;
+  font-size: 20px;
+}
+.team-turn-banner {
+  padding: 10px 12px;
+  border: 1px solid var(--amber);
+  border-radius: 8px;
+  background: #fff6e0;
+  color: #7a4d12;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.team-step-track {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.team-step-card {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--team-director);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 12px;
+}
+.team-step-card.person {
+  border-top-color: var(--amber);
+}
+.team-step-card header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.team-step-card.is-done {
+  opacity: 0.8;
+}
+.team-step-card.is-now {
+  background: #fdf3c9;
+  box-shadow: 0 0 0 2px var(--amber);
+  opacity: 1;
+}
+.team-step-card code {
+  font-size: 11px;
+}
+.team-step-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.team-step-card p.clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.team-step-card .text-button {
+  justify-self: start;
+  font-size: 11px;
+}
+.team-outputs h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.team-output {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.team-output + .team-output {
+  margin-top: 8px;
+}
+.team-output > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.team-output > summary span {
+  flex: 1 1 260px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.team-output > summary small {
+  color: var(--muted);
+}
+.team-output[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.team-output > :not(summary) {
+  margin: 10px 12px;
+}
+.team-output-history > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.team-decision-slot {
+  scroll-margin-top: 120px;
+}
+
+/* Under the hood: one panel, five views. */
+.team-hood {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  min-width: 0;
+}
+.team-hood > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+.team-hood > header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.team-hood .team-inspector {
+  padding: 0;
+  border: 0;
+}
+.team-hood .team-conflicts {
+  margin-top: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .team-stepper-dots i.is-now {
+    animation: none;
+  }
+}
+/* Screen-reader labels inside the feed are positioned absolutely; contain them in the scrolling
+   list, or they stretch the page's scroll height by the list's whole length. */
+.team-messages {
+  position: relative;
+}
+
+/* The rail's numbers: small enough to sit under the map without pushing the conversation down. */
+.team-rail .team-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.team-rail .team-stats > div {
+  padding: 4px 8px;
+}
+.team-rail .team-stats dd {
+  font-size: 15px;
+}

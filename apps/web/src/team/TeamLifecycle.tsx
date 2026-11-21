@@ -1,7 +1,7 @@
-// The pharma lifecycle on the page: the documented path (every agent step and every person's step,
-// phase by phase, with where the run is now), the card a person decides on, and the campaign file
-// of everything the agents and the system produced. Nothing here moves on its own: tabs change
-// only when the reader picks one, and new work lands inside the tab it belongs to.
+// The pharma lifecycle on the page: a stepper with the whole documented path and where the run is,
+// a workspace for one phase at a time (its steps, the decision when it's the reader's turn there,
+// and what it produced), and the views of each output. Nothing moves on its own: the workspace
+// changes phase only when the reader picks one or has just decided something.
 import {
   type ApprovedJob,
   type AudienceLine,
@@ -21,13 +21,14 @@ import {
   type PerformanceReport,
   type PharmaModule,
   type PhaseStep,
+  phaseOfGate,
   type ResultLine,
   stepDone,
   TEAM_GATES,
   TEAM_PARTY_LABELS,
   type TeamEvent,
 } from "@northstar/architecture";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ApprovedAssets } from "./TeamWork";
 
 type Artifact = Extract<TeamEvent, { type: "artifact" }>;
@@ -36,80 +37,6 @@ type Decided = Extract<TeamEvent, { type: "decided" }>;
 
 const usd = (value: number) => `$${Math.round(value).toLocaleString("en-US")}`;
 const num = (value: number) => value.toLocaleString("en-US");
-
-/** The documented path, with each step marked done, now or to come. */
-export function LifecycleSteps({ lifecycle }: { lifecycle: LifecycleState | null }) {
-  const now = lifecycle ? currentStep(lifecycle) : null;
-  const phaseIndex = lifecycle
-    ? PHARMA_PHASES.findIndex((phase) => phase.id === lifecycle.phase)
-    : -1;
-  return (
-    <section className="team-lifecycle" aria-labelledby="team-lifecycle-title">
-      <header>
-        <h3 id="team-lifecycle-title">The lifecycle, step by step</h3>
-        <p className="arch-note">
-          <span className="team-step-key agent">Agent</span> steps are done by the team’s agents and
-          checked by code; <span className="team-step-key person">Person</span> steps wait for you,
-          acting as the role named. A person who asks for changes sends the phase back to its first
-          step.
-        </p>
-      </header>
-      <ol className="team-lifecycle-phases">
-        {PHARMA_PHASES.map((phase, index) => {
-          const reached = lifecycle && (lifecycle.finished || index < phaseIndex);
-          const active = lifecycle && !lifecycle.finished && index === phaseIndex;
-          const round = lifecycle?.rounds[phase.id] ?? 1;
-          return (
-            <li
-              key={phase.id}
-              className={`team-lifecycle-phase${reached ? " reached" : ""}${active ? " active" : ""}`}
-              aria-current={active ? "step" : undefined}
-            >
-              <h4>
-                <span className="team-phase-number">{index + 1}</span> {phase.title}
-                {round > 1 && <small className="team-round">round {round}</small>}
-              </h4>
-              <ol className="team-lifecycle-steps">
-                {(phase.steps as readonly PhaseStep[]).map((step) => {
-                  const done = Boolean(
-                    reached || (active && lifecycle && stepDone(lifecycle, step)),
-                  );
-                  const isNow = active && now === step;
-                  const who =
-                    step.kind === "agent"
-                      ? TEAM_PARTY_LABELS[step.agent]
-                      : TEAM_GATES[step.gate].decider;
-                  return (
-                    <li
-                      key={step.kind === "agent" ? step.tool : step.gate}
-                      className={`team-step ${step.kind}${done ? " done" : ""}${isNow ? " now" : ""}`}
-                    >
-                      <span className={`team-step-key ${step.kind}`}>
-                        {step.kind === "agent" ? "Agent" : "Person"}
-                      </span>
-                      <strong>{who}</strong>
-                      {step.kind === "agent" && <code>{step.tool}</code>}
-                      <span className="team-step-state">
-                        {done
-                          ? "✓ done"
-                          : isNow
-                            ? step.kind === "person"
-                              ? "your turn"
-                              : "working"
-                            : ""}
-                      </span>
-                      <p>{step.does}</p>
-                    </li>
-                  );
-                })}
-              </ol>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
-  );
-}
 
 // Artifacts -----------------------------------------------------------------------------------
 
@@ -476,78 +403,6 @@ export function ArtifactView({
 const by = (artifact: Artifact) =>
   artifact.by === "system" ? "the system" : TEAM_PARTY_LABELS[artifact.by];
 
-/**
- * The campaign file, one tab per phase. The tabs are always the same six and change only when the
- * reader picks one, so work arriving in another phase never moves what they're reading.
- */
-export function CampaignFile({
-  artifacts,
-  lifecycle,
-}: {
-  artifacts: readonly Artifact[];
-  lifecycle: LifecycleState | null;
-}) {
-  const [tab, setTab] = useState<string>("focus");
-  const inTab = artifacts.filter((artifact) => artifact.phase === tab);
-  const names = [...new Set(inTab.map((artifact) => artifact.name))];
-  return (
-    <section className="team-file" aria-labelledby="team-file-title">
-      <h3 id="team-file-title">Campaign file</h3>
-      <div className="arch-tabs small" role="tablist" aria-label="Phases">
-        {PHARMA_PHASES.map((phase) => {
-          const count = artifacts.filter((artifact) => artifact.phase === phase.id).length;
-          return (
-            <button
-              key={phase.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === phase.id}
-              onClick={() => setTab(phase.id)}
-            >
-              {phase.title}
-              {count ? ` (${count})` : ""}
-            </button>
-          );
-        })}
-      </div>
-      <div className="team-file-body" role="tabpanel">
-        {names.length === 0 ? (
-          <p className="arch-note">Nothing in this phase yet.</p>
-        ) : (
-          names.map((name) => {
-            const versions = inTab.filter((artifact) => artifact.name === name);
-            const latest = versions.at(-1) as Artifact;
-            return (
-              <article key={name} className="team-file-item">
-                <h4>
-                  {ARTIFACT_TITLES[name] ?? name}{" "}
-                  <small>
-                    version {latest.version} · round {latest.round} · by {by(latest)}
-                  </small>
-                </h4>
-                <ArtifactView artifact={latest} choices={lifecycle?.choices} />
-                {versions.length > 1 && (
-                  <details>
-                    <summary>Earlier versions ({versions.length - 1})</summary>
-                    {versions.slice(0, -1).map((item) => (
-                      <div key={item.version} className="team-file-earlier">
-                        <h5>
-                          Version {item.version} · round {item.round}
-                        </h5>
-                        <ArtifactView artifact={item} />
-                      </div>
-                    ))}
-                  </details>
-                )}
-              </article>
-            );
-          })
-        )}
-      </div>
-    </section>
-  );
-}
-
 // The decision --------------------------------------------------------------------------------
 
 /** What each person checks, from the artifacts the step before them produced. */
@@ -697,6 +552,300 @@ export function LifecycleDecisionCard({
           {choice ? "None of these: ask again" : "Ask for changes"}
         </button>
         <small>Sent as {PERSONA_LABELS[waiting.persona]}; the gateway checks the role.</small>
+      </div>
+    </section>
+  );
+}
+
+// The consolidated layout -------------------------------------------------------------------------
+// One phase at a time: a stepper across the top shows the whole path and where the run is; the
+// workspace below shows the chosen phase's documented steps, the decision when it's the reader's
+// turn there, and what the phase produced. Each output is a summary line that opens to its detail.
+
+type PhaseId = (typeof PHARMA_PHASES)[number]["id"];
+
+/** Where each phase stands: done, active (with its round), or still to come. */
+function phaseStatus(lifecycle: LifecycleState | null, index: number) {
+  if (!lifecycle) return "todo" as const;
+  const active = PHARMA_PHASES.findIndex((phase) => phase.id === lifecycle.phase);
+  if (lifecycle.finished || index < active) return "done" as const;
+  return index === active ? ("active" as const) : ("todo" as const);
+}
+
+function stepState(
+  lifecycle: LifecycleState | null,
+  index: number,
+  step: PhaseStep,
+): "done" | "now" | "todo" {
+  const status = phaseStatus(lifecycle, index);
+  if (status === "done") return "done";
+  if (status !== "active" || !lifecycle) return "todo";
+  if (stepDone(lifecycle, step)) return "done";
+  return currentStep(lifecycle) === step ? "now" : "todo";
+}
+
+/** The whole path in one row; a phase opens in the workspace when the reader picks it. */
+export function PhaseStepper({
+  lifecycle,
+  selected,
+  waiting,
+  following,
+  onSelect,
+}: {
+  lifecycle: LifecycleState | null;
+  selected: PhaseId;
+  waiting: Waiting | null;
+  following: boolean;
+  onSelect: (phase: PhaseId) => void;
+}) {
+  const turn = waiting ? phaseOfGate(waiting.gate)?.id : undefined;
+  return (
+    <nav className="team-stepper" aria-label="Lifecycle phases">
+      <ol>
+        {PHARMA_PHASES.map((phase, index) => {
+          const status = phaseStatus(lifecycle, index);
+          const round = lifecycle?.rounds[phase.id] ?? 1;
+          return (
+            <li key={phase.id} className={`is-${status}${turn === phase.id ? " is-turn" : ""}`}>
+              <button
+                type="button"
+                aria-pressed={selected === phase.id}
+                aria-current={status === "active" ? "step" : undefined}
+                onClick={() => onSelect(phase.id)}
+              >
+                <span className="team-stepper-head">
+                  <span className="team-phase-number" aria-hidden="true">
+                    {status === "done" ? "✓" : index + 1}
+                  </span>
+                  <span className="team-stepper-title">{phase.title}</span>
+                </span>
+                <span className="team-stepper-dots" aria-hidden="true">
+                  {(phase.steps as readonly PhaseStep[]).map((step) => (
+                    <i
+                      key={step.kind === "agent" ? step.tool : step.gate}
+                      className={`${step.kind} is-${stepState(lifecycle, index, step)}`}
+                    />
+                  ))}
+                </span>
+                <span className="team-stepper-note">
+                  {turn === phase.id
+                    ? "Your turn"
+                    : status === "done"
+                      ? "Done"
+                      : status === "active"
+                        ? round > 1
+                          ? `Round ${round}`
+                          : "In progress"
+                        : `${phase.steps.length} steps`}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <p className="team-stepper-legend">
+        <span>
+          <i className="agent" /> agent step
+        </span>
+        <span>
+          <i className="person" /> your decision
+        </span>
+        {!following && lifecycle && !lifecycle.finished && (
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => onSelect(lifecycle.phase as PhaseId)}
+          >
+            Go to the active phase
+          </button>
+        )}
+      </p>
+    </nav>
+  );
+}
+
+/** One line that says what an output holds, so a closed item still tells the story. */
+function gist(artifact: Artifact): string {
+  const data = artifact.data as Record<string, unknown>;
+  switch (artifact.name) {
+    case "propose_focus_areas":
+      return `${(data.areas as unknown[]).length} focus areas, each citing its data`;
+    case "propose_concepts":
+      return `${(data.concepts as unknown[]).length} concepts on approved claims and images`;
+    case "draft_modules": {
+      const modules = data.modules as PharmaModule[];
+      return `${modules.map((module) => module.id).join(" and ")}: ${modules.reduce((sum, module) => sum + module.claims.length, 0)} referenced claims, fair balance attached`;
+    }
+    case "submit_mlr_job": {
+      const job = data as unknown as MlrJob;
+      return `Job ${job.jobCode}, round ${job.round}: ${job.checks.filter((check) => check.ok).length} of ${job.checks.length} pre-review checks passed`;
+    }
+    case "mlr_approval": {
+      const approved = data as unknown as ApprovedJob;
+      return `${approved.documentNumber}, expires ${approved.expiresOn}`;
+    }
+    case "build_audience": {
+      const totals = data.totals as Record<string, number>;
+      return `${num(totals.prescribers ?? 0)} prescribers, ${num(totals.emailReachable ?? 0)} email-consented, ${num(totals.doNotContact ?? 0)} do-not-contact removed`;
+    }
+    case "schedule_deployment":
+      return `${(data.lines as unknown[]).length} placements, ${usd(Number(data.totalUsd ?? 0))}`;
+    case "prepare_form_2253":
+      return `Submit at first use, ${String(data.submitAtFirstUse)}`;
+    case "campaign_results":
+      return `${(data.lines as unknown[]).length} result lines over ${String(data.days)} days (simulated)`;
+    case "report_performance":
+      return `Recommends ${String(data.recommendation)}`;
+    default:
+      return "";
+  }
+}
+
+function StepCard({
+  step,
+  state,
+  waitingHere,
+}: {
+  step: PhaseStep;
+  state: "done" | "now" | "todo";
+  /** The run is waiting on this person now (not just stopped before them). */
+  waitingHere: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const who = step.kind === "agent" ? TEAM_PARTY_LABELS[step.agent] : TEAM_GATES[step.gate].decider;
+  return (
+    <li className={`team-step-card ${step.kind} is-${state}`}>
+      <header>
+        <span className={`team-step-key ${step.kind}`}>
+          {step.kind === "agent" ? "Agent" : "You"}
+        </span>
+        <strong>{who}</strong>
+        <span className="team-step-state">
+          {state === "done"
+            ? "✓"
+            : state === "now"
+              ? step.kind === "person"
+                ? waitingHere
+                  ? "your turn"
+                  : "next"
+                : "working"
+              : ""}
+        </span>
+      </header>
+      {step.kind === "agent" && <code>{step.tool}</code>}
+      <p className={open ? "" : "clamped"}>{step.does}</p>
+      <button
+        type="button"
+        className="text-button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+      >
+        {open ? "Less" : "More"}
+      </button>
+    </li>
+  );
+}
+
+/**
+ * The chosen phase: its documented steps, the decision when it waits on the reader here, and its
+ * outputs. Outputs are closed to a summary line while a decision is open (the card shows what to
+ * check), and open otherwise; whatever the reader opens stays open.
+ */
+export function PhaseWorkspace({
+  phase,
+  lifecycle,
+  artifacts,
+  waiting,
+  decision,
+  onOpenTurn,
+}: {
+  phase: PhaseId;
+  lifecycle: LifecycleState | null;
+  artifacts: readonly Artifact[];
+  waiting: Waiting | null;
+  decision: ReactNode;
+  onOpenTurn: (phase: PhaseId) => void;
+}) {
+  const index = PHARMA_PHASES.findIndex((item) => item.id === phase);
+  const spec = PHARMA_PHASES[index];
+  if (!spec) return null;
+  const status = phaseStatus(lifecycle, index);
+  const round = lifecycle?.rounds[phase] ?? 1;
+  const turn = waiting ? phaseOfGate(waiting.gate)?.id : undefined;
+  const here = artifacts.filter((artifact) => artifact.phase === phase);
+  const names = [...new Set(here.map((artifact) => artifact.name))];
+  return (
+    <section className="team-workspace" aria-labelledby="team-workspace-title">
+      <header>
+        <p className="kicker">
+          Phase {index + 1} of {PHARMA_PHASES.length} ·{" "}
+          {status === "done" ? "done" : status === "active" ? "in progress" : "to come"}
+          {round > 1 ? ` · round ${round}` : ""}
+        </p>
+        <h3 id="team-workspace-title">{spec.title}</h3>
+      </header>
+      {turn && turn !== phase && (
+        <button
+          type="button"
+          className="team-turn-banner"
+          onClick={() => onOpenTurn(turn as PhaseId)}
+        >
+          It's your turn in {PHARMA_PHASES.find((item) => item.id === turn)?.title}:{" "}
+          {waiting?.title} →
+        </button>
+      )}
+      <ol className="team-step-track" aria-label={`${spec.title}: steps`}>
+        {(spec.steps as readonly PhaseStep[]).map((step) => (
+          <StepCard
+            key={step.kind === "agent" ? step.tool : step.gate}
+            step={step}
+            state={stepState(lifecycle, index, step)}
+            waitingHere={step.kind === "person" && waiting?.gate === step.gate}
+          />
+        ))}
+      </ol>
+      {turn === phase && decision}
+      <div className="team-outputs">
+        <h4>What this phase produced</h4>
+        {names.length === 0 ? (
+          <p className="arch-note">
+            {status === "todo" ? "Nothing yet: this phase hasn't started." : "Nothing saved yet."}
+          </p>
+        ) : (
+          names.map((name) => {
+            const versions = here.filter((artifact) => artifact.name === name);
+            const latest = versions.at(-1) as Artifact;
+            return (
+              <details
+                key={`${name}-${latest.version}`}
+                className="team-output"
+                open={turn !== phase}
+              >
+                <summary>
+                  <strong>{ARTIFACT_TITLES[name] ?? name}</strong>
+                  <span>{gist(latest)}</span>
+                  <small>
+                    v{latest.version} · by {by(latest)}
+                  </small>
+                </summary>
+                <ArtifactView artifact={latest} choices={lifecycle?.choices} />
+                {versions.length > 1 && (
+                  <details className="team-output-history">
+                    <summary>Earlier versions ({versions.length - 1})</summary>
+                    {versions.slice(0, -1).map((item) => (
+                      <div key={item.version} className="team-file-earlier">
+                        <h5>
+                          Version {item.version} · round {item.round}: {gist(item)}
+                        </h5>
+                        <ArtifactView artifact={item} />
+                      </div>
+                    ))}
+                  </details>
+                )}
+              </details>
+            );
+          })
+        )}
       </div>
     </section>
   );
