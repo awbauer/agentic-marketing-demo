@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-21T13:44:50.658Z",
+  "generatedAt": "2026-11-21T21:53:21.526Z",
   "status": "passed",
   "baseRef": "origin/main",
-  "mergeBase": "c76f4b8e86bc181083a01eac93df7c5a3ff8ca89",
+  "mergeBase": "1f004da60e7573edaa5dda99df897eaca51f6d1e",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,10 +13,10 @@
   },
   "drift": [
     {
-      "section": "campaign-squad",
-      "status": "updated",
+      "section": "ui",
+      "status": "reviewed",
       "paths": [
-        "packages/architecture/src/team-evals.ts"
+        "apps/web/src/App.tsx"
       ]
     }
   ],
