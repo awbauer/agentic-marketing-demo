@@ -1,6 +1,7 @@
 // Each spoke's saved work, and the proposal the client gets, drawn from the typed outputs rather
 // than raw JSON.
 import {
+  ASSET_LIBRARY,
   type CampaignBrief,
   type CampaignStrategy,
   type CopyPackage,
@@ -93,16 +94,59 @@ function Creative({ work, brief }: { work: CreativeConcept; brief: CampaignBrief
       <p>
         <strong>Look:</strong> {work.visualDirection} <strong>Mood:</strong> {work.mood}
       </p>
-      <h5>Images to make</h5>
-      <ul>
-        {work.keyVisuals.map((visual) => (
-          <li key={`${visual.format}-${visual.description}`}>
-            <strong>{visual.format}:</strong> {visual.description}
-          </li>
-        ))}
-      </ul>
+      <h5>Approved assets used</h5>
+      <ApprovedAssets picks={work.assets ?? []} />
       <p className="arch-note">{work.rationale}</p>
     </div>
+  );
+}
+
+/**
+ * The approved images a concept uses, as the asset library holds them: its library ID, its
+ * approval and its rights. The swatch stands in for the image; nothing is generated.
+ */
+export function ApprovedAssets({
+  picks,
+}: {
+  picks: ReadonlyArray<{ assetId: string; use: string }>;
+}) {
+  if (picks.length === 0) return <p className="arch-note">No assets chosen.</p>;
+  return (
+    <ul className="team-assets">
+      {picks.map((pick) => {
+        const asset = ASSET_LIBRARY.find((item) => item.id === pick.assetId);
+        if (!asset)
+          return (
+            <li key={pick.assetId}>
+              <code>{pick.assetId}</code> (not in the library)
+            </li>
+          );
+        return (
+          <li key={pick.assetId}>
+            <div
+              className="team-asset-swatch"
+              style={{
+                background: `linear-gradient(135deg, ${asset.palette[0]}, ${asset.palette[1]})`,
+              }}
+              role="img"
+              aria-label={asset.alt}
+            >
+              <span>{asset.kind}</span>
+            </div>
+            <div>
+              <strong>{asset.title}</strong>
+              <small>{asset.alt}</small>
+              <small>
+                {asset.source} {asset.sourceId} · {asset.approval.status}
+                {asset.approval.id ? ` ${asset.approval.id}` : ""}
+                {asset.rightsUntil ? ` · rights to ${asset.rightsUntil}` : ""}
+              </small>
+              {pick.use && <small className="team-asset-use">Used for: {pick.use}</small>}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

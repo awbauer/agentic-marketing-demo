@@ -1,166 +1,74 @@
 {
-  "generatedAt": "2026-09-29T19:27:12.903Z",
+  "generatedAt": "2026-11-21T02:57:43.313Z",
   "status": "passed",
   "baseRef": "origin/main",
-  "mergeBase": "b1c62d067164b14b754ec7efa392278e9293f26b",
+  "mergeBase": "fd6c52b2fcfa65a2dc4f14fcb89505dcf06087ae",
   "inventory": {
-    "Tool": 40,
+    "Tool": 109,
     "Write action": 5,
-    "Graph node": 34,
-    "Graph relationship": 53,
-    "Operator control": 3,
+    "Graph node": 41,
+    "Graph relationship": 65,
+    "Operator control": 4,
     "Salesforce component": 10
   },
   "drift": [
     {
-      "section": "campaign-context",
-      "status": "updated",
+      "section": "gateway",
+      "status": "reviewed",
       "paths": [
-        "apps/edge/src/campaign-context/open-meteo.ts",
-        "apps/edge/src/campaign-context/restaurant-profile.ts",
-        "packages/knowledge-graph/src/coastline.ts"
+        "apps/edge/src/architecture/store.ts"
       ]
     },
     {
-      "section": "mcp",
+      "section": "campaign-squad",
       "status": "updated",
       "paths": [
-        "apps/edge/src/campaign-context/server.ts"
+        "apps/edge/src/team/api.ts",
+        "apps/edge/src/team/director.ts",
+        "apps/edge/src/team/evals.ts",
+        "apps/edge/src/team/lifecycle-workers.ts",
+        "apps/edge/src/team/lifecycle.ts",
+        "apps/edge/src/team/run.ts",
+        "apps/edge/src/team/scripted.ts",
+        "apps/edge/src/team/specialists.ts",
+        "apps/web/src/team/TeamHierarchy.tsx",
+        "apps/web/src/team/TeamLifecycle.tsx",
+        "apps/web/src/team/TeamPeople.tsx",
+        "apps/web/src/team/TeamPlatform.tsx",
+        "apps/web/src/team/TeamView.tsx",
+        "apps/web/src/team/TeamWork.tsx",
+        "apps/web/src/team/team-state.ts",
+        "apps/web/src/team/team.css",
+        "docs/decisions/ADR-014-squad-people-and-evals.md",
+        "packages/architecture/src/team-evals.ts",
+        "packages/architecture/src/team-services.ts",
+        "packages/architecture/src/team.ts",
+        "scripts/run-team-evals.mjs"
       ]
     },
     {
-      "section": "use-cases",
+      "section": "pharma-lifecycle",
       "status": "updated",
       "paths": [
-        "apps/edge/src/campaign-context/store-inventory.ts",
-        "apps/edge/src/external-services/fed-news.ts",
-        "apps/edge/src/external-services/nager-date.ts",
-        "apps/edge/src/external-services/nws-alerts.ts",
-        "apps/edge/src/external-services/server.ts",
-        "apps/edge/src/inventory-risk.ts",
-        "apps/web/src/usecases/UseCasesView.tsx",
-        "apps/web/src/usecases/catalog.ts",
-        "apps/web/src/usecases/usecases.css",
-        "packages/knowledge-graph/src/harborstone.ts",
-        "salesforce/force-app/main/default/classes/NorthstarCreateInventoryCase.cls"
+        "apps/edge/src/team/lifecycle-workers.ts",
+        "apps/edge/src/team/lifecycle.ts",
+        "apps/web/src/team/TeamLifecycle.tsx",
+        "docs/decisions/ADR-015-pharma-campaign-lifecycle.md",
+        "packages/architecture/src/team-pharma.ts"
       ]
     },
     {
-      "section": "reliability",
-      "status": "updated",
+      "section": "object-model",
+      "status": "reviewed",
       "paths": [
-        "apps/edge/src/forced-tool-middleware.ts",
-        "apps/edge/src/turn-trace.ts"
+        "packages/architecture/src/index.ts"
       ]
     },
     {
-      "section": "marketing-cloud",
+      "section": "lifecycle",
       "status": "updated",
       "paths": [
-        "apps/edge/src/marketing-writes.ts"
-      ]
-    },
-    {
-      "section": "orchestrator",
-      "status": "updated",
-      "paths": [
-        "apps/edge/src/orchestrator.ts"
-      ]
-    },
-    {
-      "section": "routing",
-      "status": "updated",
-      "paths": [
-        "apps/edge/src/turn-policy.ts"
-      ]
-    },
-    {
-      "section": "workspace",
-      "status": "updated",
-      "paths": [
-        "apps/edge/src/working-set.ts",
-        "apps/web/src/ActionCards.tsx",
-        "apps/web/src/WorkspacePanel.tsx"
-      ]
-    },
-    {
-      "section": "ui",
-      "status": "updated",
-      "paths": [
-        "apps/web/src/App.tsx",
-        "apps/web/src/WriteProgress.tsx"
-      ]
-    },
-    {
-      "section": "evaluations",
-      "status": "updated",
-      "paths": [
-        "apps/web/src/EvaluationView.tsx",
-        "packages/evals/src/calibration.ts",
-        "packages/evals/src/cases.ts",
-        "packages/evals/src/pricing.ts",
-        "packages/evals/src/quality.ts",
-        "packages/evals/src/report.ts",
-        "packages/evals/src/rubric.ts",
-        "packages/evals/src/scoring.ts",
-        "scripts/calibrate-judge.mjs",
-        "scripts/lib/eval-estimate.mjs",
-        "scripts/lib/eval-judge.mjs",
-        "scripts/lib/eval-methodology.mjs",
-        "scripts/lib/eval-provider.mjs",
-        "scripts/lib/eval-simulated-agent.mjs",
-        "scripts/lib/eval-summary.mjs",
-        "scripts/lib/eval-throttle.mjs",
-        "scripts/rescore-evals.mjs",
-        "scripts/run-live-evals.mjs"
-      ]
-    },
-    {
-      "section": "observability",
-      "status": "updated",
-      "paths": [
-        "apps/web/src/HistoryView.tsx",
-        "apps/web/src/turn-stats.ts",
-        "apps/web/src/turn-trace.ts"
-      ]
-    },
-    {
-      "section": "long-term-memory",
-      "status": "updated",
-      "paths": [
-        "apps/web/src/MemoryPanel.tsx"
-      ]
-    },
-    {
-      "section": "graphrag-here",
-      "status": "updated",
-      "paths": [
-        "apps/web/src/graph/GraphCanvas.tsx",
-        "apps/web/src/graph/GraphView.tsx",
-        "apps/web/src/graph/graph-model.ts",
-        "apps/web/src/graph/graph.css",
-        "packages/knowledge-graph/src/dataset.ts",
-        "packages/knowledge-graph/src/explorer.ts",
-        "packages/knowledge-graph/src/index.ts",
-        "packages/knowledge-graph/src/tools.ts",
-        "scripts/check-knowledge-graph.mjs"
-      ]
-    },
-    {
-      "section": "governance",
-      "status": "updated",
-      "paths": [
-        "packages/contracts/src/index.ts",
-        "salesforce/force-app/main/default/classes/NorthstarCheckWriteAccess.cls",
-        "salesforce/force-app/main/default/permissionsets/Northstar_Marketing_Workbench_Evaluator.permissionset-meta.xml"
-      ]
-    },
-    {
-      "section": "salesforce",
-      "status": "updated",
-      "paths": [
-        "packages/contracts/src/tool-catalog.json",
-        "salesforce/force-app/main/default/mcpServerDefinitions/NorthstarMarketingWorkbench.mcpServerDefinition-meta.xml"
+        "packages/architecture/src/language.ts"
       ]
     }
   ],

@@ -3,6 +3,7 @@
 // saves its deliverable. The services behind the deliverable tools check the work, so a model that
 // breaks a rule is refused and told why, and has to fix it.
 import {
+  assetChoices,
   type Brand,
   copyProblems,
   defineTerm,
@@ -86,7 +87,9 @@ const DELIVERABLE_SCHEMAS = {
     visualDirection: z.string(),
     palette: words,
     mood: z.string().optional(),
-    keyVisuals: many(z.object({ format: z.string(), description: z.string() })),
+    assets: many(z.object({ assetId: z.string(), use: z.string().optional() })).describe(
+      "Approved assets from find_approved_assets, by assetId, each with where it is used.",
+    ),
     rationale: z.string().optional(),
   }),
   write_copy: z.object({
@@ -160,7 +163,10 @@ function normalize(
       palette: list(input.palette),
       mood: text(input.mood),
       rationale: text(input.rationale),
-      keyVisuals: list(input.keyVisuals),
+      assets: list(input.assets).map((item: { assetId: string; use?: string }) => ({
+        assetId: item.assetId,
+        use: text(item.use),
+      })),
     };
   if (name === "write_copy")
     return { tagline: input.tagline, pillars: list(input.pillars), assets: list(input.assets) };
@@ -266,6 +272,24 @@ function dataTools(run: TeamRun, agent: TeamSpecialist): ToolSet {
         return { signals: result.rows, source: result.source };
       },
     ),
+    find_approved_assets: read(
+      "find_approved_assets",
+      "The brand's digital asset library: every image with its approval (MLR or compliance ID), usage rights, what it shows, and whether this campaign may use it and why not. Images are chosen, never made.",
+      () => ({
+        campaignEnd: run.brief.end,
+        assets: assetChoices(brand, run.brief.end).map(({ asset, usable, reason }) => ({
+          assetId: asset.id,
+          title: asset.title,
+          kind: asset.kind,
+          shows: asset.alt,
+          library: `${asset.source} ${asset.sourceId}`,
+          approval: asset.approval,
+          rightsUntil: asset.rightsUntil ?? "no end",
+          usable,
+          ...(reason ? { reason } : {}),
+        })),
+      }),
+    ),
     get_brand_guidelines: read(
       "get_brand_guidelines",
       "The brand book from the semantic layer: voice, palette (hex colors), typography, imagery to use and avoid, banned phrases and any required disclosure.",
@@ -329,7 +353,7 @@ function deliverableTool(run: TeamRun, agent: TeamSpecialist, saved: { done: boo
     report_research:
       "Save your research report. Every insight cites the ids of the segments, competitors or signals it rests on.",
     propose_creative:
-      "Save the creative concept: name, big idea, visual direction, palette (hex colors from the brand palette), mood, key visuals by format, and rationale.",
+      "Save the creative concept: name, big idea, visual direction, palette (hex colors from the brand palette), mood, the approved assets it uses (by assetId from find_approved_assets, with where each is used), and rationale.",
     write_copy:
       "Save the copy: tagline, messaging pillars, and one asset per channel (headline, body, call to action, and the required disclosure if the brand has one).",
     plan_media:
@@ -346,7 +370,9 @@ function deliverableTool(run: TeamRun, agent: TeamSpecialist, saved: { done: boo
             agent === "audience-analyst"
               ? researchProblems(run.brief.brand, input as never)
               : agent === "art-director"
-                ? creativeProblems(run.brief.brand, input as never)
+                ? creativeProblems(run.brief.brand, input as never, {
+                    campaignEnd: run.brief.end,
+                  })
                 : agent === "copy-lead"
                   ? copyProblems(run.brief.brand, input as never)
                   : projectMedia(run.brief, input as never).problems;

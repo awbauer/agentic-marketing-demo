@@ -182,6 +182,13 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "scripts/check-prompts.mjs",
     "docs/decisions/ADR-009-model-catalog-and-routing.md",
   ],
+  "pharma-lifecycle": [
+    "packages/architecture/src/team-pharma.ts",
+    "apps/edge/src/team/lifecycle.ts",
+    "apps/edge/src/team/lifecycle-workers.ts",
+    "apps/web/src/team/TeamLifecycle.tsx",
+    "docs/decisions/ADR-015-pharma-campaign-lifecycle.md",
+  ],
   "campaign-squad": [
     "packages/architecture/src/team.ts",
     "packages/architecture/src/team-data.ts",

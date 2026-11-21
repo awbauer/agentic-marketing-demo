@@ -5,24 +5,30 @@ import {
   BRANDS,
   type Brand,
   type CampaignBrief,
+  runsPharmaLifecycle,
   TEAM_AGENTS,
   TEAM_BRIEFS,
   TEAM_DIRECTOR,
   TEAM_PARTY_LABELS,
-  TEAM_SPECIALISTS,
+  TEAM_GATES,
   isTeamProvider,
+  isLifecycleWorker,
+  isTeamSpecialist,
+  teamAgentsFor,
+  type TeamMode,
   TEAM_PROVIDERS,
   type TeamAgentId,
   type TeamProvider,
   type TeamEvent,
   type TeamMessageKind,
 } from "@northstar/architecture";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArchApiError, archFetch, archStream, useArch } from "../architecture/api";
 import { ErrorNote } from "../architecture/Shared";
 import { useScope } from "../scope";
 import { TeamHierarchy } from "./TeamHierarchy";
 import { DecisionCard, DecisionLog } from "./TeamPeople";
+import { ArtifactView, CampaignFile, LifecycleDecisionCard, LifecycleSteps } from "./TeamLifecycle";
 import { TeamPlatform } from "./TeamPlatform";
 import { StrategyView, TeamWorkView } from "./TeamWork";
 import { foldTeam, isPeerMessage, TEAM_PHASES, type TeamMessage } from "./team-state";
@@ -31,6 +37,7 @@ import "./team.css";
 
 const LAST_RUN = "northstar.team.lastRun";
 const PROVIDER_KEY = "northstar.team.provider";
+const MODE_KEY = "northstar.team.mode";
 
 type ProviderOption = {
   id: TeamProvider;
@@ -127,6 +134,7 @@ const KIND_LABELS: Record<TeamMessageKind, string> = {
   delivery: "Proposal",
   "approval-request": "Review request",
   decision: "Decision",
+  handoff: "Routed",
 };
 
 type Status = "idle" | "running" | "replaying" | "done";
@@ -245,16 +253,45 @@ function Party({ id }: { id: string }) {
   );
 }
 
-function MessageFeed({ messages, live }: { messages: TeamMessage[]; live: boolean }) {
+/**
+ * The conversation, in its own scrolling box. New messages scroll the box only when the reader is
+ * already at its bottom; otherwise a pill counts what arrived below. The page itself never moves.
+ */
+function MessageFeed({ messages }: { messages: TeamMessage[] }) {
   const [filter, setFilter] = useState<FeedFilter>("all");
-  const end = useRef<HTMLLIElement>(null);
+  const list = useRef<HTMLOListElement>(null);
+  const atBottom = useRef(true);
+  const seen = useRef(0);
+  const [unseen, setUnseen] = useState(0);
   const shown = messages.filter((message) =>
     filter === "all" ? true : filter === "peer" ? isPeerMessage(message) : !isPeerMessage(message),
   );
   const peers = messages.filter(isPeerMessage).length;
-  useEffect(() => {
-    if (live) end.current?.scrollIntoView({ block: "nearest" });
-  }, [messages.length, live]);
+  useLayoutEffect(() => {
+    const box = list.current;
+    const added = shown.length - seen.current;
+    seen.current = shown.length;
+    if (!box || added <= 0) return;
+    if (atBottom.current) box.scrollTop = box.scrollHeight;
+    else setUnseen((count) => count + added);
+  }, [shown.length]);
+  // A new filter starts from its own bottom.
+  useLayoutEffect(() => {
+    seen.current = shown.length;
+    atBottom.current = true;
+    setUnseen(0);
+    if (list.current) list.current.scrollTop = list.current.scrollHeight;
+  }, [filter]);
+  const onScroll = () => {
+    const box = list.current;
+    if (!box) return;
+    atBottom.current = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+    if (atBottom.current) setUnseen(0);
+  };
+  const jump = () => {
+    list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" });
+    setUnseen(0);
+  };
   return (
     <section className="team-feed" aria-labelledby="team-feed-title">
       <header>
@@ -286,21 +323,27 @@ function MessageFeed({ messages, live }: { messages: TeamMessage[]; live: boolea
             : "No messages of this kind yet."}
         </p>
       ) : (
-        <ol className="team-messages" aria-live="polite">
-          {shown.map((message) => (
-            <li key={message.id} className={`team-message kind-${message.kind}`}>
-              <div className="team-message-head">
-                <Party id={message.from} />
-                <span aria-hidden="true">→</span>
-                <span className="sr-only">to</span>
-                <Party id={message.to} />
-                <em className="team-kind">{KIND_LABELS[message.kind]}</em>
-              </div>
-              <p>{message.text}</p>
-            </li>
-          ))}
-          <li ref={end} aria-hidden="true" className="team-feed-end" />
-        </ol>
+        <div className="team-messages-wrap">
+          <ol className="team-messages" aria-live="polite" ref={list} onScroll={onScroll}>
+            {shown.map((message) => (
+              <li key={message.id} className={`team-message kind-${message.kind}`}>
+                <div className="team-message-head">
+                  <Party id={message.from} />
+                  <span aria-hidden="true">→</span>
+                  <span className="sr-only">to</span>
+                  <Party id={message.to} />
+                  <em className="team-kind">{KIND_LABELS[message.kind]}</em>
+                </div>
+                <p>{message.text}</p>
+              </li>
+            ))}
+          </ol>
+          {unseen > 0 && (
+            <button type="button" className="team-new-pill" onClick={jump}>
+              ↓ {unseen} new message{unseen === 1 ? "" : "s"}
+            </button>
+          )}
+        </div>
       )}
     </section>
   );
@@ -309,23 +352,29 @@ function MessageFeed({ messages, live }: { messages: TeamMessage[]; live: boolea
 function AgentInspector({
   state,
   selected,
+  follow,
+  onFollow,
   onSelect,
 }: {
   state: ReturnType<typeof foldTeam>;
   selected: TeamAgentId;
+  follow: boolean;
+  onFollow: (follow: boolean) => void;
   onSelect: (id: TeamAgentId) => void;
 }) {
   const manifest = TEAM_AGENTS.find((agent) => agent.id === selected);
   const view = state.agents[selected];
-  const specialist = selected !== TEAM_DIRECTOR ? selected : null;
+  const lifecycle = state.mode === "lifecycle";
+  const specialist = !lifecycle && isTeamSpecialist(selected) ? selected : null;
   const latest = specialist ? view.versions.at(-1) : undefined;
+  const made = lifecycle ? state.artifacts.filter((artifact) => artifact.by === selected) : [];
   return (
     <section className="team-inspector" aria-labelledby="team-inspector-title">
       <h3 id="team-inspector-title" className="sr-only">
         Agent detail
       </h3>
       <div className="arch-tabs small" role="tablist" aria-label="Agents">
-        {[TEAM_DIRECTOR, ...TEAM_SPECIALISTS].map((id) => (
+        {teamAgentsFor(state.mode).map(({ id }) => (
           <button
             key={id}
             type="button"
@@ -337,13 +386,22 @@ function AgentInspector({
             {TEAM_PARTY_LABELS[id]}
           </button>
         ))}
+        <label className="team-follow">
+          <input
+            type="checkbox"
+            checked={follow}
+            onChange={(event) => onFollow(event.target.checked)}
+          />
+          Follow the working agent
+        </label>
       </div>
       <div className="team-inspector-body" role="tabpanel">
         <header>
           <h4>{manifest?.name}</h4>
           <p>{manifest?.summary}</p>
           <p className="arch-note">
-            {manifest?.role === "hub" ? "Hub" : "Spoke"} · runs on{" "}
+            {manifest?.role === "hub" ? "Hub" : "Spoke"} ·{" "}
+            {manifest?.tier === "coordinator" ? "coordinator" : "worker"} model{" "}
             <code>{(state.models[selected] ?? "—").replace("@cf/", "")}</code> · state{" "}
             <strong>{view.state}</strong>
             {view.note ? ` (${view.note})` : ""}
@@ -371,6 +429,24 @@ function AgentInspector({
               {latest ? ` · ${(latest.latencyMs / 1000).toFixed(1)} s` : ""}
             </h5>
             <TeamWorkView agent={specialist} work={latest?.output} brief={state.brief} />
+          </>
+        )}
+        {lifecycle && isLifecycleWorker(selected) && (
+          <>
+            <h5>Saved work ({made.length})</h5>
+            {made.length === 0 ? (
+              <p className="arch-note">Nothing saved yet.</p>
+            ) : (
+              made.slice(-2).map((artifact) => (
+                <div key={`${artifact.name}-${artifact.version}`}>
+                  <h6>
+                    <code>{artifact.name}</code> · version {artifact.version} · round{" "}
+                    {artifact.round}
+                  </h6>
+                  <ArtifactView artifact={artifact} choices={state.lifecycle?.choices} />
+                </div>
+              ))
+            )}
           </>
         )}
         {selected === TEAM_DIRECTOR && state.plan && (
@@ -426,15 +502,46 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   const briefs = TEAM_BRIEFS.filter(
     (brief) => scope.brand === "all" || brief.brand === scope.brand,
   );
+  const [mode, setModeState] = useState<TeamMode>(() => {
+    try {
+      return localStorage.getItem(MODE_KEY) === "lifecycle" ? "lifecycle" : "squad";
+    } catch {
+      return "squad";
+    }
+  });
+  const modeBriefs =
+    mode === "lifecycle" ? briefs.filter((item) => runsPharmaLifecycle(item.brand)) : briefs;
   const [brief, setBrief] = useState<CampaignBrief>(
-    () => briefs[0] ?? (TEAM_BRIEFS[0] as CampaignBrief),
+    () => modeBriefs[0] ?? briefs[0] ?? (TEAM_BRIEFS[0] as CampaignBrief),
   );
+  const chooseMode = (next: TeamMode) => {
+    setModeState(next);
+    try {
+      localStorage.setItem(MODE_KEY, next);
+    } catch {
+      // The choice still holds for this visit.
+    }
+    // A run of the other mode no longer answers what the page shows; start clean.
+    if (state.id && state.mode !== next) {
+      setEvents([]);
+      setShown(null);
+      setStatus("idle");
+      remember(null);
+    }
+    const pharma = TEAM_BRIEFS.find((item) => runsPharmaLifecycle(item.brand));
+    if (next === "lifecycle" && !runsPharmaLifecycle(brief.brand) && pharma) setBrief(pharma);
+  };
   const [events, setEvents] = useState<TeamEvent[]>([]);
   const [shown, setShown] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<ArchApiError | null>(null);
   const [selected, setSelected] = useState<TeamAgentId>(TEAM_DIRECTOR);
-  const [follow, setFollow] = useState(true);
+  // Off unless the reader asks: tabs never switch under them.
+  const [follow, setFollow] = useState(false);
+  const decisionSlot = useRef<HTMLDivElement>(null);
+  /** Only the reader moves the page: the pill brings the decision into view when clicked. */
+  const openDecision = () =>
+    decisionSlot.current?.scrollIntoView({ block: "start", behavior: "smooth" });
   const roster = useArch<{ providers: ProviderOption[] }>("/team", {
     persona: scope.persona,
     brand: "all",
@@ -482,6 +589,8 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     })
       .then((saved) => {
         setEvents(saved.events);
+        const start = saved.events.find((event) => event.type === "start");
+        if (start?.type === "start" && start.mode) setModeState(start.mode);
         setStatus("done");
       })
       .catch(() => remember(null));
@@ -500,26 +609,26 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   // While a run plays, keep the inspector on whichever agent is working now.
   useEffect(() => {
     if (!follow || status === "done" || status === "idle") return;
-    const working = [...TEAM_SPECIALISTS, TEAM_DIRECTOR].find((id) =>
-      ["working", "revising"].includes(state.agents[id].state),
-    );
+    const working = teamAgentsFor(state.mode)
+      .map((agent) => agent.id)
+      .reverse()
+      .find((id) => ["working", "revising"].includes(state.agents[id].state));
     if (working && working !== selected) setSelected(working);
   }, [state, follow, status]);
 
   /** A person's decision on the waiting run; the squad's next steps stream onto the same page. */
-  async function decide(decision: "approve" | "changes", note: string) {
+  async function decide(decision: "approve" | "changes", note: string, choice?: string) {
     const waiting = state.waiting;
     if (!waiting || !state.id) return;
     setError(null);
     setStatus("running");
-    setFollow(true);
     startedAt.current = Date.now();
     lastEventAt.current = Date.now();
     try {
       await archStream<TeamEvent>(
         `/team/runs/${encodeURIComponent(state.id)}/decide`,
         { persona: waiting.persona, brand: "all" },
-        { gate: waiting.gate, decision, note },
+        { gate: waiting.gate, decision, note, ...(choice ? { choice } : {}) },
         (event) => {
           lastEventAt.current = Date.now();
           setEvents((current) => [...current, event]);
@@ -537,7 +646,6 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     setEvents([]);
     setError(null);
     setStatus("running");
-    setFollow(true);
     remember(null);
     startedAt.current = Date.now();
     lastEventAt.current = Date.now();
@@ -547,6 +655,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
         ? { briefId: brief.id }
         : { brief }),
       provider,
+      mode,
     };
     try {
       await archStream<TeamEvent>(
@@ -568,7 +677,6 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   function replay() {
     if (timer.current) clearInterval(timer.current);
     setStatus("replaying");
-    setFollow(true);
     setShown(1);
     timer.current = setInterval(() => {
       setShown((current) => {
@@ -590,9 +698,12 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   }
 
   const busy = status === "running" || status === "replaying";
-  const active = [...TEAM_SPECIALISTS, TEAM_DIRECTOR].find((id) =>
-    ["working", "revising"].includes(state.agents[id].state),
-  );
+  const active = teamAgentsFor(state.mode)
+    .map((agent) => agent.id)
+    .reverse()
+    .find((id) => ["working", "revising"].includes(state.agents[id].state));
+  // What the page shows: the run's own mode once there is one, the chosen mode before.
+  const view = state.id ? state.mode : mode;
   const working = active
     ? `${TEAM_PARTY_LABELS[active]}: ${state.agents[active].activity ?? state.agents[active].note ?? "thinking"}`
     : "";
@@ -601,8 +712,16 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     <section className="evaluations-view arch-view team-view" aria-labelledby="team-title">
       <div className="section-header">
         <div>
-          <p className="kicker">Campaign squad · hub and spokes</p>
-          <h2 id="team-title">Five agents, one campaign proposal</h2>
+          <p className="kicker">
+            {view === "lifecycle"
+              ? "Pharma campaign lifecycle · agents and people"
+              : "Campaign squad · hub and spokes"}
+          </p>
+          <h2 id="team-title">
+            {view === "lifecycle"
+              ? "Seven agents, six phases, MLR at the centre"
+              : "Five agents, one campaign proposal"}
+          </h2>
         </div>
         <div className="arch-header-actions">
           <button type="button" className="text-button" onClick={onClose}>
@@ -612,20 +731,56 @@ export function TeamView({ onClose }: { onClose: () => void }) {
       </div>
       <div className="arch-body">
         <div className="arch-main">
-          <p className="arch-lede">
-            Hand the squad a brief and watch it work. The campaign lead in the middle never writes a
-            word of the campaign: it splits the brief into pieces, gives each to the spoke that owns
-            it, decides whether to keep what comes back, and fits the pieces together. Spokes can
-            also message one another directly when one piece depends on another. Each agent is a
-            real model limited to its own tools, the agentic gateway checks every call, and code —
-            not the model — enforces the brand’s rules on every piece.
-          </p>
+          <fieldset className="team-mode">
+            <legend>What the team runs</legend>
+            <div className="team-switch" role="radiogroup" aria-label="Run mode">
+              {(
+                [
+                  ["squad", "Campaign squad", "Brief to an approved proposal"],
+                  ["lifecycle", "Pharma lifecycle", "Focus to analytics, with MLR"],
+                ] as const
+              ).map(([id, label, detail]) => (
+                <label key={id} className={mode === id ? "on" : ""}>
+                  <input
+                    type="radio"
+                    name="team-mode"
+                    value={id}
+                    checked={mode === id}
+                    disabled={busy}
+                    onChange={() => chooseMode(id)}
+                  />
+                  <strong>{label}</strong>
+                  <small>{detail}</small>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {mode === "lifecycle" ? (
+            <p className="arch-lede">
+              A prescription brand’s campaign, end to end. The campaign lead takes the brief through
+              business focus, ideation, content and Medical/Legal/Regulatory review, audience
+              selection, publishing and analytics. Agents do every piece of work and code checks it
+              against the claims library, the asset library, consent and the label; you take each
+              decision a real brand team, MLR committee and operations team would, acting as the
+              role it needs. The MLR coordinator runs the review and the system routes the job from
+              Medical to Legal to Regulatory.
+            </p>
+          ) : (
+            <p className="arch-lede">
+              Hand the squad a brief and watch it work. The campaign lead in the middle never writes
+              a word of the campaign: it splits the brief into pieces, gives each to the spoke that
+              owns it, decides whether to keep what comes back, and fits the pieces together. Spokes
+              can also message one another directly when one piece depends on another. Each agent is
+              a real model limited to its own tools, the agentic gateway checks every call, and code
+              — not the model — enforces the brand’s rules on every piece.
+            </p>
+          )}
 
           <section className="team-brief" aria-labelledby="team-brief-title">
             <h3 id="team-brief-title">Choose a brief</h3>
             <fieldset className="arch-flow-picker">
               <legend>Sample briefs</legend>
-              {briefs.map((item) => (
+              {modeBriefs.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -657,10 +812,18 @@ export function TeamView({ onClose }: { onClose: () => void }) {
               <button
                 type="button"
                 className="arch-primary"
-                disabled={busy || chosen?.available === false}
+                disabled={
+                  busy ||
+                  chosen?.available === false ||
+                  (mode === "lifecycle" && !runsPharmaLifecycle(brief.brand))
+                }
                 onClick={() => void run()}
               >
-                {status === "running" ? "The squad is working…" : "Hand the brief to the squad"}
+                {status === "running"
+                  ? "The team is working…"
+                  : mode === "lifecycle"
+                    ? "Start the campaign lifecycle"
+                    : "Hand the brief to the squad"}
               </button>
               {events.length > 0 && status !== "running" && (
                 <button
@@ -688,40 +851,33 @@ export function TeamView({ onClose }: { onClose: () => void }) {
 
           {error && <ErrorNote error={error} />}
 
-          {state.waiting && state.brief && shown === null && (
-            <DecisionCard
-              waiting={state.waiting}
-              strategy={state.strategy}
-              brief={state.brief}
-              decisions={state.decisions}
-              busy={busy}
-              onDecide={(decision, note) => void decide(decision, note)}
-            />
+          {view === "lifecycle" ? (
+            <LifecycleSteps lifecycle={state.lifecycle} />
+          ) : (
+            <ol className="team-steps" aria-label="Progress">
+              {TEAM_PHASES.map((phase) => (
+                <li
+                  key={phase.id}
+                  className={
+                    state.phases.has(phase.id)
+                      ? "reached"
+                      : busy && current?.id === phase.id
+                        ? "current"
+                        : ""
+                  }
+                  aria-current={busy && current?.id === phase.id ? "step" : undefined}
+                >
+                  <span aria-hidden="true" />
+                  {phase.label}
+                  {phase.id === "pieces" ? ` (${state.kept}/4)` : ""}
+                </li>
+              ))}
+            </ol>
           )}
-
-          <ol className="team-steps" aria-label="Progress">
-            {TEAM_PHASES.map((phase) => (
-              <li
-                key={phase.id}
-                className={
-                  state.phases.has(phase.id)
-                    ? "reached"
-                    : busy && current?.id === phase.id
-                      ? "current"
-                      : ""
-                }
-                aria-current={busy && current?.id === phase.id ? "step" : undefined}
-              >
-                <span aria-hidden="true" />
-                {phase.label}
-                {phase.id === "pieces" ? ` (${state.kept}/4)` : ""}
-              </li>
-            ))}
-          </ol>
 
           <div className="team-grid">
             <div className="team-diagram">
-              <TeamHierarchy state={state} />
+              <TeamHierarchy state={state} mode={view} />
               <dl className="team-stats compact" aria-live="polite">
                 <div>
                   <dt>Messages</dt>
@@ -753,11 +909,51 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                 )}
               </dl>
             </div>
-            <MessageFeed messages={state.messages} live={busy} />
+            <MessageFeed messages={state.messages} />
           </div>
 
           <TeamPlatform state={state} />
 
+          <AgentInspector
+            state={state}
+            selected={selected}
+            follow={follow}
+            onFollow={setFollow}
+            onSelect={(id) => {
+              setFollow(false);
+              setSelected(id);
+            }}
+          />
+
+          {/* Everything a run adds from here on is added below what's above, so nothing the
+              reader is looking at moves. */}
+          <DecisionLog decisions={state.decisions} />
+          <div ref={decisionSlot}>
+            {state.waiting && state.brief && shown === null && state.lifecycle && (
+              <LifecycleDecisionCard
+                key={`${state.waiting.gate}-${state.decisions.length}`}
+                waiting={state.waiting}
+                lifecycle={state.lifecycle}
+                brief={state.brief}
+                decisions={state.decisions}
+                busy={busy}
+                onDecide={(decision, note, choice) => void decide(decision, note, choice)}
+              />
+            )}
+            {state.waiting && state.brief && shown === null && !state.lifecycle && (
+              <DecisionCard
+                waiting={state.waiting}
+                strategy={state.strategy}
+                brief={state.brief}
+                decisions={state.decisions}
+                busy={busy}
+                onDecide={(decision, note) => void decide(decision, note)}
+              />
+            )}
+          </div>
+          {view === "lifecycle" && (
+            <CampaignFile artifacts={state.artifacts} lifecycle={state.lifecycle} />
+          )}
           {state.conflicts.length > 0 && (
             <section className="team-conflicts" aria-labelledby="team-conflicts-title">
               <h3 id="team-conflicts-title">Clashes the lead had to resolve</h3>
@@ -775,24 +971,21 @@ export function TeamView({ onClose }: { onClose: () => void }) {
             </section>
           )}
 
-          <DecisionLog decisions={state.decisions} />
-
-          <AgentInspector
-            state={state}
-            selected={selected}
-            onSelect={(id) => {
-              setFollow(false);
-              setSelected(id);
-            }}
-          />
-
+          {state.waiting && shown === null && !busy && (
+            <button type="button" className="team-turn-pill" onClick={openDecision}>
+              Your turn: {TEAM_GATES[state.waiting.gate].label} →
+            </button>
+          )}
           {state.error && (
             <p className="team-error" role="alert">
               {state.error}
             </p>
           )}
           {state.done && (
-            <p className={`team-done ${state.strategy ? "" : "stopped"}`} role="status">
+            <p
+              className={`team-done ${state.strategy || state.lifecycle?.finished ? "" : "stopped"}`}
+              role="status"
+            >
               {state.done.summary}
             </p>
           )}

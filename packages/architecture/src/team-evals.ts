@@ -5,6 +5,7 @@
 // provider's runs, so runs on Workers AI, Anthropic and OpenAI can be compared fairly.
 import type { CampaignBrief, CampaignStrategy, TeamEvent, TeamProvider } from "./team.ts";
 import { teamMarket } from "./team-data.ts";
+import { PHARMA_PHASES } from "./team-pharma.ts";
 
 export type EvalGroup = "outcome" | "quality" | "process" | "people" | "cost";
 
@@ -54,6 +55,8 @@ const pct = (value: number) => `${Math.round(value * 100)}%`;
 
 /** The checks a run's events support, scored 0 to 1. */
 export function scoreChecks(events: readonly TeamEvent[], brief: CampaignBrief): EvalCheck[] {
+  const start = events.find((event) => event.type === "start");
+  if (start?.type === "start" && start.mode === "lifecycle") return lifecycleChecks(events);
   const tools = events.flatMap((event) => (event.type === "tool" ? [event] : []));
   const messages = events.flatMap((event) => (event.type === "message" ? [event] : []));
   const decisions = events.flatMap((event) => (event.type === "decided" ? [event] : []));
@@ -192,6 +195,79 @@ export function scoreChecks(events: readonly TeamEvent[], brief: CampaignBrief):
       : "No person has decided yet.",
   });
   return checks;
+}
+
+const LIFECYCLE_SAVES = new Set<string>(
+  PHARMA_PHASES.flatMap((phase) =>
+    phase.steps.flatMap((step) => (step.kind === "agent" ? [step.tool] : [])),
+  ),
+);
+
+/** A lifecycle run's checks: how far it got, how cleanly the agents' work cleared the rules and the people. */
+export function lifecycleChecks(events: readonly TeamEvent[]): EvalCheck[] {
+  const phasesDone = new Set(
+    events.flatMap((event) =>
+      event.type === "phase" && event.state === "done" ? [event.phase] : [],
+    ),
+  );
+  const saves = events.flatMap((event) =>
+    event.type === "tool" && LIFECYCLE_SAVES.has(event.step.tool) ? [event] : [],
+  );
+  const refused = saves.filter((event) => !event.step.ok).length;
+  const accepted = saves.length - refused;
+  const decisions = events.flatMap((event) => (event.type === "decided" ? [event] : []));
+  const mlrChanges = decisions.filter(
+    (decision) =>
+      ["medical", "legal", "regulatory"].includes(decision.gate) && decision.decision === "changes",
+  ).length;
+  const otherChanges =
+    decisions.filter((decision) => decision.decision === "changes").length - mlrChanges;
+  const denied = events.filter(
+    (event) => event.type === "tool" && event.step.error?.startsWith("The gateway denied"),
+  ).length;
+  return [
+    {
+      id: "outcome",
+      label: "Went from focus to analytics",
+      group: "outcome",
+      score: phasesDone.size / PHARMA_PHASES.length,
+      detail: `${phasesDone.size} of ${PHARMA_PHASES.length} phases finished.`,
+    },
+    {
+      id: "first-try",
+      label: "Work cleared the rules on the first save",
+      group: "process",
+      score: saves.length ? clamp(accepted / saves.length) : null,
+      detail: `${accepted} of ${saves.length} saves accepted; ${refused} refused by the rules and fixed or retried.`,
+    },
+    {
+      id: "mlr-rounds",
+      label: "MLR approved without a resubmission",
+      group: "people",
+      score: decisions.some(
+        (decision) => decision.gate === "regulatory" && decision.decision === "approve",
+      )
+        ? clamp(1 - 0.34 * mlrChanges)
+        : mlrChanges
+          ? 0
+          : null,
+      detail: `${mlrChanges} MLR review${mlrChanges === 1 ? "" : "s"} asked for changes.`,
+    },
+    {
+      id: "people",
+      label: "Accepted by the brand team the first time",
+      group: "people",
+      score: decisions.length ? clamp(1 - 0.25 * otherChanges) : null,
+      detail: `${decisions.length} decisions by people, ${otherChanges} outside MLR asking for changes.`,
+    },
+    {
+      id: "governance",
+      label: "No agent reached for a tool it isn't granted",
+      group: "process",
+      score: denied === 0 ? 1 : clamp(1 - 0.2 * denied),
+      detail: `${denied} call${denied === 1 ? "" : "s"} denied by the gateway.`,
+    },
+  ];
 }
 
 /** The run's scorecard: its checks, the judge's scores and what it cost. */

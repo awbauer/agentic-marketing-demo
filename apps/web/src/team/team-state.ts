@@ -3,10 +3,16 @@
 // clashes, and the proposal the client gets. Pure, so a live run, a reloaded run and a
 // replay all render the same way.
 import {
+  type ArtifactName,
+  applyDecision,
   type CampaignBrief,
+  type LifecycleState,
+  newLifecycle,
+  recordArtifact,
+  TEAM_AGENTS,
+  type TeamMode,
   type CampaignStrategy,
   type Conflict,
-  TEAM_DIRECTOR,
   TEAM_SPECIALISTS,
   type TeamAgentId,
   type TeamAgentState,
@@ -51,6 +57,11 @@ export type TeamPhase = (typeof TEAM_PHASES)[number]["id"];
 
 export type TeamState = {
   id: string | null;
+  mode: TeamMode;
+  /** Where a lifecycle run is, folded with the same rules the server applies. */
+  lifecycle: LifecycleState | null;
+  /** Every artifact a lifecycle run produced, in order, each with the phase it belongs to. */
+  artifacts: Array<Extract<TeamEvent, { type: "artifact" }>>;
   brief: CampaignBrief | null;
   models: Partial<Record<TeamAgentId, string>>;
   agents: Record<TeamAgentId, AgentView>;
@@ -91,7 +102,7 @@ export type TeamState = {
   /** The person the run is waiting for, if any. */
   waiting: Extract<TeamEvent, { type: "await-person" }> | null;
   /** Decisions people have taken on this run, in order. */
-  decisions: Array<Extract<TeamEvent, { type: "decided" }>>;
+  decisions: Array<Extract<TeamEvent, { type: "decided" }> & { choiceLabel?: string }>;
   /** The run's scorecard, once it has ended. */
   scorecard: TeamScorecard | null;
   events: number;
@@ -110,13 +121,31 @@ export type InfraLayer =
   | "state"
   | "people";
 
-const SAVE_TOOLS = new Set(["report_research", "propose_creative", "write_copy", "plan_media"]);
+const SAVE_TOOLS = new Set([
+  "report_research",
+  "propose_creative",
+  "write_copy",
+  "plan_media",
+  "propose_focus_areas",
+  "propose_concepts",
+  "draft_modules",
+  "submit_mlr_job",
+  "build_audience",
+  "schedule_deployment",
+  "prepare_form_2253",
+  "report_performance",
+]);
 const toolLayer = (tool: string): InfraLayer =>
   SAVE_TOOLS.has(tool)
     ? "rules"
-    : ["plan_campaign", "delegate_task", "review_work", "reconcile_plan", "send_proposal"].includes(
-          tool,
-        )
+    : [
+          "plan_campaign",
+          "delegate_task",
+          "review_work",
+          "reconcile_plan",
+          "send_proposal",
+          "request_decision",
+        ].includes(tool)
       ? "coordination"
       : ["ask_teammate", "answer_teammate", "read_team_output"].includes(tool)
         ? "bus"
@@ -142,6 +171,21 @@ const ACTIVITY: Record<string, string> = {
   review_work: "Reviewing a piece",
   reconcile_plan: "Reconciling the pieces",
   send_proposal: "Sending the proposal",
+  request_decision: "Asking a person",
+  get_past_results: "Reading past results",
+  get_claims_library: "Reading the claims library",
+  find_approved_assets: "Searching the asset library",
+  get_hcp_universe: "Reading the HCP universe",
+  get_approved_job: "Reading the approved job",
+  get_campaign_results: "Reading the results",
+  propose_focus_areas: "Saving focus areas",
+  propose_concepts: "Saving concepts",
+  draft_modules: "Saving modules",
+  submit_mlr_job: "Submitting to MLR",
+  build_audience: "Saving the HCP list",
+  schedule_deployment: "Saving the schedule",
+  prepare_form_2253: "Preparing Form 2253",
+  report_performance: "Saving the performance read",
 };
 
 const blank = (): AgentView => ({ state: "idle", tools: [], versions: [], revisions: 0 });
@@ -149,11 +193,15 @@ const blank = (): AgentView => ({ state: "idle", tools: [], versions: [], revisi
 export function emptyTeamState(): TeamState {
   return {
     id: null,
+    mode: "squad",
+    lifecycle: null,
+    artifacts: [],
     brief: null,
     models: {},
-    agents: Object.fromEntries(
-      [TEAM_DIRECTOR, ...TEAM_SPECIALISTS].map((id) => [id, blank()]),
-    ) as Record<TeamAgentId, AgentView>,
+    agents: Object.fromEntries(TEAM_AGENTS.map((agent) => [agent.id, blank()])) as Record<
+      TeamAgentId,
+      AgentView
+    >,
     messages: [],
     plan: null,
     conflicts: [],
@@ -197,6 +245,8 @@ export function reduceTeam(state: TeamState, event: TeamEvent): TeamState {
       return {
         ...emptyTeamState(),
         id: event.id,
+        mode: event.mode ?? "squad",
+        lifecycle: event.mode === "lifecycle" ? newLifecycle() : null,
         brief: event.brief,
         models: event.models,
         infra: event.infra ?? null,
@@ -322,8 +372,46 @@ export function reduceTeam(state: TeamState, event: TeamEvent): TeamState {
       return next;
     case "decided":
       next.waiting = null;
-      next.decisions = [...state.decisions, event];
+      next.decisions = [
+        ...state.decisions,
+        {
+          ...event,
+          // The option's name, from the card the person chose on.
+          ...(event.choice
+            ? {
+                choiceLabel:
+                  state.waiting?.options?.find((option) => option.id === event.choice)?.label ??
+                  event.choice,
+              }
+            : {}),
+        },
+      ];
       next.layer = "people";
+      if (state.lifecycle && !["compliance", "client"].includes(event.gate)) {
+        const lifecycle = structuredClone(state.lifecycle);
+        try {
+          applyDecision(lifecycle, event.gate, event.decision, {
+            note: event.note,
+            ...(event.choice ? { choice: event.choice } : {}),
+          });
+          next.lifecycle = lifecycle;
+        } catch {
+          // A log from an older lifecycle; leave the state as it was.
+        }
+      }
+      return next;
+    case "artifact": {
+      if (state.lifecycle) {
+        const lifecycle = structuredClone(state.lifecycle);
+        recordArtifact(lifecycle, event.name as ArtifactName, event.by, event.data);
+        next.lifecycle = lifecycle;
+      }
+      next.artifacts = [...state.artifacts, event];
+      next.layer = event.by === "system" ? "rules" : "state";
+      return next;
+    }
+    case "phase":
+      next.layer = "coordination";
       return next;
     case "evaluation":
       next.scorecard = event.scorecard;

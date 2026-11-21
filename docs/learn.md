@@ -14,7 +14,7 @@ A hands-on course in how an agent uses context, how GraphRAG grounds answers in 
   - [2.1 RAG in one page](#21-rag-in-one-page)
   - [2.2 GraphRAG](#22-graphrag)
   - [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag)
-- [Part 3: Every concept in the demo](#part-3-every-concept-in-the-demo): Every moving part of the workbench (21 lessons, 20 min)
+- [Part 3: Every concept in the demo](#part-3-every-concept-in-the-demo): Every moving part of the workbench (22 lessons, 20 min)
   - [3.1 The orchestrator agent](#31-the-orchestrator-agent)
   - [3.2 The workspace: focus, context, and records](#32-the-workspace-focus-context-and-records)
   - [3.3 The model: gpt-oss-20b on Workers AI](#33-the-model-gpt-oss-20b-on-workers-ai)
@@ -35,7 +35,8 @@ A hands-on course in how an agent uses context, how GraphRAG grounds answers in 
   - [3.18 The content lifecycle: plan to learn](#318-the-content-lifecycle-plan-to-learn)
   - [3.19 Agents, prompts, models, and drift](#319-agents-prompts-models-and-drift)
   - [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them)
-  - [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats)
+  - [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr)
+  - [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats)
 - [Glossary](#glossary)
 - [Reference: every concept in the code](#reference-every-concept-in-the-code)
 
@@ -386,7 +387,7 @@ Which question needs GraphRAG rather than plain vector RAG?
 
 ## Part 3: Every concept in the demo
 
-*Every moving part of the workbench* · 21 lessons · 20 min
+*Every moving part of the workbench* · 22 lessons · 20 min
 
 Each piece of the workbench, how it works, and where to see it.
 
@@ -1591,7 +1592,7 @@ The lifecycle runs **Plan → Audience → Brief → Create → Substantiate →
 
 **Salesforce stays the system of record.** The lifecycle adds no new Salesforce writes. The state machine's approval is the workbench's own; the confirmed review-task write remains how a decision reaches Salesforce.
 
-**A regulated brand beyond finance.** Lumera Therapeutics' content runs through the same stages. Its claims need a trial-backed study report, the safety information (and a boxed warning for Cardivance) is a required disclosure the authoring agent adds, and the farm treats superiority or absolute-safety wording as a blocking finding.
+**A regulated brand beyond finance.** Lumera Therapeutics' content runs through the same stages. Its claims need a trial-backed study report, the safety information (and a boxed warning for Cardivance) is a required disclosure the authoring agent adds, and the farm treats superiority or absolute-safety wording as a blocking finding. The writer's own words may not imply what only a cited claim or the label can say either: "guideline-ready", "proven", "a significant reduction" or "reduced the risk" outside the claim is refused, since no guideline has endorsed the product and the claim already carries the result.
 
 **Try it**
 
@@ -1751,7 +1752,7 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 
 **The roles.** The **campaign lead** sits at the hub. It turns the brief into a work plan, hands one piece at a time to the spoke that owns it, and decides whether to keep what comes back or send it back with notes. It never does a spoke's work. The four spokes each own one piece:
 - the **audience analyst**: who to win, how big each group is, what rivals are doing, which signals point to an opening
-- the **art director**: the campaign idea, its look and palette, and the images to make
+- the **art director**: the campaign idea, its look and palette, and the approved images from the asset library it uses (none are generated)
 - the **copy lead**: the line, the recurring themes and copy for each placement
 - the **channel planner**: the channels to buy, the spend and dates for each, and the results to expect
 
@@ -1794,7 +1795,91 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 - Docs: [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/)
 - Docs: [Cedar policy language](https://www.cedarpolicy.com/)
 
-### 3.21 Long-term memory: remembering across chats
+### 3.21 A pharma campaign, focus to analytics, with MLR
+
+*Seven agents take a prescription brand's campaign through six phases; people decide at nine points, including Medical, Legal and Regulatory review.*
+
+**Diagram: Plan to learn, with a person at every gate**
+
+```mermaid
+flowchart TB
+  subgraph agent_lifecycle0_lane0["People decide"]
+    direction LR
+    agent_lifecycle0_0_0["? Brand planner<br/>approves the plan"]
+    agent_lifecycle0_0_1["? Marketer<br/>validates brief and reuse"]
+    agent_lifecycle0_0_2["? Content Lab<br/>approves every module"]
+    agent_lifecycle0_0_3["? Compliance<br/>owns the evidence"]
+    agent_lifecycle0_0_4["? Reviewer<br/>decides, by state machine"]
+    agent_lifecycle0_0_5["? Brand lead<br/>disposes on optimization"]
+    agent_lifecycle0_0_0 --> agent_lifecycle0_0_1 --> agent_lifecycle0_0_2 --> agent_lifecycle0_0_3 --> agent_lifecycle0_0_4 --> agent_lifecycle0_0_5
+  end
+  subgraph agent_lifecycle0_lane1["Agents work"]
+    direction LR
+    agent_lifecycle0_1_0["▸ Plan and scenario<br/>plan → structured demand"]
+    agent_lifecycle0_1_1["▸ Brief and reuse<br/>inherits the plan"]
+    agent_lifecycle0_1_2["▸ Module authoring<br/>cites or refuses"]
+    agent_lifecycle0_1_3["▸ Substantiation<br/>evidence per claim"]
+    agent_lifecycle0_1_4["◆ Readiness and farm<br/>block until it passes"]
+    agent_lifecycle0_1_5["▸ Attribution and optimization<br/>signal → module → claim"]
+    agent_lifecycle0_1_0 --> agent_lifecycle0_1_1 --> agent_lifecycle0_1_2 --> agent_lifecycle0_1_3 --> agent_lifecycle0_1_4 --> agent_lifecycle0_1_5
+  end
+  subgraph agent_lifecycle0_lane2["Governed by"]
+    direction LR
+    agent_lifecycle0_2_0["⋈ Governed objects<br/>one id for life"]
+    agent_lifecycle0_2_1["◆ Gateway<br/>default-deny · identity"]
+    agent_lifecycle0_2_2["▤ Registry<br/>versioned · scoped"]
+    agent_lifecycle0_2_3["◆ State machine<br/>11 transitions"]
+    agent_lifecycle0_2_4["✓ Evaluators<br/>13 · drift watch"]
+    agent_lifecycle0_2_5["✎ Channels<br/>one card, four surfaces"]
+    agent_lifecycle0_2_0 --> agent_lifecycle0_2_1 --> agent_lifecycle0_2_2 --> agent_lifecycle0_2_3 --> agent_lifecycle0_2_4 --> agent_lifecycle0_2_5
+  end
+  agent_lifecycle0_lane0 ~~~ agent_lifecycle0_lane1 ~~~ agent_lifecycle0_lane2
+```
+
+*People decide at each stage, agents do the narrow work, and every call between them passes the gateway. Performance re-enters planning inside the quarter.*
+
+> **Key idea:** Agents do every step of a regulated campaign and code checks each one against the claims library, the asset library, consent and the label; people decide at the nine points a brand team, MLR and operations would, and the MLR system routes the job reviewer to reviewer.
+
+The **Pharma lifecycle** mode of the Campaign squad page runs a prescription brand's campaign end to end: business focus, ideation, content and MLR review, audience selection, publishing and analytics. Agents do every piece of work; people take the decisions a brand team, an MLR committee and an operations team would. The page lists every step, agent or person, and marks where the run is.
+
+**The path, step by step.**
+- **Business focus.** The audience analyst reads the segments, competitors, signals and last year's results and proposes two or three focus areas, each citing data ids and a success measure (`propose_focus_areas`). The **brand lead** chooses one.
+- **Ideation.** The art director proposes concepts carried only by substantiated claims from the claims library (`get_claims_library`) and shown with approved, in-rights images from the asset library (`find_approved_assets`); no image is generated (`propose_concepts`). The brand lead chooses one.
+- **Content and MLR.** The copy lead assembles an email and a display module (`draft_modules`): the service inserts each claim's exact approved text with a reference marker and attaches the ISI, boxed warning and PI the claims require; an unsubstantiated claim is refused. The **MLR coordinator** annotates every claim to its reference, runs the pre-review checks (reference valid through the campaign, fair balance, images, wording) and submits the job (`submit_mlr_job`). **Medical**, **Legal** and **Regulatory** review in turn; the MLR system routes the job from one to the next without the lead. Regulatory's approval issues a document number and an expiry (twelve months, or the first reference expiry if sooner).
+- **Audience.** The audience analyst builds the HCP list by segment and prescribing decile (`get_hcp_universe`, `build_audience`): email only to HCPs with documented consent, the do-not-contact list removed everywhere, rep coverage shown. **Marketing operations** approves it.
+- **Publishing.** The channel planner schedules only the approved modules, by document number, to approved email and endemic HCP display, inside the window, before expiry and within budget (`get_approved_job`, `schedule_deployment`). The brand lead approves go-live; the MLR coordinator prepares **Form FDA 2253** (`prepare_form_2253`) and **Regulatory** submits it at first use.
+- **Analytics.** Thirty days in market are simulated from the brand's benchmarks and segment affinities and labelled so. The performance analyst reads them (`get_campaign_results`, `get_past_results`) and recommends continue, optimize or retire, citing result lines (`report_performance`). The brand lead decides.
+
+**How the lead moves.** The campaign lead has one tool, `lifecycle_step`: assign the next agent step, or ask the next person (`request_decision`). The server holds the lifecycle as data (`PHARMA_PHASES`) and a pure state machine, and refuses any step out of order. Every result tells the lead what comes next.
+
+**People.** Each human step is a gateway action only its role may take: the brand lead (`team:decide_focus`, `decide_concept`, `approve_go_live`, `decide_next_action`), Medical (the reviewer persona), Legal (senior), Regulatory (compliance) and marketing operations (marketer). Choice steps take one of the agents' options. A person who asks for changes sends the phase back to its first step, with their words, in a new round; a resubmitted MLR job gets a new job code.
+
+**Models.** Coordinators (the campaign lead and the MLR coordinator) run on each provider's top model, workers on a smaller one: Opus 5.5 and Sonnet 5.5 on Anthropic, gpt-6-astra and gpt-5.4-mini on OpenAI, Kimi K2.6 and gpt-oss-120b on Workers AI. Each agent's calls share a growing prefix, so they are cached: Anthropic requests carry top-level `cache_control`, OpenAI requests a per-agent `promptCacheKey`, and the cost estimate prices cache reads at the cached rate.
+
+**Scoring.** A lifecycle run's scorecard counts the phases finished, saves accepted on the first try, MLR resubmissions, brand-team changes and gateway denials.
+
+**What it does not do.** No channel is called and no Form 2253 is filed; the results, the HCP universe and its consent rates are fictional. One person plays every role.
+
+**Try it**
+
+- Open the Campaign squad (opens the team view)
+
+**In this demo**
+
+- Campaign squad → What the team runs → Pharma lifecycle → Start the campaign lifecycle
+- Campaign squad → The lifecycle, step by step (each agent and person step, and where the run is)
+- Campaign squad → Campaign file (one tab per phase)
+- packages/architecture/src/team-pharma.ts
+- apps/edge/src/team/lifecycle.ts, lifecycle-workers.ts
+- docs/decisions/ADR-015-pharma-campaign-lifecycle.md
+
+**Learn more**
+
+- Guide: [Building effective agents (Anthropic)](https://www.anthropic.com/engineering/building-effective-agents)
+- Docs: [Cloudflare Agents SDK](https://developers.cloudflare.com/agents/)
+- Docs: [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/)
+
+### 3.22 Long-term memory: remembering across chats
 
 *Drafts and decisions stored in the graph by the server, recalled by tools, and forgotten on request.*
 
@@ -1915,7 +2000,7 @@ Who decides whether you may create a campaign from the workbench?
 
 ## Reference: every concept in the code
 
-### Tools (94)
+### Tools (109)
 
 | Name | What it is | Taught in |
 | --- | --- | --- |
@@ -1940,6 +2025,21 @@ Who decides whether you may create a campaign from the workbench?
 | `propose_creative` | Saves the art director's concept; refused for a color outside the brand palette or a forbidden image. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
 | `write_copy` | Saves the copy lead's line, themes and copy; refused over a character limit, for a banned phrase, or without a required disclosure. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
 | `plan_media` | Saves the channel planner's plan and returns projections; refused under a minimum spend, over budget, or outside the window. | [3.20 The campaign squad: a lead, four spokes, and the platform under them](#320-the-campaign-squad-a-lead-four-spokes-and-the-platform-under-them) |
+| `request_decision` | The lifecycle lead asks the person whose step is next (the brand lead, Medical, Legal, Regulatory or marketing operations) to decide. The run waits for them. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `find_approved_assets` | Lists the brand's digital asset library: each image's approval, usage rights, what it shows, and whether this campaign may use it and why not. Images are chosen, never made. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `get_past_results` | Reads the brand's past in-market results, each with an id to cite. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `get_claims_library` | Reads the product's claims library: each claim's exact approved text, status, references and the disclosures it requires. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `get_hcp_universe` | Reads the HCP universe by segment and decile band, with email consent, rep coverage and the do-not-contact count. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `get_approved_job` | Reads the MLR-approved job (document number, expiry, modules), the approved HCP list, budget and window. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `get_campaign_results` | Reads thirty days of simulated in-market results, one line per module, segment and channel. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `propose_focus_areas` | Saves two or three business focus areas; refused unless each cites real data ids and says how success is measured. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `propose_concepts` | Saves two or three concepts; refused if a concept rests on an unsubstantiated claim or an unusable image. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `draft_modules` | Saves an email and a display module built from the claims library, with reference markers and the required ISI, boxed warning and PI attached; an unsubstantiated claim is refused. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `submit_mlr_job` | Submits the modules to MLR as one job after the pre-review checks pass; the job then goes to Medical, Legal and Regulatory in turn. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `build_audience` | Saves the HCP list by segment and decile; the service applies email consent and the do-not-contact list. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `schedule_deployment` | Saves the schedule; refused for a module MLR has not approved for that channel, a segment outside the approved list, dates outside the window or past expiry, or spend over budget. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `prepare_form_2253` | Prepares Form FDA 2253 from the approved job and the schedule, dated to first use. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
+| `report_performance` | Saves the performance read: findings citing result lines, and a recommendation to continue, optimize or retire. | [3.21 A pharma campaign, focus to analytics, with MLR](#321-a-pharma-campaign-focus-to-analytics-with-mlr) |
 | `next_step` | The sample-flow orchestrator's one tool: delegate a step to a subagent, ask a person to decide, or finish. It is forced on every step, and passes the gateway as the orchestrator each time. | [3.19 Agents, prompts, models, and drift](#319-agents-prompts-models-and-drift) |
 | `read_object` | Reads one governed object by urn for an agent, limited to the run's brand. | [3.18 The content lifecycle: plan to learn](#318-the-content-lifecycle-plan-to-learn) |
 | `list_objects` | Lists the run's brand's governed objects of one kind, with their urns and states. | [3.18 The content lifecycle: plan to learn](#318-the-content-lifecycle-plan-to-learn) |
@@ -2010,9 +2110,9 @@ Who decides whether you may create a campaign from the workbench?
 | `check_clinical_claims` | Each clinical claim for a drug: the trial behind it, whether its indication is on the label, and the MLR-approved content that carries it, with blockers. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `plan_hospital_engagement` | A hospital's formulary status and P&T timing for each Lumera drug, the value dossier to send (usable or blocked), its prescriber groups and consent, and ordered next steps. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `trace_content_lineage` | Traces a campaign's content back to its brief and brand-rule results. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `recall_decisions` | Recalls remembered drafts and decisions about a subject in this workspace, dated and sourced. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `recall_recent_work` | Lists this workspace's most recent remembered drafts and decisions. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `explain_memory` | Shows where one memory came from: its record, the draft versions it replaced, and its subjects. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `recall_decisions` | Recalls remembered drafts and decisions about a subject in this workspace, dated and sourced. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `recall_recent_work` | Lists this workspace's most recent remembered drafts and decisions. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `explain_memory` | Shows where one memory came from: its record, the draft versions it replaced, and its subjects. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
 
 ### Write actions (5)
 
@@ -2064,11 +2164,11 @@ Who decides whether you may create a campaign from the workbench?
 | `Hospital` | A fictional hospital or health system, with its formulary and patient volumes. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `Specialty` | A prescriber specialty, such as cardiology, and the conditions it treats. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `PrescriberGroup` | A segment of prescribers at one hospital in one specialty; a count and a decile, never a person. | [3.15 The use-case library: marketing, sales, service, and financial services](#315-the-use-case-library-marketing-sales-service-and-financial-services) |
-| `Workspace` | The workspace that owns a memory. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `MemoryEvent` | The server event that created a memory, with a hashed actor. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `Draft` | One remembered version of a focus draft. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `Decision` | A confirmed save, review, or image attachment. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `RecordRef` | The Salesforce record a decision was recorded in. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `Workspace` | The workspace that owns a memory. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `MemoryEvent` | The server event that created a memory, with a hashed actor. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `Draft` | One remembered version of a focus draft. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `Decision` | A confirmed save, review, or image attachment. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `RecordRef` | The Salesforce record a decision was recorded in. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
 
 ### Graph relationships (65)
 
@@ -2133,12 +2233,12 @@ Who decides whether you may create a campaign from the workbench?
 | `FEATURED` | A push send featuring a menu item. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
 | `SENT_DURING` | A push send made during a daypart. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
 | `UNDER` | A push send made under a weather condition. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `IN_WORKSPACE` | A memory event in its workspace. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `CREATED` | The memory event that created a draft or decision. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `SUPERSEDES` | A draft version replacing the one before it. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `ABOUT` | A memory about a campaign or brand in the demo graph. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `DECIDED_ON` | A decision about the draft version it saved. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
-| `RECORDED_IN` | A decision recorded in a Salesforce record. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `IN_WORKSPACE` | A memory event in its workspace. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `CREATED` | The memory event that created a draft or decision. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `SUPERSEDES` | A draft version replacing the one before it. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `ABOUT` | A memory about a campaign or brand in the demo graph. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `DECIDED_ON` | A decision about the draft version it saved. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
+| `RECORDED_IN` | A decision recorded in a Salesforce record. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
 
 ### Operator controls (4)
 
@@ -2147,7 +2247,7 @@ Who decides whether you may create a campaign from the workbench?
 | `WRITES_ENABLED` | Set to false to pause every Salesforce write without a deploy. | [3.9 Governance: permissions, confirmations, and kill switches](#39-governance-permissions-confirmations-and-kill-switches) |
 | `DISABLED_TOOLS` | A comma-separated list of tools to withhold from the model or block as writes. | [3.9 Governance: permissions, confirmations, and kill switches](#39-governance-permissions-confirmations-and-kill-switches) |
 | `DISABLED_AGENTS` | A comma-separated list of registry agents to switch off; the gateway denies every call they make. | [3.17 The agentic gateway](#317-the-agentic-gateway) |
-| `MEMORY_ENABLED` | Set to false to stop remembering and withhold the recall tools. | [3.21 Long-term memory: remembering across chats](#321-long-term-memory-remembering-across-chats) |
+| `MEMORY_ENABLED` | Set to false to stop remembering and withhold the recall tools. | [3.22 Long-term memory: remembering across chats](#322-long-term-memory-remembering-across-chats) |
 
 ### Salesforce components (10)
 

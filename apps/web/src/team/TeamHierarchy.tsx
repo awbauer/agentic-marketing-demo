@@ -3,11 +3,13 @@
 // to each other get a curve between them. Each node shows its agent's state, and the line a
 // message is travelling along right now is lit.
 import {
+  isLifecycleWorker,
+  type LifecycleWorker,
   TEAM_DIRECTOR,
+  TEAM_GATES,
   TEAM_PARTY_LABELS,
-  TEAM_SPECIALISTS,
   type TeamAgentId,
-  type TeamSpecialist,
+  type TeamMode,
 } from "@northstar/architecture";
 import type { TeamMessage, TeamState } from "./team-state";
 
@@ -16,12 +18,23 @@ type Point = { x: number; y: number };
 const HUB: Point = { x: 360, y: 230 };
 const RING = 150;
 /** Spokes sit at the corners of the ring, so the brief and proposal lines run clear of them. */
-const SPOKE: Record<TeamSpecialist, Point> = {
+const SQUAD_SPOKES: Partial<Record<LifecycleWorker, Point>> = {
   "audience-analyst": { x: HUB.x - RING, y: HUB.y - 120 },
   "art-director": { x: HUB.x + RING, y: HUB.y - 120 },
   "copy-lead": { x: HUB.x + RING, y: HUB.y + 120 },
   "channel-planner": { x: HUB.x - RING, y: HUB.y + 120 },
 };
+/** The lifecycle's six spokes: three above the hub and three below, in the order they work. */
+const LIFECYCLE_SPOKES: Partial<Record<LifecycleWorker, Point>> = {
+  "audience-analyst": { x: HUB.x - 175, y: HUB.y - 125 },
+  "art-director": { x: HUB.x, y: HUB.y - 168 },
+  "copy-lead": { x: HUB.x + 175, y: HUB.y - 125 },
+  "mlr-coordinator": { x: HUB.x + 175, y: HUB.y + 125 },
+  "channel-planner": { x: HUB.x, y: HUB.y + 168 },
+  "performance-analyst": { x: HUB.x - 175, y: HUB.y + 125 },
+};
+/** The people a lifecycle run waits on. */
+const PEOPLE = new Set(["brand-lead", "medical", "legal", "regulatory", "marketing-ops", "market"]);
 const BRIEF: Point = { x: 62, y: HUB.y };
 const PROPOSAL: Point = { x: 658, y: HUB.y };
 /** The compliance reviewer, a person, sits outside the ring between the hub and the client. */
@@ -30,26 +43,32 @@ const HUB_R = 58;
 const SPOKE_W = 150;
 const SPOKE_H = 50;
 
-const ICON: Record<TeamSpecialist, string> = {
+const ICON: Record<LifecycleWorker, string> = {
   "audience-analyst": "◎",
   "art-director": "◐",
   "copy-lead": "❝",
   "channel-planner": "▦",
+  "mlr-coordinator": "§",
+  "performance-analyst": "↗",
 };
 
-type EdgeId = "brief" | "proposal" | "compliance" | `spoke:${TeamSpecialist}` | `chord:${string}`;
+type EdgeId = "brief" | "proposal" | "compliance" | `spoke:${LifecycleWorker}` | `chord:${string}`;
 
-const isSpoke = (party: string): party is TeamSpecialist =>
-  (TEAM_SPECIALISTS as readonly string[]).includes(party);
-const chordId = (a: TeamSpecialist, b: TeamSpecialist) =>
+const isSpoke = (party: string): party is LifecycleWorker => isLifecycleWorker(party);
+const chordId = (a: LifecycleWorker, b: LifecycleWorker) =>
   `chord:${[a, b].sort().join("|")}` as const;
 
 /** The lines a message travels along. */
-function edgesOf(message: TeamMessage): EdgeId[] {
+function edgesOf(message: TeamMessage, spokes: readonly LifecycleWorker[]): EdgeId[] {
   if (message.from === "compliance" || message.to === "compliance") return ["compliance"];
   if (message.from === "client") return message.kind === "decision" ? ["proposal"] : ["brief"];
   if (message.to === "client") return ["proposal"];
-  if (message.to === "team") return TEAM_SPECIALISTS.map((id) => `spoke:${id}` as const);
+  if (message.kind === "brief") return ["brief"];
+  if (PEOPLE.has(message.from) || PEOPLE.has(message.to)) {
+    const spoke = isSpoke(message.from) ? message.from : isSpoke(message.to) ? message.to : null;
+    return spoke ? [`spoke:${spoke}`, "proposal"] : ["proposal"];
+  }
+  if (message.to === "team") return spokes.map((id) => `spoke:${id}` as const);
   if (isSpoke(message.from) && isSpoke(message.to)) return [chordId(message.from, message.to)];
   const spoke = isSpoke(message.from) ? message.from : isSpoke(message.to) ? message.to : null;
   return spoke ? [`spoke:${spoke}`] : [];
@@ -65,9 +84,15 @@ function toward(from: Point, to: Point, distance: number): Point {
   return { x: from.x + (dx / length) * distance, y: from.y + (dy / length) * distance };
 }
 
-export function TeamHierarchy({ state }: { state: TeamState }) {
-  const used = new Set(state.messages.flatMap(edgesOf));
-  const live = new Set(state.latest ? edgesOf(state.latest) : []);
+export function TeamHierarchy({ state, mode = "squad" }: { state: TeamState; mode?: TeamMode }) {
+  const SPOKE = (mode === "lifecycle" ? LIFECYCLE_SPOKES : SQUAD_SPOKES) as Record<
+    LifecycleWorker,
+    Point
+  >;
+  const spokes = Object.keys(SPOKE) as LifecycleWorker[];
+  const lifecycle = mode === "lifecycle";
+  const used = new Set(state.messages.flatMap((message) => edgesOf(message, spokes)));
+  const live = new Set(state.latest ? edgesOf(state.latest, spokes) : []);
   const edgeClass = (id: EdgeId, extra = "") =>
     `team-edge${extra}${used.has(id) ? " used" : ""}${live.has(id) ? " live" : ""}`;
   const note = (id: TeamAgentId) => {
@@ -80,14 +105,14 @@ export function TeamHierarchy({ state }: { state: TeamState }) {
     if (view.state === "blocked") return "Stuck";
     return view.state === "idle" ? "Idle" : "";
   };
-  const chords = TEAM_SPECIALISTS.flatMap((a, i) =>
-    TEAM_SPECIALISTS.slice(i + 1).map((b) => [a, b] as const),
-  ).filter(([a, b]) => used.has(chordId(a, b)));
+  const chords = spokes
+    .flatMap((a, i) => spokes.slice(i + 1).map((b) => [a, b] as const))
+    .filter(([a, b]) => used.has(chordId(a, b)));
   const lead = state.agents[TEAM_DIRECTOR];
   const waitingOn = state.waiting?.gate ?? null;
   const reviewed = state.decisions.filter((decision) => decision.gate === "compliance");
   const lastReview = reviewed.at(-1);
-  const summary = [TEAM_DIRECTOR, ...TEAM_SPECIALISTS]
+  const summary = [TEAM_DIRECTOR, ...spokes]
     .map((id) => `${TEAM_PARTY_LABELS[id]}: ${state.agents[id].state}`)
     .join("; ");
   return (
@@ -95,7 +120,7 @@ export function TeamHierarchy({ state }: { state: TeamState }) {
       className="team-hierarchy"
       viewBox="0 0 720 460"
       role="img"
-      aria-label={`Hub-and-spoke map of the squad. ${summary}.`}
+      aria-label={`Hub-and-spoke map of the ${lifecycle ? "lifecycle team" : "squad"}. ${summary}.`}
     >
       <circle cx={HUB.x} cy={HUB.y} r={RING + 46} className="team-ring" />
       <line
@@ -112,7 +137,7 @@ export function TeamHierarchy({ state }: { state: TeamState }) {
         y2={PROPOSAL.y}
         className={edgeClass("proposal")}
       />
-      {TEAM_SPECIALISTS.map((id) => {
+      {spokes.map((id) => {
         const start = toward(HUB, SPOKE[id], HUB_R + 3);
         const end = toward(SPOKE[id], HUB, 30);
         return (
@@ -151,7 +176,7 @@ export function TeamHierarchy({ state }: { state: TeamState }) {
           Brief
         </text>
         <text x={BRIEF.x} y={BRIEF.y + 14} textAnchor="middle" className="team-node-note">
-          {state.brief ? short(state.brief.brand, 14) : "from client"}
+          {state.brief ? short(state.brief.brand, 14) : lifecycle ? "from brand" : "from client"}
         </text>
       </g>
       {(used.has("compliance") || waitingOn === "compliance") && (
@@ -191,20 +216,26 @@ export function TeamHierarchy({ state }: { state: TeamState }) {
         </g>
       )}
       <g
-        className={`team-node team-node-endpoint ${waitingOn === "client" ? "team-node-person is-waiting-person" : `is-${state.strategy ? "done" : "idle"}`}`}
+        className={`team-node team-node-endpoint ${(lifecycle ? waitingOn : waitingOn === "client") ? "team-node-person is-waiting-person" : `is-${state.strategy || state.lifecycle?.finished ? "done" : "idle"}`}`}
       >
         <rect x={PROPOSAL.x - 46} y={PROPOSAL.y - 26} width={92} height={52} rx={26} />
         <text x={PROPOSAL.x} y={PROPOSAL.y - 3} textAnchor="middle" className="team-node-title">
-          Proposal
+          {lifecycle ? "People" : "Proposal"}
         </text>
         <text x={PROPOSAL.x} y={PROPOSAL.y + 14} textAnchor="middle" className="team-node-note">
-          {waitingOn === "client"
-            ? "your turn"
-            : state.phases.has("approved")
-              ? "approved"
-              : state.strategy && state.phases.has("proposal")
-                ? "sent"
-                : "to client"}
+          {lifecycle
+            ? waitingOn
+              ? short(TEAM_GATES[waitingOn].decider, 14)
+              : state.lifecycle?.finished
+                ? "all decided"
+                : `${state.decisions.length} decisions`
+            : waitingOn === "client"
+              ? "your turn"
+              : state.phases.has("approved")
+                ? "approved"
+                : state.strategy && state.phases.has("proposal")
+                  ? "sent"
+                  : "to client"}
         </text>
       </g>
 
@@ -221,7 +252,7 @@ export function TeamHierarchy({ state }: { state: TeamState }) {
         )}
       </g>
 
-      {TEAM_SPECIALISTS.map((id) => {
+      {spokes.map((id) => {
         const at = SPOKE[id];
         const view = state.agents[id];
         return (

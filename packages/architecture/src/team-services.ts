@@ -14,6 +14,7 @@ import type {
   ResearchReport,
   TeamOutputs,
 } from "./team.ts";
+import { ASSET_LIBRARY, type LibraryAsset } from "./assets.ts";
 import { MEDIA_CHANNEL_LABELS, type MediaChannel, teamMarket } from "./team-data.ts";
 import { costPerClick, projectedClicks, projectedImpressions } from "./team-semantic.ts";
 import type { Brand } from "./types.ts";
@@ -58,8 +59,52 @@ export function researchProblems(brand: Brand, report: ResearchReport): string[]
   return problems;
 }
 
-/** The palette comes from the brand book, and no key visual shows what the brand book forbids. */
-export function creativeProblems(brand: Brand, concept: CreativeConcept): string[] {
+export type AssetChoice = {
+  asset: LibraryAsset;
+  usable: boolean;
+  /** Why it may not be used, when it may not. */
+  reason?: string;
+};
+
+/**
+ * The brand's asset library, each image marked usable or not for a campaign: only approved
+ * images, in rights to the campaign's last day, that show no claim the content doesn't carry and
+ * nothing the brand book rules out. Nothing is generated; the squad only chooses.
+ */
+export function assetChoices(
+  brand: Brand,
+  campaignEnd: string,
+  citedTopics: readonly string[] = [],
+): AssetChoice[] {
+  const { imageryDont } = teamMarket(brand).guidelines;
+  return ASSET_LIBRARY.filter((asset) => asset.brand === brand).map((asset) => {
+    const uncited = (asset.shows ?? []).filter((topic) => !citedTopics.includes(topic));
+    const banned = imageryDont.find((item) =>
+      lower(`${asset.alt} ${asset.title}`).includes(lower(item)),
+    );
+    const reason =
+      asset.approval.status !== "Approved"
+        ? `${asset.approval.status} in ${asset.source}${asset.approval.id ? ` (${asset.approval.id})` : ""}: only approved images may be used.`
+        : asset.rightsUntil && asset.rightsUntil < campaignEnd
+          ? `Usage rights end ${asset.rightsUntil}, before the campaign ends on ${campaignEnd}.`
+          : uncited.length
+            ? `It shows ${uncited.join(", ")}, a claim the content does not carry.`
+            : banned
+              ? `It shows "${banned}", which the brand book rules out.`
+              : undefined;
+    return reason ? { asset, usable: false, reason } : { asset, usable: true };
+  });
+}
+
+/**
+ * The palette comes from the brand book, and every image is an approved, in-rights asset from the
+ * library that shows nothing the content doesn't support.
+ */
+export function creativeProblems(
+  brand: Brand,
+  concept: CreativeConcept,
+  options: { campaignEnd: string; citedTopics?: readonly string[] },
+): string[] {
   const { guidelines } = teamMarket(brand);
   const palette = new Set(guidelines.palette.map((color) => lower(color.hex)));
   const problems: string[] = [];
@@ -69,13 +114,19 @@ export function creativeProblems(brand: Brand, concept: CreativeConcept): string
         `${hex} is not in the ${brand} palette (${guidelines.palette.map((color) => color.hex).join(", ")}).`,
       );
   if (concept.palette.length === 0) problems.push("Choose at least one palette color.");
-  if (concept.keyVisuals.length === 0) problems.push("Describe at least one key visual.");
-  for (const visual of concept.keyVisuals)
-    for (const banned of guidelines.imageryDont)
-      if (lower(visual.description).includes(lower(banned)))
-        problems.push(
-          `The ${visual.format} visual shows "${banned}", which the brand book rules out.`,
-        );
+  if (concept.assets.length === 0)
+    problems.push("Choose at least one approved asset from the library (find_approved_assets).");
+  const choices = new Map(
+    assetChoices(brand, options.campaignEnd, options.citedTopics).map((choice) => [
+      choice.asset.id,
+      choice,
+    ]),
+  );
+  for (const { assetId } of concept.assets) {
+    const choice = choices.get(assetId);
+    if (!choice) problems.push(`${assetId} is not in ${brand}'s asset library.`);
+    else if (!choice.usable) problems.push(`${assetId} can't be used: ${choice.reason}`);
+  }
   return problems;
 }
 

@@ -23,6 +23,7 @@ import {
   semanticQuery,
 } from "./team-semantic.ts";
 import {
+  assetChoices,
   copyProblems,
   creativeProblems,
   findConflicts,
@@ -91,7 +92,7 @@ const creative = {
   visualDirection: "Steam and fog.",
   palette: ["#1F4E79", "#f1e9da"],
   mood: "Cozy",
-  keyVisuals: [{ format: "display", description: "Steam rising from a bowl by the window." }],
+  assets: [{ assetId: "ck-img-chowder-hero", use: "Email hero" }],
   rationale: "Fits the commuters.",
 };
 
@@ -146,15 +147,48 @@ describe("campaign squad", () => {
     expect(invented).toHaveLength(2);
   });
 
-  it("holds the creative to the brand palette and its imagery rules", () => {
-    expect(creativeProblems("Coastline Kitchen", creative)).toEqual([]);
-    const off = creativeProblems("Coastline Kitchen", {
-      ...creative,
-      palette: ["#00FF00"],
-      keyVisuals: [{ format: "display", description: "Stock models laughing at a table." }],
-    });
-    expect(off.join(" ")).toContain("#00FF00");
-    expect(off.join(" ")).toContain("stock models");
+  it("holds the creative to the brand palette and approved, in-rights assets", () => {
+    const window = { campaignEnd: coastline.end };
+    expect(creativeProblems("Coastline Kitchen", creative, window)).toEqual([]);
+    const off = creativeProblems(
+      "Coastline Kitchen",
+      {
+        ...creative,
+        palette: ["#00FF00"],
+        assets: [
+          { assetId: "ck-img-soup-counter", use: "Hero" },
+          { assetId: "ck-img-price-tile", use: "Price" },
+          { assetId: "ck-img-made-up", use: "Hero" },
+        ],
+      },
+      window,
+    ).join(" ");
+    expect(off).toContain("#00FF00");
+    // Its rights end before the campaign does.
+    expect(off).toContain("ck-img-soup-counter can't be used: Usage rights end 2026-11-07");
+    // It shows a price claim the content doesn't carry.
+    expect(off).toContain("ck-img-price-tile can't be used: It shows chowder-price");
+    expect(off).toContain("ck-img-made-up is not in Coastline Kitchen's asset library");
+    // Pending and expired approvals are never usable.
+    const lumera = assetChoices("Lumera Therapeutics", "2027-03-31");
+    expect(lumera.find((item) => item.asset.id === "lt-img-superiority-chart")?.reason).toContain(
+      "Pending",
+    );
+    expect(lumera.filter((item) => item.usable).map((item) => item.asset.id)).toEqual([
+      "lt-img-congress-hero",
+      "lt-img-cardivance-pack",
+      "lt-img-logo",
+    ]);
+    // The Glucora hero's rights end in January, before this campaign does.
+    expect(lumera.find((item) => item.asset.id === "lt-img-glucora-hero")?.reason).toContain(
+      "2027-01-31",
+    );
+    // A chart that shows a claim is usable once the content cites that claim.
+    expect(
+      assetChoices("Coastline Kitchen", coastline.end, ["chowder-price"]).find(
+        (item) => item.asset.id === "ck-img-price-tile",
+      )?.usable,
+    ).toBe(true);
   });
 
   it("checks copy limits, banned phrases as whole words, and required disclosures", () => {

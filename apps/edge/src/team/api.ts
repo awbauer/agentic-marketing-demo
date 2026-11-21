@@ -7,6 +7,10 @@ import {
   type CampaignBrief,
   isTeamGate,
   isTeamProvider,
+  PHARMA_PHASES,
+  runsPharmaLifecycle,
+  TEAM_GATES,
+  TEAM_MODES,
   TEAM_PROVIDERS,
   type TeamEvent,
   TEAM_AGENTS,
@@ -17,6 +21,7 @@ import {
 import { ArchError, type Ctx, overridesFor } from "../architecture/context";
 import { streamFlow } from "../architecture/orchestration";
 import { continueTeamRun, startTeamRun } from "./director";
+import { startLifecycleRun } from "./lifecycle";
 import { providerStatus, teamModels } from "./run";
 
 const RUN = /^\/api\/arch\/team\/runs\/([^/]+)$/;
@@ -62,6 +67,7 @@ export async function handleTeam(
       agents: TEAM_AGENTS.map((agent) => ({ ...agent, model: models[agent.id] })),
       providers: providerStatus(ctx),
       briefs: TEAM_BRIEFS,
+      lifecycle: { phases: PHARMA_PHASES, gates: TEAM_GATES },
       policies: buildTeamPolicies(await overridesFor(ctx)).map((policy) => ({
         ...policy,
         cedar: toCedar(policy),
@@ -77,14 +83,30 @@ export async function handleTeam(
         "BAD_REQUEST",
         `provider must be one of ${TEAM_PROVIDERS.join(", ")}.`,
       );
+    const mode = input.mode ?? "squad";
+    if (!(TEAM_MODES as readonly unknown[]).includes(mode))
+      throw new ArchError(400, "BAD_REQUEST", `mode must be one of ${TEAM_MODES.join(", ")}.`);
     const brief = briefFrom(input);
+    if (mode === "lifecycle") {
+      if (!runsPharmaLifecycle(brief.brand))
+        throw new ArchError(
+          400,
+          "BAD_REQUEST",
+          "The pharma lifecycle runs for a prescription brand (Lumera Therapeutics).",
+        );
+      return streamFlow<TeamEvent>(await startLifecycleRun(ctx, brief, provider));
+    }
     return streamFlow<TeamEvent>(await startTeamRun(ctx, brief, provider));
   }
   const decide = DECIDE.exec(path);
   if (decide?.[1] && request.method === "POST") {
     const input = await readBody();
     if (!isTeamGate(input.gate))
-      throw new ArchError(400, "BAD_REQUEST", "gate must be compliance or client.");
+      throw new ArchError(
+        400,
+        "BAD_REQUEST",
+        `gate must be one of ${Object.keys(TEAM_GATES).join(", ")}.`,
+      );
     if (input.decision !== "approve" && input.decision !== "changes")
       throw new ArchError(400, "BAD_REQUEST", "decision must be approve or changes.");
     return streamFlow<TeamEvent>(
@@ -92,6 +114,7 @@ export async function handleTeam(
         gate: input.gate,
         decision: input.decision,
         note: typeof input.note === "string" ? input.note.slice(0, 1000) : "",
+        ...(typeof input.choice === "string" ? { choice: input.choice.slice(0, 40) } : {}),
       }),
     );
   }

@@ -39,6 +39,8 @@ describe("campaign squad", () => {
     expect(body.agents.map((agent: Json) => agent.id)).toEqual([
       "campaign-lead",
       ...TEAM_SPECIALISTS,
+      "mlr-coordinator",
+      "performance-analyst",
     ]);
     expect(body.agents.every((agent: Json) => typeof agent.model === "string")).toBe(true);
     expect(body.briefs).toHaveLength(TEAM_BRIEFS.length);
@@ -276,7 +278,7 @@ describe("campaign squad", () => {
       roster.providers.find((item: Json) => item.id === "anthropic").models["campaign-lead"],
     ).toBe("claude-opus-5-5");
     expect(roster.providers.find((item: Json) => item.id === "openai").models["copy-lead"]).toBe(
-      "gpt-6-astra",
+      "gpt-5.4-mini",
     );
     for (const provider of ["anthropic", "openai"]) {
       const stream = await events(
@@ -292,7 +294,20 @@ describe("campaign squad", () => {
       const models = new Set(
         stream.filter((event) => event.type === "model").map((event) => event.model),
       );
-      expect([...models]).toEqual([provider === "anthropic" ? "claude-opus-5-5" : "gpt-6-astra"]);
+      // The coordinator runs on the provider's top model, the workers on a smaller one.
+      const byAgent = (agent: string) =>
+        new Set(
+          stream
+            .filter((event) => event.type === "model" && event.agent === agent)
+            .map((event) => event.model),
+        );
+      expect([...byAgent("campaign-lead")]).toEqual([
+        provider === "anthropic" ? "claude-opus-5-5" : "gpt-6-astra",
+      ]);
+      expect([...byAgent("copy-lead")]).toEqual([
+        provider === "anthropic" ? "claude-sonnet-5-5" : "gpt-5.4-mini",
+      ]);
+      expect(models.size).toBe(2);
     }
     const bad = await post("/api/arch/team/runs", {
       briefId: "coastline-winter-warmup",

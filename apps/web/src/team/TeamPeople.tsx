@@ -10,10 +10,10 @@ import {
   TEAM_GATES,
   type TeamEvent,
 } from "@northstar/architecture";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 type Waiting = Extract<TeamEvent, { type: "await-person" }>;
-type Decided = Extract<TeamEvent, { type: "decided" }>;
+type Decided = Extract<TeamEvent, { type: "decided" }> & { choiceLabel?: string };
 
 /** What the reviewer checks: every placement's copy and its disclosure. */
 function CopyUnderReview({ strategy }: { strategy: CampaignStrategy }) {
@@ -68,10 +68,6 @@ export function DecisionCard({
     (decision) => decision.gate === "client" && decision.decision === "changes",
   ).length;
   const canAskChanges = waiting.gate !== "client" || roundsUsed < CLIENT_ROUNDS;
-  // A decision is waiting: bring it into view once, so it isn't missed below the fold.
-  useEffect(() => {
-    card.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [waiting]);
   return (
     <section
       ref={card}
@@ -143,7 +139,11 @@ export function DecisionLog({ decisions }: { decisions: readonly Decided[] }) {
       {decisions.map((decision, index) => (
         <li key={`${decision.gate}-${index}`} className={`decision-${decision.decision}`}>
           <strong>{TEAM_GATES[decision.gate].decider}</strong>{" "}
-          {decision.decision === "approve" ? "approved" : "asked for changes"}
+          {decision.decision === "changes"
+            ? "asked for changes"
+            : decision.choiceLabel
+              ? `chose “${decision.choiceLabel}”`
+              : "approved"}
           {decision.note ? `: “${decision.note}”` : "."}
         </li>
       ))}

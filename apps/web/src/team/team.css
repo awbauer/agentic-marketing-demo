@@ -942,3 +942,404 @@
 .team-score-big {
   margin: 0;
 }
+
+/* Approved assets from the library: a swatch stands in for each image. */
+.team-assets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.team-assets li {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.team-assets li > div:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.team-assets small {
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.team-assets small.team-asset-use {
+  color: var(--ink);
+}
+.team-asset-swatch {
+  display: grid;
+  place-items: end start;
+  height: 60px;
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+.team-asset-swatch span {
+  font-size: 10px;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* The feed scrolls inside itself; a pill counts messages that arrived below. */
+.team-messages-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.team-new-pill {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--forest);
+  color: #fff;
+  font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+/* Fixed, so announcing a decision never moves the page. */
+.team-turn-pill {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 20;
+  padding: 10px 16px;
+  border: 2px solid var(--amber);
+  border-radius: 999px;
+  background: #fff7e8;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+.team-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* The pharma lifecycle. */
+.team-view {
+  --team-mlr: #8a2f5d;
+  --team-performance: #1d6f8a;
+}
+.party-mlr-coordinator {
+  background: #f3dde8;
+  color: var(--team-mlr);
+}
+.party-performance-analyst {
+  background: #d9eef4;
+  color: var(--team-performance);
+}
+.party-brand-lead,
+.party-medical,
+.party-legal,
+.party-regulatory,
+.party-marketing-ops {
+  background: #fdf0d8;
+  color: #7a4d12;
+}
+.party-market {
+  background: var(--line);
+  color: var(--ink);
+}
+.team-mode {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+.team-mode legend {
+  margin-bottom: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.team-mode .team-switch {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.team-lifecycle {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.team-lifecycle > header h3 {
+  margin: 0 0 4px;
+}
+.team-lifecycle-phases {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.team-lifecycle-phase {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.team-lifecycle-phase.reached {
+  border-color: var(--forest);
+}
+.team-lifecycle-phase.active {
+  border: 2px solid var(--amber);
+  background: #fffaf0;
+}
+.team-lifecycle-phase h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.team-phase-number {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--line);
+  font-size: 11px;
+}
+.team-lifecycle-phase.reached .team-phase-number {
+  background: var(--forest);
+  color: #fff;
+}
+.team-round {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f6dfe4;
+  color: #8a2f3d;
+  font-size: 11px;
+  font-weight: 600;
+}
+.team-lifecycle-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.team-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--line);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.team-step p {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.team-step code {
+  font-size: 11px;
+}
+.team-step.agent {
+  border-left-color: var(--team-director);
+}
+.team-step.person {
+  border-left-color: var(--amber);
+}
+.team-step.done {
+  opacity: 0.75;
+}
+.team-step.now {
+  background: #fdf3c9;
+  opacity: 1;
+}
+.team-step-state {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--forest);
+}
+.team-step.now .team-step-state {
+  color: #7a4d12;
+}
+.team-step-key {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.team-step-key.agent {
+  background: #dde8f3;
+  color: var(--team-director);
+}
+.team-step-key.person {
+  background: #fdf0d8;
+  color: #7a4d12;
+}
+.team-options {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+.team-options li.chosen {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f4fae0;
+}
+.team-options p {
+  margin: 2px 0;
+}
+.team-options code,
+.team-performance code {
+  margin-right: 4px;
+  font-size: 11px;
+}
+.team-choice {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 0;
+  border: 0;
+}
+.team-choice legend {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.team-choice label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  cursor: pointer;
+}
+.team-choice label.on {
+  border-color: var(--forest);
+  box-shadow: inset 0 0 0 1px var(--forest);
+}
+.team-choice small {
+  grid-column: 2;
+  color: var(--muted);
+}
+.team-modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.team-module {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: #1b1f24;
+}
+.team-module header {
+  font-size: 11px;
+  color: #5b6470;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.team-module h5 {
+  margin: 6px 0;
+  font-size: 15px;
+  color: #00797c;
+}
+.team-module-claims {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+.team-module-claims sup {
+  margin-left: 2px;
+  font-weight: 700;
+}
+.team-module-cta {
+  font-weight: 700;
+  color: #00797c;
+}
+.team-module details {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.team-module-refs {
+  padding-left: 18px;
+}
+.team-module-isi {
+  margin: 6px 0;
+  padding: 6px 8px;
+  border: 1px solid #d8dde3;
+  background: #f7f8fa;
+  line-height: 1.4;
+}
+.team-table td.ok {
+  color: var(--forest);
+}
+.team-table td.failed {
+  color: #a3262a;
+}
+.team-table tr.team-total th,
+.team-table tr.team-total td {
+  font-weight: 700;
+  border-top: 2px solid var(--line);
+}
+.team-approval {
+  padding: 8px 10px;
+  border-left: 3px solid var(--forest);
+  background: #f4fae0;
+}
+.team-file {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.team-file h3 {
+  margin: 0 0 8px;
+}
+.team-file-body {
+  margin-top: 10px;
+}
+.team-file-item + .team-file-item {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.team-file-item h4 small {
+  font-weight: 400;
+  color: var(--muted);
+}
+.team-file-earlier {
+  margin-top: 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+}
+.team-json {
+  max-height: 240px;
+  overflow: auto;
+  font-size: 11px;
+}

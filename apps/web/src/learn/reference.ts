@@ -147,6 +147,81 @@ export const LEARN_REFERENCE: ReferenceEntry[] = [
     "campaign-squad",
     "Saves the channel planner's plan and returns projections; refused under a minimum spend, over budget, or outside the window.",
   ),
+  tool(
+    "request_decision",
+    "pharma-lifecycle",
+    "The lifecycle lead asks the person whose step is next (the brand lead, Medical, Legal, Regulatory or marketing operations) to decide. The run waits for them.",
+  ),
+  tool(
+    "find_approved_assets",
+    "pharma-lifecycle",
+    "Lists the brand's digital asset library: each image's approval, usage rights, what it shows, and whether this campaign may use it and why not. Images are chosen, never made.",
+  ),
+  tool(
+    "get_past_results",
+    "pharma-lifecycle",
+    "Reads the brand's past in-market results, each with an id to cite.",
+  ),
+  tool(
+    "get_claims_library",
+    "pharma-lifecycle",
+    "Reads the product's claims library: each claim's exact approved text, status, references and the disclosures it requires.",
+  ),
+  tool(
+    "get_hcp_universe",
+    "pharma-lifecycle",
+    "Reads the HCP universe by segment and decile band, with email consent, rep coverage and the do-not-contact count.",
+  ),
+  tool(
+    "get_approved_job",
+    "pharma-lifecycle",
+    "Reads the MLR-approved job (document number, expiry, modules), the approved HCP list, budget and window.",
+  ),
+  tool(
+    "get_campaign_results",
+    "pharma-lifecycle",
+    "Reads thirty days of simulated in-market results, one line per module, segment and channel.",
+  ),
+  tool(
+    "propose_focus_areas",
+    "pharma-lifecycle",
+    "Saves two or three business focus areas; refused unless each cites real data ids and says how success is measured.",
+  ),
+  tool(
+    "propose_concepts",
+    "pharma-lifecycle",
+    "Saves two or three concepts; refused if a concept rests on an unsubstantiated claim or an unusable image.",
+  ),
+  tool(
+    "draft_modules",
+    "pharma-lifecycle",
+    "Saves an email and a display module built from the claims library, with reference markers and the required ISI, boxed warning and PI attached; an unsubstantiated claim is refused.",
+  ),
+  tool(
+    "submit_mlr_job",
+    "pharma-lifecycle",
+    "Submits the modules to MLR as one job after the pre-review checks pass; the job then goes to Medical, Legal and Regulatory in turn.",
+  ),
+  tool(
+    "build_audience",
+    "pharma-lifecycle",
+    "Saves the HCP list by segment and decile; the service applies email consent and the do-not-contact list.",
+  ),
+  tool(
+    "schedule_deployment",
+    "pharma-lifecycle",
+    "Saves the schedule; refused for a module MLR has not approved for that channel, a segment outside the approved list, dates outside the window or past expiry, or spend over budget.",
+  ),
+  tool(
+    "prepare_form_2253",
+    "pharma-lifecycle",
+    "Prepares Form FDA 2253 from the approved job and the schedule, dated to first use.",
+  ),
+  tool(
+    "report_performance",
+    "pharma-lifecycle",
+    "Saves the performance read: findings citing result lines, and a recommendation to continue, optimize or retire.",
+  ),
   // Tools the architecture agents and the sample-flow orchestrator call.
   tool(
     "next_step",
