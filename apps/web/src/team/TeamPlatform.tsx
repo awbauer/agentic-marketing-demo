@@ -14,14 +14,13 @@ import {
   type TeamProvider,
   type TeamScorecard,
 } from "@northstar/architecture";
-import { useState } from "react";
 import { useArch } from "../architecture/api";
 import { useScope } from "../scope";
 import { type InfraLayer, isPeerMessage, type TeamState } from "./team-state";
 
 const short = (id: TeamAgentId) => TEAM_PARTY_LABELS[id];
 
-function SemanticLayerPanel({ state }: { state: TeamState }) {
+export function SemanticLayerPanel({ state }: { state: TeamState }) {
   // Which agents used which metric, and which entities, in this run.
   const byMetric = new Map<string, Set<TeamAgentId>>();
   const byEntity = new Map<string, Set<TeamAgentId>>();
@@ -140,7 +139,7 @@ type Layer = {
   stats: Array<[string, string | number]>;
 };
 
-function InfrastructurePanel({ state }: { state: TeamState }) {
+export function InfrastructurePanel({ state }: { state: TeamState }) {
   const calls = state.modelCalls;
   const tokens = calls.reduce((sum, call) => sum + call.tokens, 0);
   const byModel = new Map<string, { calls: number; ms: number }>();
@@ -473,7 +472,7 @@ function RunsCompared({ refreshKey }: { refreshKey: string }) {
   );
 }
 
-function EvalsPanel({ state }: { state: TeamState }) {
+export function EvalsPanel({ state }: { state: TeamState }) {
   return (
     <div className="team-evals">
       <p className="arch-note">
@@ -495,52 +494,5 @@ function EvalsPanel({ state }: { state: TeamState }) {
       <h4>Runs compared</h4>
       <RunsCompared refreshKey={state.scorecard?.runId ?? ""} />
     </div>
-  );
-}
-
-/** The views of what the squad runs on, and how well it did. */
-export function TeamPlatform({ state }: { state: TeamState }) {
-  const [tab, setTab] = useState<"semantic" | "infra" | "evals">("infra");
-  return (
-    <section className="team-platform" aria-labelledby="team-platform-title">
-      <header>
-        <h3 id="team-platform-title">What the squad runs on</h3>
-        <div className="arch-tabs small" role="tablist" aria-label="Platform views">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "infra"}
-            onClick={() => setTab("infra")}
-          >
-            Agent infrastructure
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "semantic"}
-            onClick={() => setTab("semantic")}
-          >
-            Semantic layer
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "evals"}
-            onClick={() => setTab("evals")}
-          >
-            Evals{state.scorecard ? ` · ${state.scorecard.overall}` : ""}
-          </button>
-        </div>
-      </header>
-      <div role="tabpanel">
-        {tab === "infra" ? (
-          <InfrastructurePanel state={state} />
-        ) : tab === "semantic" ? (
-          <SemanticLayerPanel state={state} />
-        ) : (
-          <EvalsPanel state={state} />
-        )}
-      </div>
-    </section>
   );
 }

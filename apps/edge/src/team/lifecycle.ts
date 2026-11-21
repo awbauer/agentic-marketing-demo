@@ -305,6 +305,15 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
   }
   if (run.waiting) return;
   const state = lifecycleOf(run);
+  // Asking a person is procedural: if the lead's loop ends with a person's step next, the system
+  // routes it to them rather than leaving the run stuck one step from done.
+  const next = currentStep(state);
+  if (!run.finished && !stopped && next?.kind === "person") {
+    const why = `Ready for you: ${next.does}`;
+    say(run, TEAM_DIRECTOR, GATE_PARTY[next.gate], "approval-request", why);
+    pauseFor(run, next.gate, why);
+    return;
+  }
   setStatus(run, TEAM_DIRECTOR, run.finished ? "done" : "blocked");
   run.emit({
     type: "done",

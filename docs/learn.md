@@ -1766,7 +1766,7 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 
 **The semantic layer.** No agent reads a raw table. Each data tool is a named query on a governed layer that defines every entity (segment, competitor, signal, channel, guideline) and metric once: its formula, grain, unit, source and owner. `query_semantic_layer` queries it directly, and `define_term` resolves a business word ("CPC", "lapsed loyalty members") to what it means here. The projection formulas (impressions, clicks, cost per click) live only in the layer, so the channel planner, the lead's reconciliation and the client's proposal can't disagree about a number. The page shows which definitions each agent used.
 
-**The infrastructure under the agents.** The page also lights the layers each event passes: the event stream to the page; the lead's coordination loop; the models, each call metered; the agentic gateway, which checks every tool call as `team:<tool>` and mints a token for it; tools and the semantic layer; the rule services; the agent-to-agent bus; the run's state, saved to D1; and operations, where an operator disables or constrains an agent without a deploy.
+**The infrastructure under the agents.** One **Under the hood** panel holds each agent's grants and calls, the infrastructure, the semantic layer, the evals and the decisions people took, as tabs that change only when you pick one. It lights the layers each event passes: the event stream to the page; the lead's coordination loop; the models, each call metered; the agentic gateway, which checks every tool call as `team:<tool>` and mints a token for it; tools and the semantic layer; the rule services; the agent-to-agent bus; the run's state, saved to D1; and operations, where an operator disables or constrains an agent without a deploy.
 
 **Three model providers, one gateway.** A switch runs the same squad on **Cloudflare Workers AI**, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same. Every request goes through the Cloudflare AI Gateway. Anthropic and OpenAI requests go through the Worker's AI binding to the gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it, and Cloudflare-billed fallback is off. Claude Opus 5.5 does not accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message, and Claude's thinking blocks are replayed unchanged on the next turn.
 
@@ -1779,10 +1779,10 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 **In this demo**
 
 - Campaign squad → pick a brief and a provider → Hand the brief to the squad
-- Campaign squad → What the squad runs on → Agent infrastructure / Semantic layer / Evals
+- Campaign squad → Under the hood → Agent infrastructure / Semantic layer / Evals / Decisions
 - Campaign squad → a Harborstone brief → approve or ask for changes as the compliance reviewer, then as the client
 - pnpm eval:team (with the workbench running)
-- Campaign squad → the agent tabs: each agent's grants, tool calls and the gateway's decisions
+- Campaign squad → Under the hood → Agents: each agent's grants, tool calls and the gateway's decisions
 - packages/architecture/src/team.ts, team-semantic.ts, team-services.ts
 - apps/edge/src/team/director.ts, specialists.ts, gateway.ts, anthropic.ts
 - docs/decisions/ADR-013-campaign-squad.md
@@ -1840,7 +1840,7 @@ flowchart TB
 
 > **Key idea:** Agents do every step of a regulated campaign and code checks each one against the claims library, the asset library, consent and the label; people decide at the nine points a brand team, MLR and operations would, and the MLR system routes the job reviewer to reviewer.
 
-The **Pharma lifecycle** mode of the Campaign squad page runs a prescription brand's campaign end to end: business focus, ideation, content and MLR review, audience selection, publishing and analytics. Agents do every piece of work; people take the decisions a brand team, an MLR committee and an operations team would. The page lists every step, agent or person, and marks where the run is.
+The **Pharma lifecycle** mode of the Campaign squad page runs a prescription brand's campaign end to end: business focus, ideation, content and MLR review, audience selection, publishing and analytics. Agents do every piece of work; people take the decisions a brand team, an MLR committee and an operations team would. The page shows one phase at a time. A stepper across the top lists all six phases, with a mark for each agent step and each of your decisions, and stays in view as you scroll. Below it, the chosen phase shows its documented steps, your decision when it's your turn there, and what the phase produced: each output is a one-line summary that opens to the full detail, with earlier versions kept. The team map and the conversation sit beside it. You can open any phase, before or during a run; the page moves to the active phase only after you decide something. Agents, infrastructure, the semantic layer, evals and the decision log share one tabbed panel underneath.
 
 **The path, step by step.**
 - **Business focus.** The audience analyst reads the segments, competitors, signals and last year's results and proposes two or three focus areas, each citing data ids and a success measure (`propose_focus_areas`). The **brand lead** chooses one.
@@ -1867,8 +1867,9 @@ The **Pharma lifecycle** mode of the Campaign squad page runs a prescription bra
 **In this demo**
 
 - Campaign squad → What the team runs → Pharma lifecycle → Start the campaign lifecycle
-- Campaign squad → The lifecycle, step by step (each agent and person step, and where the run is)
-- Campaign squad → Campaign file (one tab per phase)
+- Campaign squad → the phase stepper (each agent step and decision, and where the run is)
+- Campaign squad → a phase's workspace: its steps, your decision, and what it produced
+- Campaign squad → Under the hood (agents, infrastructure, semantic layer, evals, decisions)
 - packages/architecture/src/team-pharma.ts
 - apps/edge/src/team/lifecycle.ts, lifecycle-workers.ts
 - docs/decisions/ADR-015-pharma-campaign-lifecycle.md
