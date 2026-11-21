@@ -1,0 +1,206 @@
+// The squad as a live hub-and-spoke map: the campaign lead sits in the middle, the four spokes sit
+// around it, the brief arrives from the left and the proposal leaves on the right. Spokes that talk
+// to each other get a curve between them. Each node shows its agent's state, and the line a
+// message is travelling along right now is lit.
+import {
+  TEAM_DIRECTOR,
+  TEAM_PARTY_LABELS,
+  TEAM_SPECIALISTS,
+  type TeamAgentId,
+  type TeamSpecialist,
+} from "@northstar/architecture";
+import type { TeamMessage, TeamState } from "./team-state";
+
+type Point = { x: number; y: number };
+
+const HUB: Point = { x: 360, y: 230 };
+const RING = 150;
+/** Spokes sit at the corners of the ring, so the brief and proposal lines run clear of them. */
+const SPOKE: Record<TeamSpecialist, Point> = {
+  "audience-analyst": { x: HUB.x - RING, y: HUB.y - 120 },
+  "art-director": { x: HUB.x + RING, y: HUB.y - 120 },
+  "copy-lead": { x: HUB.x + RING, y: HUB.y + 120 },
+  "channel-planner": { x: HUB.x - RING, y: HUB.y + 120 },
+};
+const BRIEF: Point = { x: 62, y: HUB.y };
+const PROPOSAL: Point = { x: 658, y: HUB.y };
+const HUB_R = 58;
+const SPOKE_W = 150;
+const SPOKE_H = 50;
+
+const ICON: Record<TeamSpecialist, string> = {
+  "audience-analyst": "◎",
+  "art-director": "◐",
+  "copy-lead": "❝",
+  "channel-planner": "▦",
+};
+
+type EdgeId = "brief" | "proposal" | `spoke:${TeamSpecialist}` | `chord:${string}`;
+
+const isSpoke = (party: string): party is TeamSpecialist =>
+  (TEAM_SPECIALISTS as readonly string[]).includes(party);
+const chordId = (a: TeamSpecialist, b: TeamSpecialist) =>
+  `chord:${[a, b].sort().join("|")}` as const;
+
+/** The lines a message travels along. */
+function edgesOf(message: TeamMessage): EdgeId[] {
+  if (message.from === "client") return ["brief"];
+  if (message.to === "client") return ["proposal"];
+  if (message.to === "team") return TEAM_SPECIALISTS.map((id) => `spoke:${id}` as const);
+  if (isSpoke(message.from) && isSpoke(message.to)) return [chordId(message.from, message.to)];
+  const spoke = isSpoke(message.from) ? message.from : isSpoke(message.to) ? message.to : null;
+  return spoke ? [`spoke:${spoke}`] : [];
+}
+
+const short = (text: string, max = 24) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+/** A point `distance` along the line from one point toward another. */
+function toward(from: Point, to: Point, distance: number): Point {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+  return { x: from.x + (dx / length) * distance, y: from.y + (dy / length) * distance };
+}
+
+export function TeamHierarchy({ state }: { state: TeamState }) {
+  const used = new Set(state.messages.flatMap(edgesOf));
+  const live = new Set(state.latest ? edgesOf(state.latest) : []);
+  const edgeClass = (id: EdgeId, extra = "") =>
+    `team-edge${extra}${used.has(id) ? " used" : ""}${live.has(id) ? " live" : ""}`;
+  const note = (id: TeamAgentId) => {
+    const view = state.agents[id];
+    if ((view.state === "working" || view.state === "revising") && view.activity)
+      return view.activity;
+    if (view.note) return view.note;
+    if (view.state === "done") return id === TEAM_DIRECTOR ? "Proposal sent" : "Kept";
+    if (view.state === "waiting") return "With the lead";
+    if (view.state === "blocked") return "Stuck";
+    return view.state === "idle" ? "Idle" : "";
+  };
+  const chords = TEAM_SPECIALISTS.flatMap((a, i) =>
+    TEAM_SPECIALISTS.slice(i + 1).map((b) => [a, b] as const),
+  ).filter(([a, b]) => used.has(chordId(a, b)));
+  const lead = state.agents[TEAM_DIRECTOR];
+  const summary = [TEAM_DIRECTOR, ...TEAM_SPECIALISTS]
+    .map((id) => `${TEAM_PARTY_LABELS[id]}: ${state.agents[id].state}`)
+    .join("; ");
+  return (
+    <svg
+      className="team-hierarchy"
+      viewBox="0 0 720 460"
+      role="img"
+      aria-label={`Hub-and-spoke map of the squad. ${summary}.`}
+    >
+      <circle cx={HUB.x} cy={HUB.y} r={RING + 46} className="team-ring" />
+      <line
+        x1={BRIEF.x + 46}
+        y1={BRIEF.y}
+        x2={HUB.x - HUB_R - 4}
+        y2={HUB.y}
+        className={edgeClass("brief")}
+      />
+      <line
+        x1={HUB.x + HUB_R + 4}
+        y1={HUB.y}
+        x2={PROPOSAL.x - 46}
+        y2={PROPOSAL.y}
+        className={edgeClass("proposal")}
+      />
+      {TEAM_SPECIALISTS.map((id) => {
+        const start = toward(HUB, SPOKE[id], HUB_R + 3);
+        const end = toward(SPOKE[id], HUB, 30);
+        return (
+          <line
+            key={id}
+            x1={start.x}
+            y1={start.y}
+            x2={end.x}
+            y2={end.y}
+            className={edgeClass(`spoke:${id}`)}
+          />
+        );
+      })}
+      {chords.map(([a, b]) => {
+        const from = SPOKE[a];
+        const to = SPOKE[b];
+        const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+        // Bow the curve outward, away from the hub; a diagonal pair passes over the top instead.
+        const centred = Math.hypot(mid.x - HUB.x, mid.y - HUB.y) < 1;
+        const through = centred
+          ? { x: HUB.x, y: HUB.y - 175 }
+          : toward(HUB, mid, Math.hypot(mid.x - HUB.x, mid.y - HUB.y) + 60);
+        return (
+          <path
+            key={`${a}|${b}`}
+            d={`M ${from.x} ${from.y} Q ${through.x} ${through.y} ${to.x} ${to.y}`}
+            className={edgeClass(chordId(a, b), " team-edge-peer")}
+            fill="none"
+          />
+        );
+      })}
+
+      <g className={`team-node team-node-endpoint is-${state.brief ? "done" : "idle"}`}>
+        <rect x={BRIEF.x - 46} y={BRIEF.y - 26} width={92} height={52} rx={26} />
+        <text x={BRIEF.x} y={BRIEF.y - 3} textAnchor="middle" className="team-node-title">
+          Brief
+        </text>
+        <text x={BRIEF.x} y={BRIEF.y + 14} textAnchor="middle" className="team-node-note">
+          {state.brief ? short(state.brief.brand, 14) : "from client"}
+        </text>
+      </g>
+      <g className={`team-node team-node-endpoint is-${state.strategy ? "done" : "idle"}`}>
+        <rect x={PROPOSAL.x - 46} y={PROPOSAL.y - 26} width={92} height={52} rx={26} />
+        <text x={PROPOSAL.x} y={PROPOSAL.y - 3} textAnchor="middle" className="team-node-title">
+          Proposal
+        </text>
+        <text x={PROPOSAL.x} y={PROPOSAL.y + 14} textAnchor="middle" className="team-node-note">
+          {state.strategy ? "sent" : "to client"}
+        </text>
+      </g>
+
+      <g className={`team-node team-node-director is-${lead.state}`}>
+        <circle cx={HUB.x} cy={HUB.y} r={HUB_R} />
+        <text x={HUB.x} y={HUB.y - 4} textAnchor="middle" className="team-node-title">
+          Campaign lead
+        </text>
+        <text x={HUB.x} y={HUB.y + 14} textAnchor="middle" className="team-node-note">
+          {short(note(TEAM_DIRECTOR), 18)}
+        </text>
+        {(lead.state === "working" || lead.state === "revising") && (
+          <circle cx={HUB.x + 40} cy={HUB.y - 40} r={5} className="team-node-pulse" />
+        )}
+      </g>
+
+      {TEAM_SPECIALISTS.map((id) => {
+        const at = SPOKE[id];
+        const view = state.agents[id];
+        return (
+          <g key={id} className={`team-node team-node-specialist is-${view.state}`}>
+            <rect
+              x={at.x - SPOKE_W / 2}
+              y={at.y - SPOKE_H / 2}
+              width={SPOKE_W}
+              height={SPOKE_H}
+              rx={8}
+            />
+            <text x={at.x - SPOKE_W / 2 + 12} y={at.y - 4} className="team-node-title">
+              <tspan className="team-node-step">{ICON[id]}</tspan> {TEAM_PARTY_LABELS[id]}
+            </text>
+            <text x={at.x - SPOKE_W / 2 + 12} y={at.y + 14} className="team-node-note">
+              {short(note(id))}
+              {view.revisions ? ` · back ${view.revisions}×` : ""}
+            </text>
+            {(view.state === "working" || view.state === "revising") && (
+              <circle
+                cx={at.x + SPOKE_W / 2 - 12}
+                cy={at.y - SPOKE_H / 2 + 12}
+                r={5}
+                className="team-node-pulse"
+              />
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}

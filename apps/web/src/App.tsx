@@ -37,6 +37,7 @@ import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
 import { TechnicalTrace } from "./TechnicalTrace";
 import { ToolActivity } from "./ToolActivity";
 import { executionTrace } from "./turn-trace";
+import { TeamView } from "./team/TeamView";
 import { UseCasesView } from "./usecases/UseCasesView";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { WriteProgress } from "./WriteProgress";
@@ -194,6 +195,7 @@ export function App() {
     | "usecases"
     | "journeys"
     | "architecture"
+    | "team"
   >("chat");
   // History and the use-case library open from the chat page, so the rail shows them as Chat.
   const chatViews: ReadonlyArray<typeof view> = ["chat", "history", "usecases"];
@@ -656,6 +658,14 @@ export function App() {
             >
               <span>◫</span>Architecture
             </button>
+            <button
+              type="button"
+              className={`nav-item ${view === "team" ? "active" : ""}`}
+              aria-current={view === "team" ? "page" : undefined}
+              onClick={() => setView("team")}
+            >
+              <span>⧉</span>Campaign squad
+            </button>
           </div>
           <div>
             <p className="nav-label">Sources</p>
@@ -803,6 +813,7 @@ export function App() {
             onOpenJourneys={() => setView("journeys")}
           />
         )}
+        {view === "team" && <TeamView onClose={() => setView("chat")} />}
         {view === "usecases" && (
           <UseCasesView
             onClose={() => setView("chat")}

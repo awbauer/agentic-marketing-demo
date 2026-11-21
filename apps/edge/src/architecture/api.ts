@@ -14,6 +14,7 @@ import {
   workspaceById,
 } from "@northstar/architecture";
 import type { Principal } from "@northstar/contracts";
+import { handleTeam } from "../team/api";
 import { type ArchEnv, ArchError, type Ctx, invoke, makeCtx } from "./context";
 import {
   acceptOptimizationOp,
@@ -119,6 +120,10 @@ export async function handleArchitecture(
         brandScope: ctx.user.brands,
         role: principal.role,
       });
+    if (path === "/api/arch/team" || path.startsWith("/api/arch/team/")) {
+      const team = await handleTeam(ctx, request, path, () => body(request));
+      if (team) return team;
+    }
     if (path === "/api/arch/objects" && method === "GET") {
       const kind = url.searchParams.get("kind") ?? undefined;
       const brand = url.searchParams.get("brand") ?? undefined;
