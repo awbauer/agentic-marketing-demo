@@ -400,6 +400,27 @@ describe("squad evals", () => {
     },
   ] as unknown as TeamEvent[];
 
+  it("scores people's changes by whether the next version satisfied them", () => {
+    const decided = (gate: string, decision: "approve" | "changes") =>
+      ({ type: "decided", gate, decision, note: "", persona: "compliance" }) as TeamEvent;
+    const people = (list: TeamEvent[]) =>
+      scoreChecks(list, coastline).find((check) => check.id === "people");
+    // Asked twice before approving: the first request wasn't met, the second was.
+    expect(
+      people([
+        decided("compliance", "changes"),
+        decided("compliance", "changes"),
+        decided("compliance", "approve"),
+      ])?.score,
+    ).toBe(0.5);
+    // Asked, and the run ended before the person saw a new version.
+    expect(people([decided("client", "changes")])?.score).toBe(0);
+    // Approved the first time.
+    expect(people([decided("client", "approve")])?.detail).toBe(
+      "All 1 decision approved the first version.",
+    );
+  });
+
   it("scores a run from its own events", () => {
     const checks = Object.fromEntries(
       scoreChecks(events, coastline).map((check) => [check.id, check]),
@@ -407,7 +428,9 @@ describe("squad evals", () => {
     expect(checks.outcome?.score).toBe(1);
     expect(checks["first-try"]?.score).toBe(0.5);
     expect(checks.collaboration?.score).toBe(1);
-    expect(checks.people?.score).toBe(0.75);
+    // The person who asked for changes approved the next version.
+    expect(checks.people?.score).toBe(1);
+    expect(checks.people?.detail).toContain("1 request for changes; 1 approved on the next review");
     // $10,000 of $18,000 is 56% of the budget: under the 80% that scores full marks.
     expect(checks.budget?.score).toBeCloseTo(0.694, 2);
     expect(checks.consistency?.score).toBe(1);

@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-21T03:52:34.642Z",
+  "generatedAt": "2026-11-21T13:44:50.658Z",
   "status": "passed",
   "baseRef": "origin/main",
-  "mergeBase": "52b6ce2171b3b1db52db17135f9b4ec555ff46a5",
+  "mergeBase": "c76f4b8e86bc181083a01eac93df7c5a3ff8ca89",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,25 +13,10 @@
   },
   "drift": [
     {
-      "section": "pharma-lifecycle",
-      "status": "reviewed",
-      "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts",
-        "apps/web/src/team/TeamLifecycle.tsx"
-      ]
-    },
-    {
       "section": "campaign-squad",
-      "status": "reviewed",
+      "status": "updated",
       "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts",
-        "apps/web/src/team/RichText.tsx",
-        "apps/web/src/team/TeamLifecycle.tsx",
-        "apps/web/src/team/TeamPeople.tsx",
-        "apps/web/src/team/TeamView.tsx",
-        "apps/web/src/team/team.css"
+        "packages/architecture/src/team-evals.ts"
       ]
     }
   ],

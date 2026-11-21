@@ -53,6 +53,43 @@ const SAVE_TOOLS = new Set(["report_research", "propose_creative", "write_copy",
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 const pct = (value: number) => `${Math.round(value * 100)}%`;
 
+type Decision = Extract<TeamEvent, { type: "decided" }>;
+
+/**
+ * How the team acted on people's requests for changes. A request is no failure: people ask for
+ * changes, and evals ask on purpose to test this. What counts is whether the next version
+ * satisfied the same person: each request scores 1 when that person's next decision approved, and
+ * 0 when they asked again or the run ended first. With no requests, the check passes.
+ */
+function actedOn(
+  decisions: readonly Decision[],
+  label: string,
+): Omit<EvalCheck, "id" | "group"> & {
+  score: number | null;
+} {
+  if (decisions.length === 0) return { label, score: null, detail: "No person has decided yet." };
+  const requests = decisions.flatMap((decision, index) =>
+    decision.decision === "changes" ? [index] : [],
+  );
+  const firstTime = decisions.filter(
+    (decision, index) =>
+      decision.decision === "approve" &&
+      !decisions.slice(0, index).some((earlier) => earlier.gate === decision.gate),
+  ).length;
+  const resolved = requests.filter(
+    (at) =>
+      decisions.slice(at + 1).find((later) => later.gate === decisions[at]?.gate)?.decision ===
+      "approve",
+  ).length;
+  return {
+    label,
+    score: requests.length ? resolved / requests.length : 1,
+    detail: requests.length
+      ? `${requests.length} request${requests.length === 1 ? "" : "s"} for changes; ${resolved} approved on the next review. ${firstTime} of ${decisions.length} decisions approved the first version.`
+      : `All ${decisions.length} decision${decisions.length === 1 ? "" : "s"} approved the first version.`,
+  };
+}
+
 /** The checks a run's events support, scored 0 to 1. */
 export function scoreChecks(events: readonly TeamEvent[], brief: CampaignBrief): EvalCheck[] {
   const start = events.find((event) => event.type === "start");
@@ -183,16 +220,11 @@ export function scoreChecks(events: readonly TeamEvent[], brief: CampaignBrief):
     });
   }
 
-  // People: how many rounds the compliance reviewer and the client needed.
-  const changes = decisions.filter((decision) => decision.decision === "changes").length;
+  // People: whether the next version satisfied each person who asked for changes.
   checks.push({
     id: "people",
-    label: "Accepted by people the first time",
     group: "people",
-    score: decisions.length ? clamp(1 - 0.25 * changes) : null,
-    detail: decisions.length
-      ? `${decisions.length} decision${decisions.length === 1 ? "" : "s"} by people, ${changes} asking for changes.`
-      : "No person has decided yet.",
+    ...actedOn(decisions, "Acted on people's changes"),
   });
   return checks;
 }
@@ -216,12 +248,9 @@ export function lifecycleChecks(events: readonly TeamEvent[]): EvalCheck[] {
   const refused = saves.filter((event) => !event.step.ok).length;
   const accepted = saves.length - refused;
   const decisions = events.flatMap((event) => (event.type === "decided" ? [event] : []));
-  const mlrChanges = decisions.filter(
-    (decision) =>
-      ["medical", "legal", "regulatory"].includes(decision.gate) && decision.decision === "changes",
-  ).length;
-  const otherChanges =
-    decisions.filter((decision) => decision.decision === "changes").length - mlrChanges;
+  const isMlr = (decision: Decision) => ["medical", "legal", "regulatory"].includes(decision.gate);
+  const mlrDecisions = decisions.filter(isMlr);
+  const otherDecisions = decisions.filter((decision) => !isMlr(decision));
   const denied = events.filter(
     (event) => event.type === "tool" && event.step.error?.startsWith("The gateway denied"),
   ).length;
@@ -242,23 +271,13 @@ export function lifecycleChecks(events: readonly TeamEvent[]): EvalCheck[] {
     },
     {
       id: "mlr-rounds",
-      label: "MLR approved without a resubmission",
       group: "people",
-      score: decisions.some(
-        (decision) => decision.gate === "regulatory" && decision.decision === "approve",
-      )
-        ? clamp(1 - 0.34 * mlrChanges)
-        : mlrChanges
-          ? 0
-          : null,
-      detail: `${mlrChanges} MLR review${mlrChanges === 1 ? "" : "s"} asked for changes.`,
+      ...actedOn(mlrDecisions, "Acted on MLR reviewers' changes"),
     },
     {
       id: "people",
-      label: "Accepted by the brand team the first time",
       group: "people",
-      score: decisions.length ? clamp(1 - 0.25 * otherChanges) : null,
-      detail: `${decisions.length} decisions by people, ${otherChanges} outside MLR asking for changes.`,
+      ...actedOn(otherDecisions, "Acted on the brand team's changes"),
     },
     {
       id: "governance",
