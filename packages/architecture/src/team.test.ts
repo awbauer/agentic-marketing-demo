@@ -3,6 +3,8 @@ import { evaluate } from "./gateway.ts";
 import {
   briefProblems,
   buildTeamPolicies,
+  needsComplianceReview,
+  type TeamEvent,
   type CopyPackage,
   type MediaPlan,
   type ResearchReport,
@@ -12,6 +14,7 @@ import {
   teamBriefById,
 } from "./team.ts";
 import { TEAM_MARKETS } from "./team-data.ts";
+import { scoreChecks, scoreRun } from "./team-evals.ts";
 import {
   costPerClick,
   defineTerm,
@@ -284,5 +287,130 @@ describe("semantic layer", () => {
     expect(line?.impressions).toBe(Math.round(impressions));
     expect(line?.clicks).toBe(Math.round(clicks));
     expect(line?.costPerClickUsd).toBe(costPerClick(8000, clicks));
+  });
+});
+
+describe("people in the loop", () => {
+  it("lets only the right people decide, and never an agent", () => {
+    const policies = buildTeamPolicies();
+    const as = (principal: { type: "persona" | "agent"; id: string }, action: string) =>
+      evaluate(policies, { user, principal: principal as never, action }).decision;
+    expect(as({ type: "persona", id: "compliance" }, "team:decide_compliance")).toBe("allow");
+    expect(as({ type: "persona", id: "marketer" }, "team:decide_compliance")).toBe("deny");
+    expect(as({ type: "persona", id: "brand-lead" }, "team:decide_proposal")).toBe("allow");
+    expect(as({ type: "persona", id: "compliance" }, "team:decide_proposal")).toBe("deny");
+    expect(as({ type: "agent", id: "campaign-lead" }, "team:decide_proposal")).toBe("deny");
+    expect(needsComplianceReview("Harborstone Wealth")).toBe(true);
+    expect(needsComplianceReview("Lumera Therapeutics")).toBe(true);
+    expect(needsComplianceReview("Coastline Kitchen")).toBe(false);
+  });
+});
+
+describe("squad evals", () => {
+  const strategy = must(
+    (() => {
+      const result = reconcileCampaign(
+        coastline,
+        {
+          "audience-analyst": research,
+          "art-director": creative,
+          "copy-lead": copy,
+          "channel-planner": media,
+        },
+        { positioning: "Soup season.", milestones: [], successMetrics: [], resolutions: [] },
+      );
+      return result.ok ? result.strategy : undefined;
+    })(),
+  );
+  const tool = (name: string, ok: boolean) =>
+    ({
+      type: "tool",
+      agent: "copy-lead",
+      step: {
+        tool: name,
+        input: {},
+        ok,
+        decision: { decision: "allow", policyId: "p", reason: "" },
+      },
+    }) as const;
+  const events = [
+    tool("write_copy", false),
+    tool("write_copy", true),
+    {
+      type: "message",
+      id: "m1",
+      from: "art-director",
+      to: "copy-lead",
+      kind: "question",
+      text: "?",
+    },
+    { type: "message", id: "m2", from: "copy-lead", to: "art-director", kind: "answer", text: "!" },
+    { type: "reconciled", strategy },
+    { type: "delivered", strategy },
+    {
+      type: "decided",
+      gate: "client",
+      decision: "changes",
+      note: "More safety.",
+      persona: "brand-lead",
+    },
+    { type: "decided", gate: "client", decision: "approve", note: "", persona: "brand-lead" },
+    {
+      type: "model",
+      agent: "campaign-lead",
+      model: "@cf/openai/gpt-oss-120b",
+      purpose: "lead",
+      tokens: 1000,
+      latencyMs: 2000,
+      ok: true,
+    },
+  ] as unknown as TeamEvent[];
+
+  it("scores a run from its own events", () => {
+    const checks = Object.fromEntries(
+      scoreChecks(events, coastline).map((check) => [check.id, check]),
+    );
+    expect(checks.outcome?.score).toBe(1);
+    expect(checks["first-try"]?.score).toBe(0.5);
+    expect(checks.collaboration?.score).toBe(1);
+    expect(checks.people?.score).toBe(0.75);
+    // $10,000 of $18,000 is 56% of the budget: under the 80% that scores full marks.
+    expect(checks.budget?.score).toBeCloseTo(0.694, 2);
+    expect(checks.consistency?.score).toBe(1);
+    expect(checks.grounding?.score).toBe(0.5);
+  });
+
+  it("blends the judge in, and leaves checks that don't apply out", () => {
+    const withoutJudge = scoreRun({
+      runId: "r",
+      provider: "cloudflare",
+      brief: coastline,
+      events: [],
+      judge: null,
+      costUsd: null,
+      at: "2026-11-20T00:00:00Z",
+    });
+    // Nothing happened: only the outcome and coordination checks apply.
+    expect(
+      withoutJudge.checks.filter((check) => check.score !== null).map((check) => check.id),
+    ).toEqual(["outcome", "coordination"]);
+    expect(withoutJudge.overall).toBe(50);
+    const judged = scoreRun({
+      runId: "r",
+      provider: "anthropic",
+      brief: coastline,
+      events,
+      judge: {
+        model: "@cf/openai/gpt-oss-120b",
+        scores: [{ criterion: "on_brief", score: 5, reason: "On brief." }],
+        summary: "Good.",
+      },
+      costUsd: 0.42,
+      at: "2026-11-20T00:00:00Z",
+    });
+    expect(judged.tokens).toBe(1000);
+    expect(judged.modelMs).toBe(2000);
+    expect(judged.overall).toBeGreaterThan(withoutJudge.overall);
+    expect(judged.checks.at(-1)?.detail).toContain("$0.42");
   });
 });

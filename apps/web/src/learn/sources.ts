@@ -187,9 +187,12 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "packages/architecture/src/team-data.ts",
     "packages/architecture/src/team-semantic.ts",
     "packages/architecture/src/team-services.ts",
+    "packages/architecture/src/team-evals.ts",
+    "scripts/run-team-evals.mjs",
     "apps/edge/src/team/",
     "apps/web/src/team/",
     "docs/decisions/ADR-013-campaign-squad.md",
+    "docs/decisions/ADR-014-squad-people-and-evals.md",
   ],
   "long-term-memory": [
     "packages/knowledge-graph/src/memory.ts",

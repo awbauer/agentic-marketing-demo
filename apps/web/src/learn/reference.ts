@@ -67,6 +67,11 @@ export const LEARN_REFERENCE: ReferenceEntry[] = [
     "The lead fits the four pieces into one proposal, refused until every clash is resolved or sent back.",
   ),
   tool(
+    "request_compliance_review",
+    "campaign-squad",
+    "The lead asks the compliance reviewer, a person, to check a regulated brand's copy. The run waits for their decision, and the lead may not propose until they approve the current version.",
+  ),
+  tool(
     "send_proposal",
     "campaign-squad",
     "The lead sends the reconciled proposal to the client, who decides whether to run it.",

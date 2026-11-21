@@ -5,10 +5,18 @@ import {
   SEMANTIC_METRIC_IDS,
   SEMANTIC_METRICS,
   SEMANTIC_SOURCES,
+  JUDGE_CRITERIA,
+  type JudgeCriterion,
+  TEAM_GATES,
   TEAM_PARTY_LABELS,
+  TEAM_PROVIDER_LABELS,
   type TeamAgentId,
+  type TeamProvider,
+  type TeamScorecard,
 } from "@northstar/architecture";
 import { useState } from "react";
+import { useArch } from "../architecture/api";
+import { useScope } from "../scope";
 import { type InfraLayer, isPeerMessage, type TeamState } from "./team-state";
 
 const short = (id: TeamAgentId) => TEAM_PARTY_LABELS[id];
@@ -239,6 +247,15 @@ function InfrastructurePanel({ state }: { state: TeamState }) {
       ],
     },
     {
+      id: "people",
+      name: "People in the loop",
+      what: "Some decisions belong to people: a compliance reviewer clears a regulated brand's copy, and the client approves the proposal. The run waits, saved, until the person at the browser decides; the gateway checks the role, and no agent can ever take the decision.",
+      stats: [
+        ["Decisions by people", state.decisions.length],
+        ["Waiting now", state.waiting ? TEAM_GATES[state.waiting.gate].decider : "no one"],
+      ],
+    },
+    {
       id: "operations",
       name: "Operations",
       what: "Operators can disable an agent or move it through its lifecycle (constrain keeps reads only, retire withholds everything) without a deploy; the gateway applies it on the next call.",
@@ -274,9 +291,216 @@ function InfrastructurePanel({ state }: { state: TeamState }) {
   );
 }
 
-/** The two views of what the squad runs on. */
+const GROUP_LABELS: Record<string, string> = {
+  outcome: "Outcome",
+  quality: "Quality of the plan",
+  process: "How the agents worked",
+  people: "People",
+  cost: "Cost",
+};
+
+/** One run's scorecard: the overall score, every check with its evidence, and the judge's view. */
+function Scorecard({ scorecard }: { scorecard: TeamScorecard }) {
+  return (
+    <div className="team-scorecard">
+      <div className="team-score-head">
+        <p className="team-score-big">
+          <span className="sr-only">Overall score: </span>
+          {scorecard.overall}
+          <small>/100</small>
+        </p>
+        <p className="arch-note">
+          {TEAM_PROVIDER_LABELS[scorecard.provider]} · {scorecard.tokens.toLocaleString("en-US")}{" "}
+          tokens
+          {scorecard.costUsd === null
+            ? " · cost not priced"
+            : ` · about $${scorecard.costUsd.toFixed(2)}`}{" "}
+          · {Math.round(scorecard.modelMs / 1000)} s of model time. The checks count 70% and the
+          judge 30%.
+        </p>
+      </div>
+      <ul className="team-checks">
+        {scorecard.checks.map((check) => (
+          <li key={check.id}>
+            <div>
+              <strong>{check.label}</strong> <small>{GROUP_LABELS[check.group]}</small>
+              <p>{check.detail}</p>
+            </div>
+            {check.score === null ? (
+              <span className="team-check-na">n/a</span>
+            ) : (
+              <meter
+                min={0}
+                max={1}
+                low={0.5}
+                high={0.8}
+                optimum={1}
+                value={check.score}
+                aria-label={`${check.label}: ${Math.round(check.score * 100)}%`}
+              />
+            )}
+          </li>
+        ))}
+      </ul>
+      {scorecard.judge ? (
+        <>
+          <h4>
+            Quality judge <small>({scorecard.judge.model.replace("@cf/", "")}, 1 to 5)</small>
+          </h4>
+          <ul className="team-checks">
+            {scorecard.judge.scores.map((item) => (
+              <li key={item.criterion}>
+                <div>
+                  <strong>{item.criterion.replaceAll("_", " ")}</strong>{" "}
+                  <small>{JUDGE_CRITERIA[item.criterion as JudgeCriterion]}</small>
+                  <p>{item.reason}</p>
+                </div>
+                <span className="team-judge-score">{item.score}/5</span>
+              </li>
+            ))}
+          </ul>
+          <p className="arch-note">{scorecard.judge.summary}</p>
+        </>
+      ) : (
+        <p className="arch-note">No proposal to judge on this run.</p>
+      )}
+    </div>
+  );
+}
+
+type SavedRun = {
+  id: string;
+  title: string;
+  brand: string;
+  provider: TeamProvider;
+  status: string;
+  at: string;
+  scorecard: TeamScorecard | null;
+};
+
+const average = (values: number[]) =>
+  values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+
+/** Past runs side by side, and the average per provider, so the providers can be compared. */
+function RunsCompared({ refreshKey }: { refreshKey: string }) {
+  const { scope } = useScope();
+  const { data, loading } = useArch<{ runs: SavedRun[] }>(
+    "/team/evals",
+    { persona: scope.persona, brand: "all" },
+    refreshKey.length,
+  );
+  const scored = (data?.runs ?? []).filter((run) => run.scorecard);
+  if (loading && !data) return <p className="arch-note">Loading past runs…</p>;
+  if (scored.length === 0)
+    return (
+      <p className="arch-note">
+        No scored runs yet. Every run is scored when it ends; <code>pnpm eval:team</code> scores the
+        reference briefs on each provider.
+      </p>
+    );
+  const providers = [...new Set(scored.map((run) => run.provider))];
+  return (
+    <>
+      <div className="team-table-wrap">
+        <table className="team-table">
+          <caption>Average per provider</caption>
+          <thead>
+            <tr>
+              <th scope="col">Provider</th>
+              <th scope="col">Runs</th>
+              <th scope="col">Score</th>
+              <th scope="col">Judge</th>
+              <th scope="col">Cost per run</th>
+              <th scope="col">Model time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {providers.map((provider) => {
+              const cards = scored
+                .filter((run) => run.provider === provider)
+                .map((run) => run.scorecard as TeamScorecard);
+              const judge = average(
+                cards.flatMap((card) =>
+                  card.judge?.scores.length
+                    ? [
+                        card.judge.scores.reduce((sum, item) => sum + item.score, 0) /
+                          card.judge.scores.length,
+                      ]
+                    : [],
+                ),
+              );
+              const cost = average(
+                cards.flatMap((card) => (card.costUsd === null ? [] : [card.costUsd])),
+              );
+              return (
+                <tr key={provider}>
+                  <th scope="row">{TEAM_PROVIDER_LABELS[provider]}</th>
+                  <td>{cards.length}</td>
+                  <td>{Math.round(average(cards.map((card) => card.overall)) ?? 0)}</td>
+                  <td>{judge === null ? "—" : `${judge.toFixed(1)}/5`}</td>
+                  <td>{cost === null ? "—" : `$${cost.toFixed(2)}`}</td>
+                  <td>{Math.round((average(cards.map((card) => card.modelMs)) ?? 0) / 1000)} s</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="team-table-wrap">
+        <table className="team-table">
+          <caption>Recent runs</caption>
+          <thead>
+            <tr>
+              <th scope="col">Brief</th>
+              <th scope="col">Provider</th>
+              <th scope="col">Status</th>
+              <th scope="col">Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {scored.slice(0, 12).map((run) => (
+              <tr key={run.id}>
+                <th scope="row">{run.title}</th>
+                <td>{TEAM_PROVIDER_LABELS[run.provider]}</td>
+                <td>{run.status}</td>
+                <td>{run.scorecard?.overall}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function EvalsPanel({ state }: { state: TeamState }) {
+  return (
+    <div className="team-evals">
+      <p className="arch-note">
+        Every run is scored when it ends. Checks come from the run&rsquo;s own record: did it reach
+        an approved proposal, how often the rules refused work, whether the plan fits the budget and
+        the audience, how the agents coordinated, and how many rounds people needed. A judge model
+        then scores the proposal against a rubric. The judge is the same for every provider, so the
+        providers can be compared fairly.
+      </p>
+      {state.scorecard ? (
+        <Scorecard scorecard={state.scorecard} />
+      ) : (
+        <p className="arch-note">
+          {state.waiting
+            ? "This run is waiting for a person; it is scored once it ends."
+            : "This run has no scorecard yet."}
+        </p>
+      )}
+      <h4>Runs compared</h4>
+      <RunsCompared refreshKey={state.scorecard?.runId ?? ""} />
+    </div>
+  );
+}
+
+/** The views of what the squad runs on, and how well it did. */
 export function TeamPlatform({ state }: { state: TeamState }) {
-  const [tab, setTab] = useState<"semantic" | "infra">("infra");
+  const [tab, setTab] = useState<"semantic" | "infra" | "evals">("infra");
   return (
     <section className="team-platform" aria-labelledby="team-platform-title">
       <header>
@@ -298,13 +522,23 @@ export function TeamPlatform({ state }: { state: TeamState }) {
           >
             Semantic layer
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "evals"}
+            onClick={() => setTab("evals")}
+          >
+            Evals{state.scorecard ? ` · ${state.scorecard.overall}` : ""}
+          </button>
         </div>
       </header>
       <div role="tabpanel">
         {tab === "infra" ? (
           <InfrastructurePanel state={state} />
-        ) : (
+        ) : tab === "semantic" ? (
           <SemanticLayerPanel state={state} />
+        ) : (
+          <EvalsPanel state={state} />
         )}
       </div>
     </section>

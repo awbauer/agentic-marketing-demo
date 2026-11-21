@@ -5,7 +5,9 @@
 // each tool call is checked by the agentic gateway under the policies below.
 import type { AgentOverrides } from "./registry.ts";
 import type { Policy } from "./gateway.ts";
-import { MEDIA_CHANNELS, type MediaChannel } from "./team-data.ts";
+import type { Persona } from "./state-machine.ts";
+import { MEDIA_CHANNELS, type MediaChannel, teamMarket } from "./team-data.ts";
+import type { TeamScorecard } from "./team-evals.ts";
 import { BRANDS, type Brand } from "./types.ts";
 
 /**
@@ -35,7 +37,7 @@ export type TeamAgentId = typeof TEAM_DIRECTOR | TeamSpecialist;
  * A party to a message: an agent, the whole team (a broadcast), or the client who sent the brief
  * and receives the strategy.
  */
-export type TeamParty = TeamAgentId | "client" | "team";
+export type TeamParty = TeamAgentId | "client" | "team" | "compliance";
 
 export type TeamAgent = {
   id: TeamAgentId;
@@ -59,6 +61,7 @@ export const TEAM_TOOL_NAMES = [
   "delegate_task",
   "review_work",
   "reconcile_plan",
+  "request_compliance_review",
   "send_proposal",
   // Shared
   "read_team_output",
@@ -116,6 +119,7 @@ export const TEAM_AGENTS: readonly TeamAgent[] = [
       "delegate_task",
       "review_work",
       "reconcile_plan",
+      "request_compliance_review",
       "send_proposal",
       "read_team_output",
     ],
@@ -180,6 +184,7 @@ export const isTeamSpecialist = (id: string): id is TeamSpecialist =>
 export const TEAM_PARTY_LABELS: Record<TeamParty, string> = {
   client: "Client",
   team: "Whole squad",
+  compliance: "Compliance",
   "campaign-lead": "Campaign lead",
   "audience-analyst": "Audience analyst",
   "art-director": "Art director",
@@ -192,24 +197,72 @@ export const TEAM_PARTY_LABELS: Record<TeamParty, string> = {
  * operator's kill switch or a retired lifecycle withholds all of them, and constrain keeps reads.
  */
 export function buildTeamPolicies(overrides: AgentOverrides = {}): Policy[] {
-  return TEAM_AGENTS.flatMap((agent) => {
-    const lifecycle = overrides.lifecycle?.[agent.id];
-    if (overrides.disabled?.includes(agent.id) || lifecycle === "retire") return [];
-    const tools =
-      lifecycle === "constrain"
-        ? agent.tools.filter((tool) => TEAM_READ_TOOLS.includes(tool))
-        : agent.tools;
-    if (tools.length === 0) return [];
-    return [
-      {
-        id: `team-${agent.id}`,
-        effect: "permit" as const,
-        principal: { type: "agent" as const, ids: [agent.id] },
-        actions: tools.map((tool) => `team:${tool}`),
-        note: `${agent.name} may call its own tools: ${tools.join(", ")}.`,
-      },
-    ];
-  });
+  return [
+    ...teamGatePolicies(),
+    ...TEAM_AGENTS.flatMap((agent) => {
+      const lifecycle = overrides.lifecycle?.[agent.id];
+      if (overrides.disabled?.includes(agent.id) || lifecycle === "retire") return [];
+      const tools =
+        lifecycle === "constrain"
+          ? agent.tools.filter((tool) => TEAM_READ_TOOLS.includes(tool))
+          : agent.tools;
+      if (tools.length === 0) return [];
+      return [
+        {
+          id: `team-${agent.id}`,
+          effect: "permit" as const,
+          principal: { type: "agent" as const, ids: [agent.id] },
+          actions: tools.map((tool) => `team:${tool}`),
+          note: `${agent.name} may call its own tools: ${tools.join(", ")}.`,
+        },
+      ];
+    }),
+  ];
+}
+
+// People in the loop ---------------------------------------------------------------------------
+
+/**
+ * The decisions no agent may take. A person in the browser takes each one, acting as the role
+ * named here; the gateway checks the role, and forbids every agent.
+ */
+export const TEAM_GATES = {
+  compliance: {
+    label: "Compliance review",
+    decider: "Compliance reviewer",
+    personas: ["compliance", "admin"],
+    action: "team:decide_compliance",
+  },
+  client: {
+    label: "Client approval",
+    decider: "Client (played by the brand lead)",
+    personas: ["brand-lead", "admin"],
+    action: "team:decide_proposal",
+  },
+} as const satisfies Record<
+  string,
+  { label: string; decider: string; personas: readonly Persona[]; action: string }
+>;
+export type TeamGate = keyof typeof TEAM_GATES;
+export const isTeamGate = (value: unknown): value is TeamGate =>
+  typeof value === "string" && value in TEAM_GATES;
+
+/** How many times the client may send a proposal back before the run stops. */
+export const CLIENT_ROUNDS = 2;
+
+/** Brands whose copy must clear compliance before the client sees it: those with a disclosure. */
+export const needsComplianceReview = (brand: Brand) =>
+  teamMarket(brand).guidelines.requiredDisclosure !== null;
+
+/** Only these personas may take each decision. Agents are never among them. */
+export function teamGatePolicies(): Policy[] {
+  return Object.entries(TEAM_GATES).map(([gate, spec]) => ({
+    id: `team-person-${gate}`,
+    effect: "permit" as const,
+    principal: { type: "persona" as const, ids: [...spec.personas] },
+    actions: [spec.action],
+    note: `Only a ${spec.decider.toLowerCase()} takes the ${spec.label.toLowerCase()} decision.`,
+  }));
 }
 
 // Briefs --------------------------------------------------------------------------------------
@@ -399,7 +452,8 @@ export type CampaignStrategy = {
   timeline: Array<{ date: string; label: string }>;
   successMetrics: string[];
   resolutions: Array<{ conflict: string; resolution: string }>;
-  status: "proposed";
+  /** Proposed to the client; approved once the client says so. */
+  status: "proposed" | "approved";
 };
 
 // Events --------------------------------------------------------------------------------------
@@ -414,7 +468,9 @@ export type TeamMessageKind =
   | "review"
   | "revision"
   | "proposal"
-  | "delivery";
+  | "delivery"
+  | "approval-request"
+  | "decision";
 
 export type TeamAgentState = "idle" | "working" | "waiting" | "done" | "revising" | "blocked";
 
@@ -445,6 +501,9 @@ export type TeamEvent =
     }
   | {
       type: "model";
+      /** Split, so a run can be priced; total is their sum. */
+      inputTokens?: number;
+      outputTokens?: number;
       agent: TeamAgentId;
       model: string;
       purpose: "lead" | "work" | "answer" | "report";
@@ -482,7 +541,23 @@ export type TeamEvent =
     }
   | { type: "review"; agent: TeamSpecialist; verdict: "accept" | "revise"; feedback: string }
   | { type: "conflicts"; conflicts: Conflict[] }
+  | { type: "reconciled"; strategy: CampaignStrategy }
+  | {
+      type: "await-person";
+      gate: TeamGate;
+      persona: Persona;
+      title: string;
+      why: string;
+    }
+  | {
+      type: "decided";
+      gate: TeamGate;
+      decision: "approve" | "changes";
+      note: string;
+      persona: Persona;
+    }
   | { type: "delivered"; strategy: CampaignStrategy }
+  | { type: "evaluation"; scorecard: TeamScorecard }
   | { type: "done"; summary: string; tokens: number; latencyMs: number }
   | { type: "error"; message: string };
 

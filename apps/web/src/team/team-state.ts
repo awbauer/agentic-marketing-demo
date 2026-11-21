@@ -15,6 +15,7 @@ import {
   type TeamParty,
   type TeamPlan,
   type TeamSpecialist,
+  type TeamScorecard,
   type TeamToolStep,
 } from "@northstar/architecture";
 
@@ -44,6 +45,7 @@ export const TEAM_PHASES = [
   { id: "pieces", label: "Pieces kept" },
   { id: "reconcile", label: "Reconciled" },
   { id: "proposal", label: "Proposal sent" },
+  { id: "approved", label: "Client approved" },
 ] as const;
 export type TeamPhase = (typeof TEAM_PHASES)[number]["id"];
 
@@ -86,6 +88,12 @@ export type TeamState = {
   /** Saves the rule services accepted, and saves they refused. */
   rules: { accepted: number; refused: number };
   saved: boolean | null;
+  /** The person the run is waiting for, if any. */
+  waiting: Extract<TeamEvent, { type: "await-person" }> | null;
+  /** Decisions people have taken on this run, in order. */
+  decisions: Array<Extract<TeamEvent, { type: "decided" }>>;
+  /** The run's scorecard, once it has ended. */
+  scorecard: TeamScorecard | null;
   events: number;
   /** The layer of the infrastructure the latest event touched. */
   layer: InfraLayer | null;
@@ -99,7 +107,8 @@ export type InfraLayer =
   | "semantic"
   | "rules"
   | "bus"
-  | "state";
+  | "state"
+  | "people";
 
 const SAVE_TOOLS = new Set(["report_research", "propose_creative", "write_copy", "plan_media"]);
 const toolLayer = (tool: string): InfraLayer =>
@@ -161,6 +170,9 @@ export function emptyTeamState(): TeamState {
     semantic: [],
     rules: { accepted: 0, refused: 0 },
     saved: null,
+    waiting: null,
+    decisions: [],
+    scorecard: null,
     events: 0,
     layer: null,
   };
@@ -269,6 +281,7 @@ export function reduceTeam(state: TeamState, event: TeamEvent): TeamState {
     case "delivered":
       next.strategy = event.strategy;
       next.phases.add("proposal");
+      if (event.strategy.status === "approved") next.phases.add("approved");
       return next;
     case "model":
       next.modelCalls = [
@@ -296,6 +309,24 @@ export function reduceTeam(state: TeamState, event: TeamEvent): TeamState {
         },
       ];
       next.layer = "semantic";
+      return next;
+    case "reconciled":
+      next.strategy = event.strategy;
+      next.phases.add("reconcile");
+      next.layer = "coordination";
+      return next;
+    case "await-person":
+      next.waiting = event;
+      next.latest = null;
+      next.layer = "people";
+      return next;
+    case "decided":
+      next.waiting = null;
+      next.decisions = [...state.decisions, event];
+      next.layer = "people";
+      return next;
+    case "evaluation":
+      next.scorecard = event.scorecard;
       return next;
     case "saved":
       next.saved = event.ok;

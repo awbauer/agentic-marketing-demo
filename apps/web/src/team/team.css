@@ -65,7 +65,7 @@
 /* The eight steps from the hierarchical workflow. */
 .team-steps {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
   margin: 0;
   padding: 0;
@@ -783,4 +783,162 @@
   .team-switch label {
     padding: 7px 6px;
   }
+}
+
+/* People in the loop. */
+.team-decision-card {
+  padding: 16px 18px;
+  border: 2px solid var(--amber);
+  border-radius: 12px;
+  background: #fffaf0;
+  box-shadow: 0 2px 10px rgba(199, 132, 54, 0.15);
+}
+.team-decision-card.gate-client {
+  border-color: var(--forest);
+  background: #f4fae0;
+  box-shadow: 0 2px 10px rgba(23, 61, 49, 0.12);
+}
+.team-decision-card h3 {
+  margin: 4px 0 8px;
+  font-size: 17px;
+}
+.team-decision-card blockquote {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--line);
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.team-decision-card blockquote span {
+  font-weight: 600;
+}
+.team-decision-note {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.team-decision-note textarea {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: #fff;
+}
+.team-decision-log {
+  margin: 0;
+  padding: 10px 14px 10px 32px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.team-decision-log .decision-changes {
+  color: #7a4a10;
+}
+.party-compliance {
+  background: #fde8cc;
+  color: #7a4a10;
+}
+@media (max-width: 760px) {
+  .team-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* A person node: a decision no agent may take. */
+.team-node-person rect {
+  fill: #fff7e8;
+  stroke: var(--amber);
+  stroke-width: 1.5;
+}
+.team-node.is-waiting-person rect {
+  stroke: var(--amber);
+  stroke-width: 3;
+  fill: #fde8cc;
+  animation: team-pulse 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .team-node.is-waiting-person rect {
+    animation: none;
+  }
+}
+
+/* Evals. */
+.team-score-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 8px 0 4px;
+}
+.team-score-big {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--forest);
+  font-variant-numeric: tabular-nums;
+}
+.team-score-big small {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.team-checks {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.team-checks li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.team-checks strong {
+  font-size: 13px;
+  text-transform: none;
+}
+.team-checks small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.team-checks p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.team-checks meter {
+  width: 100%;
+  height: 10px;
+}
+.team-check-na,
+.team-judge-score {
+  justify-self: end;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.team-judge-score {
+  color: var(--forest);
+}
+.team-table caption {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 10px 0 4px;
+  color: var(--muted);
+}
+.team-score-big {
+  margin: 0;
 }

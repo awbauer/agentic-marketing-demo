@@ -272,6 +272,24 @@ export class ArchitectureStore {
       .run();
   }
 
+  /** Saved flows whose flow id starts with a prefix, newest first. The campaign squad's evals list them. */
+  async orchestrationsWithPrefix(prefix: string, limit = 50) {
+    const { results } = await this.db
+      .prepare(
+        "SELECT id, flow_id, brand, status, events, updated_at FROM arch_orchestrations WHERE subject = ? AND flow_id LIKE ? ORDER BY updated_at DESC LIMIT ?",
+      )
+      .bind(this.subject, `${prefix}%`, limit)
+      .all<Row>();
+    return (results ?? []).map((row) => ({
+      id: String(row.id),
+      flowId: String(row.flow_id),
+      brand: String(row.brand),
+      status: String(row.status),
+      updatedAt: String(row.updated_at),
+      events: JSON.parse(String(row.events)) as unknown[],
+    }));
+  }
+
   async orchestration(id: string) {
     const row = await this.db
       .prepare("SELECT * FROM arch_orchestrations WHERE subject = ? AND id = ?")

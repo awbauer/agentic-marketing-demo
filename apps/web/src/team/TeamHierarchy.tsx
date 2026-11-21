@@ -24,6 +24,8 @@ const SPOKE: Record<TeamSpecialist, Point> = {
 };
 const BRIEF: Point = { x: 62, y: HUB.y };
 const PROPOSAL: Point = { x: 658, y: HUB.y };
+/** The compliance reviewer, a person, sits outside the ring between the hub and the client. */
+const COMPLIANCE: Point = { x: 650, y: 52 };
 const HUB_R = 58;
 const SPOKE_W = 150;
 const SPOKE_H = 50;
@@ -35,7 +37,7 @@ const ICON: Record<TeamSpecialist, string> = {
   "channel-planner": "▦",
 };
 
-type EdgeId = "brief" | "proposal" | `spoke:${TeamSpecialist}` | `chord:${string}`;
+type EdgeId = "brief" | "proposal" | "compliance" | `spoke:${TeamSpecialist}` | `chord:${string}`;
 
 const isSpoke = (party: string): party is TeamSpecialist =>
   (TEAM_SPECIALISTS as readonly string[]).includes(party);
@@ -44,7 +46,8 @@ const chordId = (a: TeamSpecialist, b: TeamSpecialist) =>
 
 /** The lines a message travels along. */
 function edgesOf(message: TeamMessage): EdgeId[] {
-  if (message.from === "client") return ["brief"];
+  if (message.from === "compliance" || message.to === "compliance") return ["compliance"];
+  if (message.from === "client") return message.kind === "decision" ? ["proposal"] : ["brief"];
   if (message.to === "client") return ["proposal"];
   if (message.to === "team") return TEAM_SPECIALISTS.map((id) => `spoke:${id}` as const);
   if (isSpoke(message.from) && isSpoke(message.to)) return [chordId(message.from, message.to)];
@@ -81,6 +84,9 @@ export function TeamHierarchy({ state }: { state: TeamState }) {
     TEAM_SPECIALISTS.slice(i + 1).map((b) => [a, b] as const),
   ).filter(([a, b]) => used.has(chordId(a, b)));
   const lead = state.agents[TEAM_DIRECTOR];
+  const waitingOn = state.waiting?.gate ?? null;
+  const reviewed = state.decisions.filter((decision) => decision.gate === "compliance");
+  const lastReview = reviewed.at(-1);
   const summary = [TEAM_DIRECTOR, ...TEAM_SPECIALISTS]
     .map((id) => `${TEAM_PARTY_LABELS[id]}: ${state.agents[id].state}`)
     .join("; ");
@@ -148,13 +154,57 @@ export function TeamHierarchy({ state }: { state: TeamState }) {
           {state.brief ? short(state.brief.brand, 14) : "from client"}
         </text>
       </g>
-      <g className={`team-node team-node-endpoint is-${state.strategy ? "done" : "idle"}`}>
+      {(used.has("compliance") || waitingOn === "compliance") && (
+        <path
+          d={`M ${HUB.x + HUB_R * 0.7} ${HUB.y - HUB_R * 0.7} Q ${HUB.x + 160} ${COMPLIANCE.y + 10} ${COMPLIANCE.x - 50} ${COMPLIANCE.y}`}
+          className={edgeClass("compliance")}
+          fill="none"
+        />
+      )}
+      {(used.has("compliance") || waitingOn === "compliance") && (
+        <g
+          className={`team-node team-node-person is-${waitingOn === "compliance" ? "waiting-person" : lastReview?.decision === "approve" ? "done" : "idle"}`}
+        >
+          <rect x={COMPLIANCE.x - 50} y={COMPLIANCE.y - 24} width={100} height={48} rx={24} />
+          <text
+            x={COMPLIANCE.x}
+            y={COMPLIANCE.y - 3}
+            textAnchor="middle"
+            className="team-node-title"
+          >
+            Compliance
+          </text>
+          <text
+            x={COMPLIANCE.x}
+            y={COMPLIANCE.y + 13}
+            textAnchor="middle"
+            className="team-node-note"
+          >
+            {waitingOn === "compliance"
+              ? "your turn"
+              : lastReview
+                ? lastReview.decision === "approve"
+                  ? "approved"
+                  : "changes asked"
+                : "a person"}
+          </text>
+        </g>
+      )}
+      <g
+        className={`team-node team-node-endpoint ${waitingOn === "client" ? "team-node-person is-waiting-person" : `is-${state.strategy ? "done" : "idle"}`}`}
+      >
         <rect x={PROPOSAL.x - 46} y={PROPOSAL.y - 26} width={92} height={52} rx={26} />
         <text x={PROPOSAL.x} y={PROPOSAL.y - 3} textAnchor="middle" className="team-node-title">
           Proposal
         </text>
         <text x={PROPOSAL.x} y={PROPOSAL.y + 14} textAnchor="middle" className="team-node-note">
-          {state.strategy ? "sent" : "to client"}
+          {waitingOn === "client"
+            ? "your turn"
+            : state.phases.has("approved")
+              ? "approved"
+              : state.strategy && state.phases.has("proposal")
+                ? "sent"
+                : "to client"}
         </text>
       </g>
 
