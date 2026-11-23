@@ -14,6 +14,7 @@ import {
   type TeamSpecialist,
   teamMarket,
 } from "@northstar/architecture";
+import { useState } from "react";
 
 const usd = (value: number) =>
   value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -101,9 +102,34 @@ function Creative({ work, brief }: { work: CreativeConcept; brief: CampaignBrief
   );
 }
 
+const KIND_LABEL: Record<string, string> = {
+  hero: "Hero",
+  product: "Product",
+  lifestyle: "Lifestyle",
+  logo: "Logo",
+};
+
+/** The asset's image from the library, or its brand colors while the file is missing. */
+function AssetImage({ asset }: { asset: (typeof ASSET_LIBRARY)[number] }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div
+      className={`team-asset-image kind-${asset.kind}${asset.image.endsWith(".svg") ? " artwork" : ""}`}
+      style={{
+        background: `linear-gradient(135deg, ${asset.palette[0]}, ${asset.palette[1]})`,
+      }}
+    >
+      {!failed && (
+        <img src={asset.image} alt={asset.alt} loading="lazy" onError={() => setFailed(true)} />
+      )}
+      <span className="team-asset-kind">{KIND_LABEL[asset.kind] ?? asset.kind}</span>
+    </div>
+  );
+}
+
 /**
- * The approved images a concept uses, as the asset library holds them: its library ID, its
- * approval and its rights. The swatch stands in for the image; nothing is generated.
+ * The approved images a concept uses, as the asset library holds them: the image, its library ID,
+ * its approval and its rights, and what the concept uses it for.
  */
 export function ApprovedAssets({
   picks,
@@ -117,31 +143,26 @@ export function ApprovedAssets({
         const asset = ASSET_LIBRARY.find((item) => item.id === pick.assetId);
         if (!asset)
           return (
-            <li key={pick.assetId}>
+            <li key={pick.assetId} className="team-asset-missing">
               <code>{pick.assetId}</code> (not in the library)
             </li>
           );
         return (
-          <li key={pick.assetId}>
-            <div
-              className="team-asset-swatch"
-              style={{
-                background: `linear-gradient(135deg, ${asset.palette[0]}, ${asset.palette[1]})`,
-              }}
-              role="img"
-              aria-label={asset.alt}
-            >
-              <span>{asset.kind}</span>
-            </div>
-            <div>
+          <li key={pick.assetId} title={asset.alt}>
+            <AssetImage asset={asset} />
+            <div className="team-asset-text">
               <strong>{asset.title}</strong>
-              <small>{asset.alt}</small>
-              <small>
-                {asset.source} {asset.sourceId} · {asset.approval.status}
-                {asset.approval.id ? ` ${asset.approval.id}` : ""}
-                {asset.rightsUntil ? ` · rights to ${asset.rightsUntil}` : ""}
-              </small>
-              {pick.use && <small className="team-asset-use">Used for: {pick.use}</small>}
+              <span className="team-asset-meta">
+                {asset.source} <code>{asset.sourceId}</code>
+              </span>
+              <span className="team-asset-meta">
+                <span className={`team-asset-status ${asset.approval.status.toLowerCase()}`}>
+                  {asset.approval.status}
+                </span>
+                {asset.approval.id && <code>{asset.approval.id}</code>}
+                {asset.rightsUntil && <span>rights to {asset.rightsUntil}</span>}
+              </span>
+              {pick.use && <p className="team-asset-use">{pick.use}</p>}
             </div>
           </li>
         );

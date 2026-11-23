@@ -157,6 +157,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "packages/architecture/src/agents.ts",
     "packages/architecture/src/language.ts",
     "packages/architecture/src/assets.ts",
+    "scripts/generate-library-photos.mjs",
     "packages/architecture/src/farm.ts",
     "packages/architecture/src/state-machine.ts",
     "apps/edge/src/architecture/ops.ts",

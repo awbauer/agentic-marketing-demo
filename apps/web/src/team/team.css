@@ -943,50 +943,100 @@
   margin: 0;
 }
 
-/* Approved assets from the library: a swatch stands in for each image. */
+/* Approved assets from the library: the image on top, its library record underneath. */
 .team-assets {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 8px;
-  margin: 0;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  margin: 8px 0 0;
   padding: 0;
   list-style: none;
 }
 .team-assets li {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 10px;
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
 }
-.team-assets li > div:last-child {
+.team-assets li.team-asset-missing {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.team-asset-image {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
+.team-asset-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Logos, charts and tiles are artwork: show the whole file, not a crop. */
+.team-asset-image.artwork img {
+  object-fit: contain;
+  background: #fff;
+}
+.team-asset-kind {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.62);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.team-asset-text {
   display: grid;
-  gap: 2px;
+  gap: 4px;
+  padding: 8px 10px 10px;
   min-width: 0;
 }
-.team-assets small {
+.team-asset-text strong {
+  font-size: 13px;
+  line-height: 1.3;
+}
+.team-asset-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
   font-size: 11px;
   color: var(--muted);
-  overflow-wrap: anywhere;
 }
-.team-assets small.team-asset-use {
+.team-asset-meta code {
+  font-size: 10.5px;
+}
+.team-asset-status {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-weight: 600;
+  background: #eef2ee;
+  color: var(--forest);
+}
+.team-asset-status.pending {
+  background: #fff4dc;
+  color: #8a5a00;
+}
+.team-asset-status.expired {
+  background: #fde8e6;
+  color: #a12a1f;
+}
+.team-asset-use {
+  margin: 2px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--ink);
-}
-.team-asset-swatch {
-  display: grid;
-  place-items: end start;
-  height: 60px;
-  border-radius: 6px;
-  padding: 4px 6px;
-}
-.team-asset-swatch span {
-  font-size: 10px;
-  color: #fff;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 /* The feed scrolls inside itself; a pill counts messages that arrived below. */

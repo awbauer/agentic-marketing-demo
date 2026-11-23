@@ -29,6 +29,8 @@ export type LibraryAsset = {
   shows?: readonly string[];
   /** Two colors for the preview's placeholder, from the brand's palette. */
   palette: readonly [string, string];
+  /** The image file the web app serves for the asset, under /library. */
+  image: string;
 };
 
 const LUMERA: [string, string] = ["#5b2a86", "#c9b6e4"];
@@ -48,6 +50,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email"],
     approval: { status: "Approved", id: "MLR-2026-0611" },
     rightsUntil: "2027-06-30",
+    image: "/library/lt-img-congress-hero.jpg",
     palette: LUMERA,
   },
   {
@@ -62,6 +65,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email"],
     approval: { status: "Approved", id: "MLR-2026-0577" },
     rightsUntil: "2027-03-31",
+    image: "/library/lt-img-cardivance-pack.jpg",
     palette: LUMERA,
   },
   {
@@ -76,6 +80,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email"],
     approval: { status: "Pending", id: "MLR-2026-0702" },
     shows: ["cardivance-superior"],
+    image: "/library/lt-img-superiority-chart.svg",
     palette: LUMERA,
   },
   {
@@ -90,6 +95,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email"],
     approval: { status: "Approved", id: "MLR-2025-0914" },
     rightsUntil: "2026-10-31",
+    image: "/library/lt-img-patient-walk.jpg",
     palette: LUMERA,
   },
   {
@@ -104,6 +110,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email"],
     approval: { status: "Approved", id: "MLR-2026-0640" },
     rightsUntil: "2027-01-31",
+    image: "/library/lt-img-glucora-hero.jpg",
     palette: LUMERA,
   },
   {
@@ -117,6 +124,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     tags: [],
     channels: ["email", "push"],
     approval: { status: "Approved", id: "MLR-2024-0001" },
+    image: "/library/lt-img-logo.svg",
     palette: LUMERA,
   },
   {
@@ -131,6 +139,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email"],
     approval: { status: "Approved", id: "COMP-2026-118" },
     rightsUntil: "2027-09-30",
+    image: "/library/hs-img-rate-hero.jpg",
     palette: HARBORSTONE,
   },
   {
@@ -146,6 +155,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     approval: { status: "Approved", id: "COMP-2026-121" },
     rightsUntil: "2027-09-30",
     shows: ["sweep-apy"],
+    image: "/library/hs-img-rate-card.svg",
     palette: HARBORSTONE,
   },
   {
@@ -160,6 +170,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email"],
     approval: { status: "Expired", id: "COMP-2025-077" },
     rightsUntil: "2026-09-30",
+    image: "/library/hs-img-advisor.jpg",
     palette: HARBORSTONE,
   },
   {
@@ -173,6 +184,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     tags: [],
     channels: ["email", "push"],
     approval: { status: "Approved", id: "COMP-2024-001" },
+    image: "/library/hs-img-logo.svg",
     palette: HARBORSTONE,
   },
   {
@@ -187,6 +199,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email", "push"],
     approval: { status: "Approved" },
     rightsUntil: "2027-02-28",
+    image: "/library/ck-img-chowder-hero.jpg",
     palette: COASTLINE,
   },
   {
@@ -201,6 +214,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email"],
     approval: { status: "Approved" },
     rightsUntil: "2026-11-07",
+    image: "/library/ck-img-soup-counter.jpg",
     palette: COASTLINE,
   },
   {
@@ -216,6 +230,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     approval: { status: "Approved" },
     rightsUntil: "2027-02-28",
     shows: ["chowder-price"],
+    image: "/library/ck-img-price-tile.svg",
     palette: COASTLINE,
   },
   {
@@ -229,6 +244,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     tags: [],
     channels: ["email", "push"],
     approval: { status: "Approved" },
+    image: "/library/ck-img-logo.svg",
     palette: COASTLINE,
   },
 ];
