@@ -528,7 +528,7 @@ The local servers are called **in-process** through an in-memory MCP transport. 
 
 Ask one question across them (for example whether a drug's materials are consistent across Aprimo, the claims library and the website) and the orchestrator calls three and points out where they disagree.`,
         inDemo: [
-          "Sources list in the left rail",
+          "Sources list in the left rail (collapsed to a status line)",
           "apps/edge/src/campaign-context, apps/edge/src/knowledge-graph",
           "salesforce/…/mcpServerDefinitions",
         ],
@@ -709,6 +709,7 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
 - **Item rows on native cards.** A card whose tool returned a list shows one row per item: a colored status label (usable, waiting, blocked), the item, a monospaced ID and a readable date, so an MLR ID and its expiry stand out. A row can list what stands behind it, such as a claim's trial evidence and the assets that carry it.
 - **Live write progress.** Accepting an action card switches its button to **Preparing…** and shows the preparation's steps until the confirmation card appears. Clicking **Confirm** disables the buttons and shows the write's steps in the card as the Worker reports them, kept in view while they run. Afterwards a collapsible **Behind the scenes** record keeps each step and how long it took; it opens by itself when a write fails.
 - **Inventory case confirmation.** The card lists the store manager, the forecast, and a table of each low item: on hand, needed, and the dishes it goes into. After you confirm, a banner links to the Case.
+- **Left rail.** The data sources fold into one line by default: how many are ready, and which are offline by name. Open it for the full list. Below it, the **MCP Gateway** box stays open: the Salesforce connection's state, how many governed tools are connected, and the list of them.
 - **Use-case library.** A page of every scenario the demo runs, filterable by team, with its prompts, systems, and data flow. **Try it** puts a prompt in the chat box without sending it.
 - **Accessibility.** The UI targets WCAG 2.2 AA and is tested in Chrome and Edge.
 
