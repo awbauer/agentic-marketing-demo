@@ -154,6 +154,42 @@ select:disabled,
   padding: 7px 12px;
   color: #526057;
 }
+/* Sources collapse to one status line; open them for the list. */
+.source-list summary {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  cursor: pointer;
+}
+.source-list summary::-webkit-details-marker {
+  display: none;
+}
+.source-list summary .nav-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0;
+}
+.source-list summary .nav-label::after {
+  content: "▸";
+  letter-spacing: 0;
+  font-size: 11px;
+}
+.source-list[open] summary .nav-label::after {
+  content: "▾";
+}
+.source-summary {
+  padding: 0 10px 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #526057;
+}
+.source-list[open] .source-summary {
+  display: none;
+}
+.connector-tools {
+  font-size: 11px;
+  color: #526057;
+}
 .dot {
   display: inline-block;
   width: 7px;
@@ -1711,7 +1747,7 @@ select:disabled,
   }
   .rail .nav-label,
   .nav-item:not(.active),
-  .source-row,
+  .source-list,
   .rail-footer {
     display: none;
   }

@@ -35,6 +35,7 @@ import { SalesforceAgentsPanel } from "./SalesforceAgents";
 import { ScopeBar } from "./ScopeBar";
 import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
 import { RouteMapPanel } from "./RouteMapPanel";
+import { SourceList } from "./SourceList";
 import { TechnicalTrace } from "./TechnicalTrace";
 import { ToolActivity } from "./ToolActivity";
 import { latestRoute } from "./turn-route";
@@ -669,61 +670,49 @@ export function App() {
               <span>⧉</span>Campaign squad
             </button>
           </div>
-          <div>
-            <p className="nav-label">Sources</p>
-            <div className="source-row">
-              <i className={`dot ${salesforceReady ? "ready" : "stale"}`} />
-              Salesforce CRM
-            </div>
-            <div className="source-row">
-              <i className={`dot ${salesforceReady ? "ready" : "stale"}`} />
-              Marketing Cloud Next
-            </div>
-            <div className="source-row">
-              <i className={`dot ${salesforceReady ? "ready" : "stale"}`} />
-              Data 360
-            </div>
-            <div className="source-row">
-              <i
-                className={`dot ${operations.disabledTools.includes("get_restaurant_profile") ? "stale" : "ready"}`}
-              />
-              Restaurant data
-            </div>
-            <div className="source-row">
-              <i
-                className={`dot ${operations.disabledTools.includes("get_current_weather") ? "stale" : "ready"}`}
-              />
-              Weather · Open-Meteo
-            </div>
-            <div className="source-row">
-              <i
-                className={`dot ${operations.disabledTools.includes("get_public_holidays") ? "stale" : "ready"}`}
-              />
-              Holidays · Nager.Date
-            </div>
-            <div className="source-row">
-              <i
-                className={`dot ${operations.disabledTools.includes("get_weather_alerts") ? "stale" : "ready"}`}
-              />
-              Weather alerts · NWS
-            </div>
-            <div className="source-row">
-              <i
-                className={`dot ${operations.disabledTools.includes("get_fed_announcements") ? "stale" : "ready"}`}
-              />
-              Rate news · Federal Reserve
-            </div>
-            <div className="source-row">
-              <i
-                className={`dot ${operations.knowledgeGraph === "neo4j" && !operations.disabledTools.includes("get_graph_overview") ? "ready" : "stale"}`}
-              />
-              {operations.knowledgeGraph === "fixture"
-                ? "Knowledge graph · demo copy"
-                : "Knowledge graph · Neo4j"}
-            </div>
-          </div>
+          <SourceList
+            sources={[
+              { name: "Salesforce CRM", ready: salesforceReady },
+              { name: "Marketing Cloud Next", ready: salesforceReady },
+              { name: "Data 360", ready: salesforceReady },
+              {
+                name: "Restaurant data",
+                ready: !operations.disabledTools.includes("get_restaurant_profile"),
+              },
+              {
+                name: "Weather · Open-Meteo",
+                ready: !operations.disabledTools.includes("get_current_weather"),
+              },
+              {
+                name: "Holidays · Nager.Date",
+                ready: !operations.disabledTools.includes("get_public_holidays"),
+              },
+              {
+                name: "Weather alerts · NWS",
+                ready: !operations.disabledTools.includes("get_weather_alerts"),
+              },
+              {
+                name: "Rate news · Federal Reserve",
+                ready: !operations.disabledTools.includes("get_fed_announcements"),
+              },
+              {
+                name:
+                  operations.knowledgeGraph === "fixture"
+                    ? "Knowledge graph · demo copy"
+                    : "Knowledge graph · Neo4j",
+                ready:
+                  operations.knowledgeGraph === "neo4j" &&
+                  !operations.disabledTools.includes("get_graph_overview"),
+              },
+            ]}
+          />
           <section className="connector-panel" aria-labelledby="salesforce-connector-title">
-            <strong id="salesforce-connector-title">{state.connector.label}</strong>
+            <strong id="salesforce-connector-title">MCP Gateway</strong>
+            <small className="connector-tools">
+              {state.connector.state === "ready"
+                ? `Salesforce · ${state.connector.toolCount} connected tool${state.connector.toolCount === 1 ? "" : "s"}`
+                : `Salesforce · ${PHASE_2_CURATED_TOOLS.length} tools, none connected yet`}
+            </small>
             <span role={state.connector.state === "error" ? "alert" : undefined}>
               {state.connector.message}
             </span>
@@ -733,8 +722,8 @@ export function App() {
             <details className="tool-catalog">
               <summary>
                 {state.connector.state === "ready"
-                  ? `${state.connector.toolCount} discovered tools`
-                  : `${PHASE_2_CURATED_TOOLS.length} configured tools`}
+                  ? `Show the ${state.connector.toolCount} connected tools`
+                  : `Show the ${PHASE_2_CURATED_TOOLS.length} allowed tools`}
               </summary>
               <p>
                 {state.connector.state === "ready"
