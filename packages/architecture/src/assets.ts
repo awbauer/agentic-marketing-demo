@@ -29,6 +29,8 @@ export type LibraryAsset = {
   shows?: readonly string[];
   /** Two colors for the preview's placeholder, from the brand's palette. */
   palette: readonly [string, string];
+  /** The image file the web app serves for the asset, under /library. */
+  image: string;
 };
 
 const LUMERA: [string, string] = ["#5b2a86", "#c9b6e4"];
@@ -43,11 +45,12 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     sourceId: "APR-482113",
     title: "Heart failure meeting banner",
     kind: "hero",
-    alt: "A cardiology meeting hall with the Lumera booth in the foreground",
+    alt: "A crowded cardiology congress hall between sessions",
     tags: ["heart", "failure", "meeting", "congress", "cardiology", "outcomes"],
     channels: ["email"],
     approval: { status: "Approved", id: "MLR-2026-0611" },
     rightsUntil: "2027-06-30",
+    image: "/library/lt-img-congress-hero.jpg",
     palette: LUMERA,
   },
   {
@@ -57,11 +60,12 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     sourceId: "APR-482190",
     title: "Cardivance pack shot",
     kind: "product",
-    alt: "Cardivance tablets and carton on a white background",
+    alt: "A carton of Cardivance tablets in foil blister packs",
     tags: ["cardivance", "heart", "failure", "mortality"],
     channels: ["email"],
     approval: { status: "Approved", id: "MLR-2026-0577" },
     rightsUntil: "2027-03-31",
+    image: "/library/lt-img-cardivance-pack.jpg",
     palette: LUMERA,
   },
   {
@@ -76,6 +80,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email"],
     approval: { status: "Pending", id: "MLR-2026-0702" },
     shows: ["cardivance-superior"],
+    image: "/library/lt-img-superiority-chart.svg",
     palette: LUMERA,
   },
   {
@@ -85,11 +90,12 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     sourceId: "APR-471950",
     title: "Patient walking with a clinician",
     kind: "lifestyle",
-    alt: "An older patient walking outdoors with a clinician",
+    alt: "An older patient walking a country path with a clinician",
     tags: ["heart", "failure", "patients", "cardiology"],
     channels: ["email"],
     approval: { status: "Approved", id: "MLR-2025-0914" },
     rightsUntil: "2026-10-31",
+    image: "/library/lt-img-patient-walk.jpg",
     palette: LUMERA,
   },
   {
@@ -99,11 +105,12 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     sourceId: "APR-483005",
     title: "Glucora data banner",
     kind: "hero",
-    alt: "A clinician reviewing a patient's glucose readings on a tablet",
+    alt: "A clinician going over results on a tablet with an older patient",
     tags: ["glucora", "hba1c", "diabetes", "data"],
     channels: ["email"],
     approval: { status: "Approved", id: "MLR-2026-0640" },
     rightsUntil: "2027-01-31",
+    image: "/library/lt-img-glucora-hero.jpg",
     palette: LUMERA,
   },
   {
@@ -117,6 +124,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     tags: [],
     channels: ["email", "push"],
     approval: { status: "Approved", id: "MLR-2024-0001" },
+    image: "/library/lt-img-logo.svg",
     palette: LUMERA,
   },
   {
@@ -126,11 +134,12 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     sourceId: "APR-215507",
     title: "Sweep account banner",
     kind: "hero",
-    alt: "A calm harbor at dawn with the Harborstone wordmark",
+    alt: "Tall ships moored in a calm harbor at dawn",
     tags: ["sweep", "account", "rate", "cash"],
     channels: ["email"],
     approval: { status: "Approved", id: "COMP-2026-118" },
     rightsUntil: "2027-09-30",
+    image: "/library/hs-img-rate-hero.jpg",
     palette: HARBORSTONE,
   },
   {
@@ -146,6 +155,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     approval: { status: "Approved", id: "COMP-2026-121" },
     rightsUntil: "2027-09-30",
     shows: ["sweep-apy"],
+    image: "/library/hs-img-rate-card.svg",
     palette: HARBORSTONE,
   },
   {
@@ -160,6 +170,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     channels: ["email"],
     approval: { status: "Expired", id: "COMP-2025-077" },
     rightsUntil: "2026-09-30",
+    image: "/library/hs-img-advisor.jpg",
     palette: HARBORSTONE,
   },
   {
@@ -173,6 +184,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     tags: [],
     channels: ["email", "push"],
     approval: { status: "Approved", id: "COMP-2024-001" },
+    image: "/library/hs-img-logo.svg",
     palette: HARBORSTONE,
   },
   {
@@ -182,11 +194,12 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     sourceId: "CB-88214",
     title: "Clam chowder on a cold day",
     kind: "hero",
-    alt: "A bowl of clam chowder by a rain-streaked window",
+    alt: "Clam chowder served in a bread bowl",
     tags: ["chowder", "cold", "day", "soup", "weather"],
     channels: ["email", "push"],
     approval: { status: "Approved" },
     rightsUntil: "2027-02-28",
+    image: "/library/ck-img-chowder-hero.jpg",
     palette: COASTLINE,
   },
   {
@@ -196,11 +209,12 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     sourceId: "CB-88230",
     title: "Soup counter",
     kind: "lifestyle",
-    alt: "The Coastline soup counter with three kettles",
+    alt: "A soup pot steaming on the stove in the Coastline kitchen",
     tags: ["soup", "day", "hours", "counter"],
     channels: ["email"],
     approval: { status: "Approved" },
     rightsUntil: "2026-11-07",
+    image: "/library/ck-img-soup-counter.jpg",
     palette: COASTLINE,
   },
   {
@@ -216,6 +230,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     approval: { status: "Approved" },
     rightsUntil: "2027-02-28",
     shows: ["chowder-price"],
+    image: "/library/ck-img-price-tile.svg",
     palette: COASTLINE,
   },
   {
@@ -229,6 +244,7 @@ export const ASSET_LIBRARY: readonly LibraryAsset[] = [
     tags: [],
     channels: ["email", "push"],
     approval: { status: "Approved" },
+    image: "/library/ck-img-logo.svg",
     palette: COASTLINE,
   },
 ];
