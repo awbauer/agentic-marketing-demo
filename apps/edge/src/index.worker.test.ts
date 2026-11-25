@@ -12,7 +12,6 @@ import {
   conversationWindow,
   evidenceTurnMessages,
   requestedToolName,
-  requiredToolChoice,
   selectRequiredTool,
   validateImageConcept,
 } from "./orchestrator";
@@ -211,10 +210,6 @@ describe("edge runtime", () => {
     expect(requestedToolName("Draft campaign content for the sample audience")).toBe(
       "draft_campaign_content",
     );
-    expect(requiredToolChoice(names[0], 0)).toEqual({
-      toolChoice: { type: "tool", toolName: names[0] },
-    });
-    expect(requiredToolChoice(names[0], 1)).toEqual({ toolChoice: "none" });
   });
   it("routes the whole routing set correctly through the policy and intent routers", () => {
     for (const test of routingCases) {

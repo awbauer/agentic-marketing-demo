@@ -661,12 +661,17 @@ export async function runLifecycleWorker(
       messages,
       tools,
       stopWhen: [stepCountIs(10), () => saved.done],
+      // This stage's tools only (its reads and its save, within the agent's grants), in the
+      // worker's chosen order: the first step must use one, and from the fifth step (or on a
+      // nudge) only saving is on offer (ADR-019).
       prepareStep: ({ stepNumber }) =>
         saved.done
           ? {}
           : attempt > 0 || stepNumber >= 4
-            ? { toolChoice: { type: "tool" as const, toolName: step.tool } }
-            : { toolChoice: "required" as const },
+            ? { activeTools: [step.tool] }
+            : stepNumber === 0
+              ? { toolChoice: "required" as const }
+              : {},
       ...AGENT_GENERATION,
     });
     try {

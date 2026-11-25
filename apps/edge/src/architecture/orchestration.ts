@@ -343,7 +343,8 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
       system: systemFor(brand),
       messages: state.messages,
       tools,
-      toolChoice: { type: "tool", toolName: "next_step" },
+      // next_step is how the orchestrator acts; it isn't forced, and a step that ends in prose
+      // gets the reminder above (ADR-019).
       stopWhen: [stepCountIs(16), () => Boolean(paused || finished || stopped)],
       ...AGENT_GENERATION,
     });

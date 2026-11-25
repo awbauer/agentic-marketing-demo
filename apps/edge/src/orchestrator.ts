@@ -156,7 +156,6 @@ import {
 
 export {
   requestedToolName,
-  requiredToolChoice,
   selectRequiredTool,
   stepToolChoice,
 } from "./turn-policy";

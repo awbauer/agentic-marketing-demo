@@ -1054,7 +1054,7 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
   routing: {
     label: "How a message is routed",
     caption:
-      "Two deterministic routers run before the model. Forced tools come one per step, then the model answers with no tools.",
+      "Two deterministic routers run before the model. A scenario offers its tools and the model picks; then it answers with no tools.",
     blocks: [
       {
         kind: "lanes",
@@ -1090,7 +1090,7 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
               },
               {
                 title: "Tool plan",
-                caption: "one forced tool per step",
+                caption: "the scenario's tools, model's choice",
                 tone: "tool",
                 glyph: "▶",
               },
@@ -1124,7 +1124,7 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
   },
   reliability: {
     label: "Tool-call failures and their guards",
-    caption: "The forced-tool middleware sits between the model and the tools.",
+    caption: "The tool-call guard sits between the model and the tools.",
     blocks: [
       {
         kind: "lanes",
@@ -1409,7 +1409,7 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
   "push-plan": {
     label: "The Coastline campaign tool plan",
     caption:
-      "Four forced tools in order: context, past results, then the content draft. The model presents the draft, and the workspace saves it as the focus.",
+      "Four tools on offer: context and past results first, the content draft once they have run. The model presents the draft, and the workspace saves it as the focus.",
     blocks: [
       {
         kind: "flow",

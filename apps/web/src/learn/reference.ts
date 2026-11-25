@@ -226,7 +226,7 @@ export const LEARN_REFERENCE: ReferenceEntry[] = [
   tool(
     "next_step",
     "agent-operations",
-    "The sample-flow orchestrator's one tool: delegate a step to a subagent, ask a person to decide, or finish. It is forced on every step, and passes the gateway as the orchestrator each time.",
+    "The sample-flow orchestrator's one tool: delegate a step to a subagent, ask a person to decide, or finish. It is offered, not forced, and passes the gateway as the orchestrator each time.",
   ),
   tool(
     "read_object",

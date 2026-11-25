@@ -567,7 +567,7 @@ export async function runSpecialist(
   const model = teamModel(run, agent);
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
   // A model can end a step in prose without calling a tool, which ends the loop. Give it up to two
-  // nudges, each forcing the save from its first step.
+  // nudges, each offering only the save (ADR-019).
   for (let attempt = 0; attempt < 3 && !saved.done; attempt += 1) {
     if (attempt > 0)
       messages.push({
@@ -587,16 +587,17 @@ export async function runSpecialist(
       messages,
       tools,
       stopWhen: [stepCountIs(10), () => saved.done],
-      // Read first. If the piece builds on work another spoke has saved, the second step is a
-      // question to that spoke (the model writes it). From the fifth step, only saving is left.
+      // The spoke's own tools, its choice of order: the first step must use one of them, and from
+      // the fifth step (or on a nudge) only saving is on offer. Asking an upstream spoke first is
+      // guidance in its prompt, not a mandate.
       prepareStep: ({ stepNumber }) =>
         saved.done
           ? {}
           : attempt > 0 || stepNumber >= 4
-            ? { toolChoice: { type: "tool" as const, toolName: deliverable } }
-            : stepNumber === 1 && upstream.length > 0 && asked.count === 0
-              ? { toolChoice: { type: "tool" as const, toolName: "ask_teammate" } }
-              : { toolChoice: "required" as const },
+            ? { activeTools: [deliverable] }
+            : stepNumber === 0
+              ? { toolChoice: "required" as const }
+              : {},
       ...AGENT_GENERATION,
     });
     let usage: Awaited<typeof result.totalUsage>;

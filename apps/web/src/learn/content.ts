@@ -662,12 +662,12 @@ Its **Campaign Refinement** subagent runs **Refine Campaign Preview** to change 
       },
       {
         id: "routing",
-        title: "Routing: policy router, intent router, and tool plans",
+        title: "Routing: policy router, intent router, and scenario toolsets",
         summary: "Deterministic decisions before and around the model.",
         body: `Not every decision should be left to the model. Each turn passes through two deterministic routers:
 
 1. **Policy router.** "Remember this draft" is handled by the server, which stores the focus in long-term memory. A save or create request with a draft in the workspace prepares that write: the server plans it from the draft, Salesforce checks your permissions, and a confirmation card appears. Other save, create, or change requests get a fixed reply pointing to the confirmation flow. Publish, send, delete, and similar requests are refused. A question about what to send ("What can we send clients?") asks for guidance, not an action, and reaches the model; each sentence that names an action is judged on its own, so context before the question ("The Fed moved rates.") doesn't turn it into a request. None of these calls the model, so it can never claim a write happened.
-2. **Intent router.** Clear intents force a **tool plan**: an ordered list of tools, one forced per step.
+2. **Intent router.** A clear intent picks a **scenario**, which decides the tools on offer: only that scenario's, never the whole catalog. The model then chooses which to call and in what order; its prompt suggests an order, and nothing forces one (ADR-019). A request no rule recognises gets the brand's whole catalog.
    - "Check readiness" → \`check_campaign_readiness\`
    - "Why is X in the buyer group?" → \`explain_buyer_group\`
    - "What did we decide about…?" or "last time…" → \`recall_decisions\`; "what have we worked on recently?" → \`recall_recent_work\`
@@ -682,9 +682,13 @@ Its **Campaign Refinement** subagent runs **Refine Campaign Preview** to change 
    - **Checks first, Marketing Cloud last.** Every new draft starts with its brand's claims checks and ends with Marketing Cloud's agents, whatever order the prompt implies: a Lumera campaign runs \`check_clinical_claims\` → \`aprimo_search_approved_assets\` → the brief, and a Harborstone one \`get_fed_announcements\` → \`match_news_to_approved_content\` → the brief. The model drafts from what the checks allow, lists what it ruled out and why, and only then asks Marketing Cloud for the brief. The header's brand decides the checks; with all brands, the brand the request names does. Coastline has no claims library in chat, so its campaigns start from the restaurant's context. A revision of a brief already in focus goes straight back to the agent
    - A change to a brief ("make it warmer") → back to the agent: a re-drafted brief before it's saved, or **Refine Campaign Preview** after
    - A change to other drafts → no tools; the model rewrites the draft, which is saved as the next version
-   - The rules need specific signals and **defer to the model** when unsure, because a wrongly forced tool can't be undone within the turn.
+   - The rules need specific signals and **defer to the model** when unsure, because a scenario that offers the wrong tools narrows what the model can do.
 
-If a planned tool fails, for example because it rejected an argument, the plan offers that same tool once more before moving on. A forced step also keeps the plan's earlier read-only tools callable, so a model taking a second look at the claims check gets an answer instead of failing the turn; the plan moves on only when the step's own tool runs, and Marketing Cloud's agents are never offered before their step. After a plan finishes, the model gets **no tools** and must write the answer.
+**Guardrails, not mandates.** Within a scenario:
+- **Look before you answer.** The first step must call one of the scenario's tools (any one), so an answer about Salesforce or the graph starts from evidence.
+- **Ground before you draft.** A Marketing Cloud agent, which drafts and creates in Salesforce, is offered only once every tool planned before it has worked; the brand's checks come first.
+- **Fix, don't fail.** A tool that failed, for example on a rejected argument, stays on offer so the model can correct it.
+- **Then write.** When every planned tool has worked, or on the last step, the model gets **no tools** and must write the answer. It may also answer sooner, once it has enough.
 
 **Life-sciences routes.** A request about a target list or prescriber groups goes to \`build_hcp_target_list\`; clinical claims, off-label use, a boxed warning or a Lumera drug beside \`claims\` go to \`check_clinical_claims\`; a named hospital with formulary, P&T, access or a plan goes to \`plan_hospital_engagement\`. The model is told that only supported, on-label, MLR-approved claims can be used and that groups are never people.
 
@@ -696,14 +700,15 @@ If a planned tool fails, for example because it rejected an argument, the plan o
         id: "reliability",
         title: "Reliability guards for tool calling",
         summary: "How the demo keeps a small model's tool calls on track.",
-        body: `Small reasoning models fail at tool calling in predictable ways. The forced-tool guard, a language-model middleware, handles each one:
+        body: `Small reasoning models fail at tool calling in predictable ways. The tool-call guard, a language-model middleware, handles each one without deciding which tool the model calls (ADR-019):
 
 - **A tool call written into reasoning or answer text.** The guard recovers the JSON arguments when they match the tool's schema, and hides leaked text from the user.
 - **Channel markup or a dropped prefix in tool names**, such as \`summarize_campaign<|channel|>analysis\`. The guard repairs the name when exactly one real tool matches.
 - **Arguments that aren't valid JSON.** The guard escapes raw newlines inside strings, drops anything the model appended after the object (a literal "\\n", channel markup), and reads \`<arg_key>\`/\`<arg_value>\` markup. Arguments cut off mid-call can't be repaired, so they count as no call.
-- **No usable call at all.** The step is retried once.
+- **A call written into reasoning when the tool wasn't named.** On a step that must call some tool, the guard works out which offered tool the arguments fit (only when exactly one does) and makes the call. On a free step it does so only when the step produced nothing else, so an answer is never turned into a call.
+- **No usable call at all** on a step that must call some tool. The step is retried once.
 - **A tool call in an answer step,** which offers no tools. The call is dropped; if it was all the step produced, the answer is retried once.
-- **Runaway reasoning.** Forced steps are capped at 2,048 tokens. Reasoning counts against the cap, and a detailed request to a Salesforce agent can take several hundred tokens on its own.
+- **Runaway reasoning.** Steps that must call a tool are capped at 2,048 tokens. Reasoning counts against the cap, and a detailed request to a Salesforce agent can take several hundred tokens on its own.
 
 At the turn level:
 - Structured timeouts cover the whole turn, gaps between chunks, and each tool call.
@@ -1056,7 +1061,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **What a model may add.** The red-team agent can report a concern the probes missed, but that is advice shown to the reviewer; it blocks nothing, because only the deterministic probes can block approval. A model's say-so should never stop a person's decision, and should never be what lets one through.
 
-**The orchestrator.** A sample flow gives a goal to an orchestrator model, which has one tool, **next_step**: delegate a step to a subagent, ask a person, or finish. One tool forced on every step is what makes gpt-oss dependable here, because a call buried in its reasoning can still be recovered. Each delegation runs the subagent as above; what it creates comes back as a short handle (module-1) the orchestrator uses instead of copying a long urn. When a module is submitted for review the orchestrator asks the person and the flow stops, saved in D1; it resumes only once the module's state shows a decision. Platform agents, which Admin owns, act for whoever started the flow, so a flow never takes on Admin.
+**The orchestrator.** A sample flow gives a goal to an orchestrator model, which has one tool, **next_step**: delegate a step to a subagent, ask a person, or finish. That tool is offered, not forced: a step that ends in prose gets a reminder, and a call buried in the model's reasoning is still recovered by the tool-call guard. Each delegation runs the subagent as above; what it creates comes back as a short handle (module-1) the orchestrator uses instead of copying a long urn. When a module is submitted for review the orchestrator asks the person and the flow stops, saved in D1; it resumes only once the module's state shows a decision. Platform agents, which Admin owns, act for whoever started the flow, so a flow never takes on Admin.
 
 **Where the models run.** Deployed, on Workers AI through AI Gateway. Locally, \`pnpm dev:local\` uses local D1 and R2 with real Workers AI (a Worker name of its own keeps the remote-bindings proxy off the Access-protected domain). The hermetic worker tests select a scripted stand-in with \`AGENT_MODEL=scripted\`; it calls each agent's real tools, so the gateway, services and persistence are tested, and no deployed environment sets it. \`AGENT_CHAMPIONS\` can name another catalog model for a task class in one environment.
 
@@ -1090,7 +1095,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 - the **copy lead**: the line, the recurring themes and copy for each placement
 - the **channel planner**: the channels to buy, the spend and dates for each, and the results to expect
 
-**How the agents talk.** Assignments, hand-backs and send-backs travel between the lead and a spoke. When a piece builds on another spoke's saved work, the spoke first asks that spoke a question with \`ask_teammate\`, and the other spoke answers from its own saved work (\`answer_teammate\`). Every message is logged and drawn live on the map. The lead's loop has one forced tool, \`next_step\`, and the lead may hand out a piece only after the pieces it depends on are kept.
+**How the agents talk.** Assignments, hand-backs and send-backs travel between the lead and a spoke. When a piece builds on another spoke's saved work, the spoke first asks that spoke a question with \`ask_teammate\`, and the other spoke answers from its own saved work (\`answer_teammate\`). Every message is logged and drawn live on the map. The lead acts through one tool, \`next_step\`, offered rather than forced, and may hand out a piece only after the pieces it depends on are kept. Each spoke is offered only its own reads, \`ask_teammate\` and its save, and chooses how to use them; from its fifth step only the save is left.
 
 **Rules are code, not prompts.** Each spoke saves through one tool, and a service checks the work whatever the model wrote: findings must cite real data ids (cite or refuse); the palette must come from the brand book and no image may show what it forbids; copy must fit each placement's character limits, avoid banned phrases and carry any required disclosure; the channel plan must respect minimum spends, the budget and the brief's window. A refused save comes back with every problem, and the model has to fix them. When the pieces are in, reconciliation finds clashes (a channel bought with no copy, copy for a channel not bought, an audience the analyst didn't recommend) and the lead must resolve each one or send the piece back. The client gets a **proposal**; the client decides.
 
@@ -1143,6 +1148,8 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **How the lead moves.** The campaign lead has one tool, \`lifecycle_step\`: assign the next agent step, or ask the next person (\`request_decision\`). The server holds the lifecycle as data (\`PHARMA_PHASES\`) and a pure state machine, and refuses any step out of order. Every result tells the lead what comes next.
 
+**Different tools at each stage.** No agent sees the whole toolbox (ADR-019). At each stage a worker is offered that stage's reads, within its own grants, and that stage's save: the analyst gets segments, competitors, signals and past results to propose focus areas, then only the HCP universe to build the audience; the copy lead gets the claims library, approved assets and brand guidelines; the channel planner gets the approved job and channel benchmarks. Within that set the worker chooses what to read and when to save; its first step must use one of them, and from its fifth step only the save is left. The lead's \`lifecycle_step\` is offered, not forced. The state machine, the rule services and the people's decisions are the guardrails; the order of reads isn't.
+
 **People.** Each human step is a gateway action only its role may take: the brand lead (\`team:decide_focus\`, \`decide_concept\`, \`approve_go_live\`, \`decide_next_action\`), Medical (the reviewer persona, for the early concept review, \`team:review_concept\`, and the MLR review), Legal (senior), Regulatory (compliance) and marketing operations (marketer). Choice steps take one of the agents' options. A person who asks for changes sends the phase back to its first step, with their words, in a new round; a resubmitted MLR job gets a new job code.
 
 **Models.** Coordinators (the campaign lead and the MLR coordinator) run on each provider's top model, workers on a smaller one: Opus 5.5 and Sonnet 5.5 on Anthropic, gpt-6-astra and gpt-5.4-mini on OpenAI, GLM-5.3 and DeepSeek V4.1 Flash on Workers AI (a worker re-sends a growing prompt, and DeepSeek's cached input costs $0.006 per million tokens). Each agent's calls share a growing prefix, so they are cached: Anthropic requests carry top-level \`cache_control\`, OpenAI requests a per-agent \`promptCacheKey\`, and the cost estimate prices cache reads at the cached rate.
@@ -1180,7 +1187,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 Every node carries its workspace and an expiry. The person who acted is stored only as a hash.
 
-**How it's recalled.** When you ask about earlier work ("what did we decide…", "last time…", "what have we worked on recently?"), the intent router forces a recall tool:
+**How it's recalled.** When you ask about earlier work ("what did we decide…", "last time…", "what have we worked on recently?"), the intent router offers the recall tools:
 - \`recall_decisions\`
 - \`recall_recent_work\`
 - \`explain_memory\`
@@ -1238,7 +1245,8 @@ export const GLOSSARY: Array<{ term: string; definition: string }> = [
   },
   {
     term: "Forced tool call",
-    definition: "A step where the host requires the model to call one specific tool.",
+    definition:
+      "A step where the host requires the model to call one specific tool. The demo doesn't use them (ADR-019): context scopes which tools are offered, and the model chooses.",
   },
   {
     term: "GraphRAG",
@@ -1292,6 +1300,6 @@ export const GLOSSARY: Array<{ term: string; definition: string }> = [
   {
     term: "Tool plan",
     definition:
-      "An ordered list of tools the intent router forces, one per step, before the model writes its answer.",
+      "The tools a recognised scenario offers, with a suggested order; the model chooses which to call and when it has enough.",
   },
 ];

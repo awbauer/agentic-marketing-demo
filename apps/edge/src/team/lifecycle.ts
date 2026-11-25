@@ -297,7 +297,8 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       system: systemFor(run.brief),
       messages,
       tools,
-      toolChoice: { type: "tool", toolName: "lifecycle_step" },
+      // lifecycle_step is how the lead acts; it isn't forced, and a turn that ends in prose gets
+      // a nudge (ADR-019).
       stopWhen: [stepCountIs(16), halted],
       ...AGENT_GENERATION,
     });

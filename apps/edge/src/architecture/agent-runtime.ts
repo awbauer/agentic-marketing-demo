@@ -308,11 +308,10 @@ export async function runModelAgent(
   ]
     .filter(Boolean)
     .join("\n\n");
-  // Until the action's own tool has succeeded, it is the tool to call: a model may otherwise
-  // describe the work in prose, or bury the call in its reasoning, without doing it. If a forced
-  // step yields no call at all (the model wanted to read something first), try once more letting it
-  // call any tool; the next step is forced again.
-  const attempt = async (loose: boolean) => {
+  // The agent has only the tools its grants allow (ADR-019), and chooses among them. Its first
+  // step must use one, any one, so it acts rather than describing the work in prose; after that it
+  // reads and works as it sees fit. If it ends without calling anything, it gets one more try.
+  const attempt = async (_retry: boolean) => {
     const result = streamText({
       model: wrapLanguageModel({ model, middleware: forcedToolCallMiddleware }),
       system,
@@ -325,11 +324,9 @@ export async function runModelAgent(
         () => done() && agent.id !== "adversarial-farm",
       ],
       prepareStep: ({ stepNumber }) =>
-        done() || !(primaryTool in tools)
+        done() || !(primaryTool in tools) || stepNumber > 0
           ? {}
-          : loose && stepNumber === 0
-            ? { toolChoice: "required" as const }
-            : { toolChoice: { type: "tool" as const, toolName: primaryTool } },
+          : { toolChoice: "required" as const },
       ...AGENT_GENERATION,
     });
     await result.consumeStream();

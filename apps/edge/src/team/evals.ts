@@ -102,7 +102,7 @@ export async function judgeRun(run: TeamRun): Promise<JudgeResult | null> {
         },
       }),
     },
-    toolChoice: { type: "tool", toolName: "score_proposal" },
+    // Its only tool, not forced (ADR-019): a judge that doesn't score leaves the run unscored.
     ...AGENT_GENERATION,
   });
   return captured;

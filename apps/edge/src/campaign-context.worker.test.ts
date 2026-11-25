@@ -130,44 +130,40 @@ describe("campaign-context MCP", () => {
     ];
     const plan = selectToolPlan(PUSH_PROMPT, names);
     expect(plan).toEqual(names);
-    for (const [step, name] of names.entries())
-      expect(stepToolChoice(plan, step)).toMatchObject({ activeTools: [name] });
-    expect(stepToolChoice(plan, 4)).toEqual({ toolChoice: "none", activeTools: [] });
-    // A planned tool that failed is offered once more, then the plan moves on. The plan's
-    // earlier read-only tools stay callable, so a second look doesn't fail the turn.
+    // The scenario's read tools are all on offer from the start, never forced: the first step must
+    // call one of them, then the model chooses. The Marketing Cloud agent, which drafts in
+    // Salesforce, is offered only once every tool planned before it has worked.
     const [first, second, third, brief] = names as [string, string, string, string];
+    expect(stepToolChoice(plan, 0)).toEqual({
+      toolChoice: "required",
+      activeTools: [first, second, third],
+    });
     const at = (outcomes: Array<{ tool: string; ok: boolean }>) =>
-      stepToolChoice(plan, outcomes.length, 6, outcomes)?.activeTools;
+      stepToolChoice(plan, outcomes.length, 6, outcomes);
+    expect(at([{ tool: second, ok: true }])).toEqual({
+      toolChoice: "auto",
+      activeTools: [first, second, third],
+    });
+    // A tool that failed stays on offer, so the model can fix its arguments.
     expect(
       at([
         { tool: first, ok: true },
         { tool: second, ok: false },
-      ]),
-    ).toEqual([second, first]);
-    expect(
-      at([
-        { tool: first, ok: true },
-        { tool: second, ok: false },
-        { tool: second, ok: true },
-      ]),
-    ).toEqual([third, first, second]);
-    expect(
-      at([
-        { tool: first, ok: true },
-        { tool: second, ok: false },
-        { tool: second, ok: false },
-      ]),
-    ).toEqual([third, first, second]);
-    // Another look at an earlier tool leaves the plan where it was: the brief is still next.
+      ])?.activeTools,
+    ).toContain(second);
     const ready = [
+      { tool: third, ok: true },
       { tool: first, ok: true },
       { tool: second, ok: true },
-      { tool: third, ok: true },
     ];
-    expect(at(ready)).toEqual([brief, first, second, third]);
-    expect(at([...ready, { tool: second, ok: true }])).toEqual([brief, first, second, third]);
-    // Marketing Cloud's agent is never offered before its step.
-    expect(at([{ tool: first, ok: true }])?.includes(brief)).toBe(false);
+    expect(at(ready)?.activeTools).toEqual(names);
+    expect(at([...ready, { tool: brief, ok: true }])).toEqual({
+      toolChoice: "none",
+      activeTools: [],
+    });
+    expect(at([{ tool: first, ok: true }])?.activeTools.includes(brief)).toBe(false);
+    // The last allowed step writes the answer.
+    expect(stepToolChoice(plan, 5)).toEqual({ toolChoice: "none", activeTools: [] });
     expect(
       selectToolPlan(
         "Draft an email campaign for Coastline Kitchen, our fast casual restaurant in California, tailored to the current weather, time of day, and our menu",

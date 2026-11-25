@@ -65,7 +65,10 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "salesforce/force-app/main/default/classes/NorthstarValidateCampaignContent.cls",
     "salesforce/force-app/main/default/classes/NorthstarCreateCampaignReviewRequest.cls",
   ],
-  routing: ["apps/edge/src/turn-policy.ts"],
+  routing: [
+    "apps/edge/src/turn-policy.ts",
+    "docs/decisions/ADR-019-scoped-tools-not-forced-calls.md",
+  ],
   reliability: ["apps/edge/src/forced-tool-middleware.ts", "apps/edge/src/turn-trace.ts"],
   governance: [
     "apps/edge/src/draft-review.ts",
