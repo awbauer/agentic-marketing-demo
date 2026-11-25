@@ -3,7 +3,8 @@
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateText } from "ai";
+import { generateText, tool } from "ai";
+import { z } from "zod";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 import { describe, expect, it } from "vitest";
 import { resolvePrincipal } from "../../../edge/src/auth";
@@ -77,6 +78,45 @@ describe("Vertex AI models", () => {
       model: "openai/gpt-oss-120b-maas",
       reasoning_effort: "low",
     });
+  });
+
+  it("never sends a forced tool choice, which Vertex's gpt-oss refuses", async () => {
+    const { calls, fetcher } = recorder(() => chatReply("ok"));
+    const models = vertexModels({
+      project: "p",
+      location: "us-central1",
+      fetch: fetcher,
+      accessToken: async () => "t",
+    });
+    const tools = {
+      lookup: tool({ description: "Look up", inputSchema: z.object({ q: z.string() }) }),
+      other: tool({ description: "Other", inputSchema: z.object({}) }),
+    };
+    await generateText({
+      model: models.chat("@cf/openai/gpt-oss-20b"),
+      prompt: "hi",
+      tools,
+      toolChoice: { type: "tool", toolName: "lookup" },
+      // The fake answers in text; only the request it was sent matters here.
+    }).catch(() => undefined);
+    const forced = calls[0]?.body as {
+      tool_choice?: unknown;
+      tools?: Array<{ function: { name: string } }>;
+      messages: Array<{ role: string; content: unknown }>;
+    };
+    expect(forced.tool_choice).toBe("auto");
+    expect(forced.tools?.map((item) => item.function.name)).toEqual(["lookup"]);
+    expect(forced.messages.at(-1)).toMatchObject({ role: "system" });
+    expect(String(forced.messages.at(-1)?.content)).toContain("`lookup`");
+    await generateText({
+      model: models.chat("@cf/openai/gpt-oss-20b"),
+      prompt: "hi",
+      tools,
+      toolChoice: "required",
+    }).catch(() => undefined);
+    const required = calls[1]?.body as { tool_choice?: unknown; tools?: unknown[] };
+    expect(required.tool_choice).toBe("auto");
+    expect(required.tools).toHaveLength(2);
   });
 
   it("generates a PNG with Gemini's image model", async () => {

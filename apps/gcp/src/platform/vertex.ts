@@ -4,6 +4,7 @@
 // the squad's Anthropic provider reaches Claude on Vertex. Every call authenticates with the
 // service account's own credentials (ADC), so there is no key to store.
 import { createOpenAI } from "@ai-sdk/openai";
+import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { generateText, type LanguageModel, wrapLanguageModel } from "ai";
 import { GoogleAuth } from "google-auth-library";
 import type { ImageRequest, JudgeVerdict, ModelPlatform } from "../../../edge/src/platform/models";
@@ -61,28 +62,56 @@ function adcToken() {
   };
 }
 
+type CallParams = LanguageModelV4CallOptions;
+
+/**
+ * Vertex AI's gpt-oss refuses a forced tool choice ("Forced tool calling is not supported for
+ * this model"), and the orchestrator forces a tool on many steps. So a forced step offers only
+ * the forced tool, asks for `auto`, and says in a system message to call it now; a step that
+ * requires some tool keeps them all and says to call one. The salvage middleware above this model
+ * still sees the forced choice, so it still recovers a call written into the reasoning.
+ */
+export function unforcedToolChoice(params: CallParams): CallParams {
+  const choice = params.toolChoice;
+  if (choice?.type !== "tool" && choice?.type !== "required") return params;
+  const tools =
+    choice.type === "tool"
+      ? params.tools?.filter((tool) => tool.name === choice.toolName)
+      : params.tools;
+  const instruction =
+    choice.type === "tool"
+      ? `Call the \`${choice.toolName}\` tool now. Do not answer in text on this step.`
+      : "Call one of the available tools now. Do not answer in text on this step.";
+  return {
+    ...params,
+    ...(tools ? { tools } : {}),
+    toolChoice: { type: "auto" },
+    prompt: [...params.prompt, { role: "system", content: instruction }],
+  };
+}
+
 /** Workers AI-style options the shared code sets, translated for the OpenAI-compatible endpoint. */
+export function vertexCompatibleParams(params: CallParams): CallParams {
+  const unforced = unforcedToolChoice(params);
+  const workersAi = unforced.providerOptions?.["workers-ai"] as
+    | { reasoning_effort?: string }
+    | undefined;
+  if (!workersAi?.reasoning_effort) return unforced;
+  return {
+    ...unforced,
+    providerOptions: {
+      ...unforced.providerOptions,
+      openai: { ...unforced.providerOptions?.openai, reasoningEffort: workersAi.reasoning_effort },
+    },
+  };
+}
+
 function reasoningFromWorkersAi(model: Exclude<LanguageModel, string>) {
   return wrapLanguageModel({
     model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
     middleware: {
       specificationVersion: "v3",
-      transformParams: async ({ params }) => {
-        const workersAi = params.providerOptions?.["workers-ai"] as
-          | { reasoning_effort?: string }
-          | undefined;
-        if (!workersAi?.reasoning_effort) return params;
-        return {
-          ...params,
-          providerOptions: {
-            ...params.providerOptions,
-            openai: {
-              ...params.providerOptions?.openai,
-              reasoningEffort: workersAi.reasoning_effort,
-            },
-          },
-        };
-      },
+      transformParams: async ({ params }) => vertexCompatibleParams(params),
     },
   });
 }
