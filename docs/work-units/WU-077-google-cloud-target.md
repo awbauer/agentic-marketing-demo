@@ -38,7 +38,7 @@ Andrew asked for a `gcp` branch that runs the project 100% on Google Cloud, keep
 - [x] `pnpm verify`'s gates pass except `lint`, which fails identically on the base commit (six library SVGs without titles); `pnpm build` still builds the Cloudflare Worker.
 - [ ] A confirmed write runs once per idempotency key, audited in Firestore, then read back from Salesforce on Google Cloud. Needs the Salesforce secrets and callback URL.
 - [ ] `pnpm eval` / `pnpm eval:team` on Vertex gpt-oss-120b, compared with the Workers AI baseline.
-- [ ] An evaluator signs in through IAP on the deployed load balancer and runs a model turn. Waits on the managed certificate.
+- [ ] An evaluator signs in through IAP on the deployed load balancer and runs a model turn.
 
 ## Verification
 
@@ -50,11 +50,11 @@ Andrew asked for a `gcp` branch that runs the project 100% on Google Cloud, keep
 
 - Vertex AI in `burner-andbauer-7311`, 2026-11-25: `openai/gpt-oss-120b-maas` answered in `us-central1`; `gpt-oss-20b-maas` and every Imagen id returned 404 and are not listed; `gemini-3.1-flash-image` in `global` returned a 1024×1024 PNG; Claude models are listed but return 404 until enabled.
 - The bundled server run locally against the Firestore emulator served `/api/health`, `/api/ready`, `/api/session`, `/agent/operations`, `/agent/turns`, the squad library and the SPA. In the built React app, a chat message went over the WebSocket, the policy router answered, the route map showed Identity-Aware Proxy and Vertex AI, and the chat was still there after a reload.
-- Deployed: image `us-central1-docker.pkg.dev/burner-andbauer-7311/northstar/workbench:f0621bd-dirty` (Cloud Build), Cloud Run revision `northstar-workbench-00009-f8b` started and listening; the `run.app` URL answers 404 from the internet (ingress admits only the load balancer and Google-internal callers); load balancer `https://136.110.207.171.nip.io` with IAP, certificate provisioning.
+- Deployed: image `us-central1-docker.pkg.dev/burner-andbauer-7311/northstar/workbench:f0621bd-dirty` (Cloud Build), Cloud Run revision `northstar-workbench-00009-f8b` started and listening; the `run.app` URL answers 404 from the internet (ingress admits only the load balancer and Google-internal callers); load balancer `https://136.110.207.171.nip.io` with IAP; once its managed certificate was active, an unauthenticated request was redirected (302) to Google sign-in.
 
 ## Not yet demonstrated
 
-- Signing in through IAP on the deployed URL, until the managed certificate is active.
+- A signed-in session on the deployed URL (IAP's redirect works; the sign-in itself needs a person).
 - The hourly Cloud Scheduler run against the deployed service.
 - Model turns, images and the squad on Vertex in the deployed service, and `pnpm eval` on Vertex.
 - Salesforce on Google Cloud: needs `SALESFORCE_MCP_URL`, `SALESFORCE_CLIENT_ID`, `CONFIRMATION_SIGNING_KEY` (shared with Salesforce) and the callback URL in the External Client App.
