@@ -81,6 +81,21 @@ The knowledge graph (ADR-006) reads from Neo4j AuraDB through the Query API.
 - **Keep-alive and sweep:** the Worker's hourly cron (`17 * * * *` UTC) runs one read query so Aura Free doesn't pause, and deletes memory past its 14-day expiry. A paused instance returns a "may be paused" tool error; resume it in the Aura console.
 - **Teardown:** delete the Aura instance in the console, and remove the three secrets with `wrangler secret delete`.
 
+## Vertex AI from the Worker (ADR-021)
+
+The top bar's AI platform menu offers Vertex AI once the Worker holds a federation credential. No Google key is involved: the Worker signs its own short-lived token, and Google's workload identity pool `northstar-workers` (provider `cloudflare-worker`, project `burner-andbauer-7311`) exchanges it for an access token of `northstar-vertex-worker`, which holds `roles/aiplatform.user` only.
+
+Put the credential on the Worker straight from Secret Manager, without writing it to disk or a terminal:
+
+```sh
+gcloud secrets versions access latest --secret northstar-vertex-worker-identity --project burner-andbauer-7311 \
+  | npx wrangler secret put GOOGLE_WORKLOAD_IDENTITY --config wrangler.jsonc
+```
+
+`wrangler secret put` publishes a new version of the deployed Worker. Deploy a build containing ADR-021 for the menu to use it.
+
+To revoke access, run `gcloud iam workload-identity-pools providers delete cloudflare-worker --workload-identity-pool northstar-workers --location global --project burner-andbauer-7311` (or disable the pool), then `npx wrangler secret delete GOOGLE_WORKLOAD_IDENTITY`. To rotate the key, generate a new pair, add its public key to the provider (`--jwk-json-path`), store a new credential version, put it on the Worker, then remove the old public key.
+
 ## Rollback and teardown
 
 Delete only the IDs recorded by this work unit: the proof Worker, Access application/policy, D1 database, R2 bucket, and Durable Object namespace/migration associated with the proof Worker. Export no data. Read back the resource lists after deletion and attach the results to the work unit. Never use a broad account cleanup command.

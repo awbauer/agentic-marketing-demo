@@ -21,7 +21,12 @@ import {
 } from "@northstar/contracts";
 import { createProviderRegistry, type LanguageModel } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
-import { parseServiceAccountKey, serviceAccountToken } from "./google-token";
+import {
+  parseServiceAccountKey,
+  parseWorkloadIdentity,
+  serviceAccountToken,
+  workloadIdentityToken,
+} from "./google-token";
 import { vertexModels } from "./vertex";
 
 export type ImageRequest = {
@@ -86,6 +91,8 @@ export type ModelBindings = {
   /** Vertex AI credentials: the host's own token source, or a service-account key (JSON). */
   GOOGLE_ACCESS_TOKEN?: () => Promise<string>;
   GOOGLE_SERVICE_ACCOUNT_KEY?: string;
+  /** Or a workload-identity credential (JSON), for where service-account keys are banned. */
+  GOOGLE_WORKLOAD_IDENTITY?: string;
 };
 
 /** Which host this server is: the GCP host sets HOST; the Worker leaves it unset. */
@@ -187,6 +194,15 @@ function vertexFromEnv(env: ModelBindings): { platform: ModelPlatform } | { reas
   const project = env.VERTEX_PROJECT ?? env.GCP_PROJECT;
   if (!project) return { reason: "Set VERTEX_PROJECT to the Google Cloud project to use." };
   let token = env.GOOGLE_ACCESS_TOKEN;
+  if (!token && env.GOOGLE_WORKLOAD_IDENTITY) {
+    try {
+      token = workloadIdentityToken(parseWorkloadIdentity(env.GOOGLE_WORKLOAD_IDENTITY));
+    } catch (error) {
+      return {
+        reason: error instanceof Error ? error.message : "The credential could not be read.",
+      };
+    }
+  }
   if (!token && env.GOOGLE_SERVICE_ACCOUNT_KEY) {
     try {
       token = serviceAccountToken(parseServiceAccountKey(env.GOOGLE_SERVICE_ACCOUNT_KEY));
@@ -197,7 +213,7 @@ function vertexFromEnv(env: ModelBindings): { platform: ModelPlatform } | { reas
   if (!token)
     return {
       reason:
-        "Set GOOGLE_SERVICE_ACCOUNT_KEY to a key for a service account with Vertex AI access.",
+        "Set GOOGLE_WORKLOAD_IDENTITY (or GOOGLE_SERVICE_ACCOUNT_KEY) to a credential for a service account with Vertex AI access.",
     };
   let modelMap: Record<string, string> = {};
   try {

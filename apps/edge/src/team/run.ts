@@ -316,7 +316,7 @@ export function providerStatus(ctx: Ctx) {
       keys: vertex
         ? serverHost(ctx.env) === "google-cloud"
           ? "none needed (Google Cloud IAM)"
-          : "a Google service-account key, held as a Worker secret"
+          : "none stored (Workload Identity Federation)"
         : id === "cloudflare"
           ? "none needed"
           : "stored on the AI Gateway",

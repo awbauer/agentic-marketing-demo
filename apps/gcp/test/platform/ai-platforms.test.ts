@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import { aiPlatformOptions, aiPlatforms, modelPlatform } from "../../../edge/src/platform/models";
 import {
   parseServiceAccountKey,
+  parseWorkloadIdentity,
   serviceAccountToken,
+  workloadIdentityToken,
 } from "../../../edge/src/platform/google-token";
 
 const fakeAi = { run: async () => ({}) } as unknown as Ai;
@@ -95,5 +97,73 @@ describe("service-account tokens", () => {
     expect(payload.scope).toBe("https://www.googleapis.com/auth/cloud-platform");
     now += 56 * 60_000;
     expect(await token()).toBe("token-2");
+  });
+});
+
+describe("workload-identity tokens", () => {
+  it("signs its own JWT, exchanges it at STS, then acts as the service account", async () => {
+    const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+    const audience =
+      "//iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/pool/providers/worker";
+    const credential = parseWorkloadIdentity(
+      JSON.stringify({
+        type: "northstar-workload-identity",
+        issuer: "https://worker.example",
+        subject: "northstar-worker",
+        audience,
+        serviceAccount: "vertex@p.iam.gserviceaccount.com",
+        keyId: "k1",
+        privateKey: await exportPKCS8(privateKey),
+      }),
+    );
+    const now = 1_000_000;
+    const calls: Array<{ url: string; body: Record<string, unknown>; auth: string | null }> = [];
+    const fetcher: typeof fetch = async (input, init) => {
+      const url = String(input);
+      calls.push({
+        url,
+        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+        auth: new Headers(init?.headers).get("authorization"),
+      });
+      return url.startsWith("https://sts.")
+        ? Response.json({ access_token: "federated" })
+        : Response.json({
+            accessToken: "vertex-token",
+            expireTime: new Date(now + 3600_000).toISOString(),
+          });
+    };
+    const token = workloadIdentityToken(credential, { fetch: fetcher, now: () => now });
+    expect(await token()).toBe("vertex-token");
+    expect(await token()).toBe("vertex-token");
+    expect(calls).toHaveLength(2);
+    const { payload, protectedHeader } = await jwtVerify(
+      String(calls[0]?.body.subjectToken),
+      publicKey,
+      {
+        issuer: "https://worker.example",
+        subject: "northstar-worker",
+        audience: `https:${audience}`,
+        currentDate: new Date(now),
+      },
+    );
+    expect(protectedHeader.kid).toBe("k1");
+    expect(payload.sub).toBe("northstar-worker");
+    expect(calls[0]?.body).toMatchObject({ audience });
+    expect(calls[1]?.url).toContain(
+      "serviceAccounts/vertex%40p.iam.gserviceaccount.com:generateAccessToken",
+    );
+    expect(calls[1]?.auth).toBe("Bearer federated");
+  });
+
+  it("explains a credential of the wrong shape", () => {
+    const env = {
+      AI: fakeAi,
+      VERTEX_PROJECT: "p",
+      GOOGLE_WORKLOAD_IDENTITY: JSON.stringify({ type: "something-else" }),
+    };
+    expect(aiPlatformOptions(env).platforms[1]).toMatchObject({
+      available: false,
+      reason: expect.stringContaining("workload-identity"),
+    });
   });
 });
