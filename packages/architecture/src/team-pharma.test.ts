@@ -152,6 +152,15 @@ describe("pharma lifecycle rules", () => {
       references: [{ source: "CARDIO-HF clinical study report", anchor: "p. 7, table 2" }],
     });
     expect(mortality?.context).toMatch(/Absolute rates/);
+    // Every usable claim carries its passage anchor, keyed to its governed evidence source.
+    for (const claim of library.filter((item) => item.usable))
+      expect(
+        claim.references.every((reference) => reference.anchor),
+        claim.topic,
+      ).toBe(true);
+    expect(
+      library.find((claim) => claim.topic === "cardivance-safety")?.references[0]?.anchor,
+    ).toMatch(/section 6\.1/);
   });
 
   it("refuses the near twins a search returns beside the right claim", () => {

@@ -365,7 +365,13 @@ export const CLAIM_RECORDS: Record<string, ClaimRecord> = {
     audiences: ["HCP"],
     markets: ["US"],
     channels: ["email", "display", "detail-aid"],
-    anchors: [{ reference: CURRENT_LABEL.id, anchor: "section 6.1" }],
+    // Keyed by the governed evidence's own source name, so the anchor reaches the module.
+    anchors: [
+      {
+        reference: "Cardivance prescribing information, section 6",
+        anchor: `${CURRENT_LABEL.id} section 6.1, adverse reactions table`,
+      },
+    ],
     context: null,
     mustNotAppearWith: [],
     labelVersion: CURRENT_LABEL.id,
@@ -868,14 +874,16 @@ export function preReviewChecks(
       checks.push({
         module: module.id,
         check: `Reference for claim ${claim.marker}`,
-        ok: claim.references.length > 0 && lasts,
+        // A reference without its passage anchor is unsubstantiated: nothing ties the claim to
+        // the place in the evidence that supports it.
+        ok: claim.references.length > 0 && lasts && anchored,
         detail: claim.references.length
           ? claim.references
               .map(
                 (reference) =>
                   `${reference.source}${reference.anchor ? `, ${reference.anchor}` : ""} (${reference.asOf}, valid to ${reference.expiresOn})`,
               )
-              .join("; ") + (anchored ? "" : " · some references have no passage anchor")
+              .join("; ") + (anchored ? "" : " · a reference has no passage anchor")
           : "No reference.",
       });
       const record = CLAIM_RECORDS[claim.topic];

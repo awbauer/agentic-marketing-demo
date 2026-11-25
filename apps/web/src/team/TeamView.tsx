@@ -529,6 +529,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     if (state.id && state.mode !== next) {
       stopPlayback();
       setEvents([]);
+      setFromLibrary(false);
       stamps.current = null;
       setShown(null);
       setStatus("idle");
@@ -538,6 +539,12 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     if (next === "lifecycle" && !runsPharmaLifecycle(brief.brand) && pharma) setBrief(pharma);
   };
   const [events, setEvents] = useState<TeamEvent[]>([]);
+  /**
+   * Whether the page shows a run loaded from the shared library. Such a run is a recording: it
+   * stays read-only after playback ends, since it may be another person's, and taking its
+   * decision would resume it and call models from what is presented as a replay.
+   */
+  const [fromLibrary, setFromLibrary] = useState(false);
   const [shown, setShown] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<ArchApiError | null>(null);
@@ -607,6 +614,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     })
       .then((saved) => {
         setEvents(saved.events);
+        setFromLibrary(false);
         stamps.current = null;
         const start = saved.events.find((event) => event.type === "start");
         if (start?.type === "start" && start.mode) setModeState(start.mode);
@@ -638,7 +646,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   /** A person's decision on the waiting run; the squad's next steps stream onto the same page. */
   async function decide(decision: "approve" | "changes", note: string, choice?: string) {
     const waiting = state.waiting;
-    if (!waiting || !state.id) return;
+    if (!waiting || !state.id || fromLibrary) return;
     setError(null);
     setStatus("running");
     startedAt.current = Date.now();
@@ -664,6 +672,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     stopPlayback();
     setShown(null);
     setEvents([]);
+    setFromLibrary(false);
     stamps.current = [];
     setError(null);
     setStatus("running");
@@ -740,6 +749,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     const start = saved.events.find((event) => event.type === "start");
     if (start?.type === "start") setModeState(start.mode ?? "squad");
     setEvents(saved.events);
+    setFromLibrary(true);
     stamps.current = saved.stamps;
     replay({ events: saved.events, stamps: saved.stamps });
   }
@@ -769,6 +779,8 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   }
 
   const busy = status === "running" || status === "replaying";
+  /** Decisions can be taken only on a live run, never during a replay or on a library run. */
+  const live = shown === null && !fromLibrary;
   const active = teamAgentsFor(state.mode)
     .map((agent) => agent.id)
     .reverse()
@@ -793,7 +805,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     );
   };
   const lifecycleDecision =
-    state.waiting && state.brief && shown === null && state.lifecycle ? (
+    state.waiting && state.brief && live && state.lifecycle ? (
       <div ref={decisionSlot} className="team-decision-slot">
         <LifecycleDecisionCard
           key={`${state.waiting.gate}-${state.decisions.length}`}
@@ -1023,6 +1035,15 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                 currentId={state.id}
                 onPick={replayFromLibrary}
               />
+              {fromLibrary && status === "done" && (
+                <small className="arch-note" role="status">
+                  A recorded run from the library: read-only
+                  {state.waiting
+                    ? `, stopped where it waited for the ${TEAM_GATES[state.waiting.gate].decider.toLowerCase()}`
+                    : ""}
+                  . Start a new run to take decisions.
+                </small>
+              )}
               {status === "running" && startedAt.current ? (
                 <small className="team-clock" role="status">
                   Working · {clock(now - startedAt.current)} · last update{" "}
@@ -1056,7 +1077,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
               <PhaseStepper
                 lifecycle={state.lifecycle}
                 selected={phase}
-                waiting={shown === null ? state.waiting : null}
+                waiting={live ? state.waiting : null}
                 following={phase === activePhase}
                 onSelect={(id) => setPhasePick(id)}
               />
@@ -1065,7 +1086,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                   phase={phase}
                   lifecycle={state.lifecycle}
                   artifacts={state.artifacts}
-                  waiting={shown === null ? state.waiting : null}
+                  waiting={live ? state.waiting : null}
                   decision={lifecycleDecision}
                   onOpenTurn={(id) => setPhasePick(id)}
                 />
@@ -1119,7 +1140,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
               at moves; the lifecycle's sits in its phase's workspace. */}
           {view !== "lifecycle" && (
             <div ref={decisionSlot}>
-              {state.waiting && state.brief && shown === null && !state.lifecycle && (
+              {state.waiting && state.brief && live && !state.lifecycle && (
                 <DecisionCard
                   waiting={state.waiting}
                   strategy={state.strategy}
@@ -1132,7 +1153,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {state.waiting && shown === null && !busy && (
+          {state.waiting && live && !busy && (
             <button
               type="button"
               className="team-turn-pill"
