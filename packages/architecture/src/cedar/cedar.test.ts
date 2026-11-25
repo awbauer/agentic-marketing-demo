@@ -116,7 +116,9 @@ describe("offer equals allow", () => {
     }
   }, 30_000);
 
-  it("never offers an agent more than its grants", () => {
+  // Every agent × every context × every candidate through the Cedar engine: thousands of
+  // decisions, which can outlast the default 5 s on a shared CI runner.
+  it("never offers an agent more than its grants", { timeout: 30_000 }, () => {
     const policies = all();
     for (const agent of [...AGENT_REGISTRY, ...TEAM_AGENTS]) {
       if (agent.id === "orchestrator") continue;
