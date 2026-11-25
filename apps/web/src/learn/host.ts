@@ -65,8 +65,24 @@ const SENTENCES: readonly Rule[] = [
     "are service settings that operators can change without a rebuild",
   ],
   [
-    "The path runs from the page through Cloudflare Access to the policy router, then AI Gateway and Workers AI, and out through the agentic gateway to each MCP server. A turn that ran on Google Cloud says so in its trace, and its map shows Identity-Aware Proxy and Vertex AI, with no AI Gateway hop.",
-    "The path runs from the page through Identity-Aware Proxy to the policy router, then Vertex AI, and out through the agentic gateway to each MCP server.",
+    "The path runs from the page through Cloudflare Access to the policy router, then AI Gateway and Workers AI, and out through the agentic gateway to each MCP server. A turn that ran on Google Cloud says so in its trace, and its map shows Identity-Aware Proxy in place of Access. The model hop is the AI platform the turn actually used: Workers AI behind AI Gateway, or Vertex AI called directly with no AI Gateway hop, whichever host served it.",
+    "The path runs from the page through Identity-Aware Proxy to the policy router, then Vertex AI, and out through the agentic gateway to each MCP server. The model hop names the AI platform the turn actually ran on (ADR-021).",
+  ],
+  [
+    "- **Where it runs is a choice.** The top bar's **AI platform** menu can send a Cloudflare turn to **Vertex AI** instead (ADR-021). Vertex serves gpt-oss-120b, not 20b, so the turn runs on 120b there, and the trace says so.",
+    "- **Where it runs.** The top bar's **AI platform** menu shows where the models run; on Google Cloud that is Vertex AI (ADR-021).",
+  ],
+  [
+    "Beside them, **AI platform** picks where the models run: Workers AI or Vertex AI. It lists only what this server can reach, says why an option isn't set up, and is greyed out when there is only one choice (ADR-021).",
+    "Beside them, **AI platform** shows where the models run, Vertex AI here. It lists only what this server can reach, says why an option isn't set up, and is greyed out when there is only one choice (ADR-021).",
+  ],
+  [
+    " With **Vertex AI** chosen in the top bar, Gemini's image model draws it instead, and the draft records which model did.",
+    "",
+  ],
+  [
+    "The open-model tier follows the top bar's **AI platform**: Workers AI, or gpt-oss on Vertex AI; the vendors keep the host's route. ",
+    "",
   ],
   ["- **Workers Logs** for operators", "- **Cloud Logging** for operators"],
   [
