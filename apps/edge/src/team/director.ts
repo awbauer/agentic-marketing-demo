@@ -52,6 +52,7 @@ import { evaluateRun } from "./evals";
 import { dataPlatform, storeLabel } from "../platform/data";
 import { continueLifecycleRun } from "./lifecycle";
 import { runSpecialist } from "./specialists";
+import { serverHost } from "../platform/models";
 
 /** How many times the lead may send one spoke's work back. */
 const REVISION_LIMIT = 2;
@@ -421,7 +422,8 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
     } catch (error) {
       // The SDK reports a failed call as "no output"; the real reason is the stream's error.
       const cause = streamError ?? error;
-      if (!isToolChoiceViolation(cause)) throw explainModelError(cause, run.provider);
+      if (!isToolChoiceViolation(cause))
+        throw explainModelError(cause, run.provider, serverHost(run.ctx.env));
       console.warn("[team] the lead skipped its required call; nudging it");
     }
   }

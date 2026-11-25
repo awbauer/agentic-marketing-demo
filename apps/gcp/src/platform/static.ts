@@ -2,6 +2,7 @@
 // cached for a year, and index.html for any other path (single-page-application handling).
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize, resolve, sep } from "node:path";
+import { HOST_META_NAME, type HostId } from "@northstar/contracts";
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -30,7 +31,19 @@ async function file(path: string) {
   }
 }
 
-export function staticAssets(directory: string) {
+/**
+ * Tags the app's page with its host, so the browser names Google Cloud's infrastructure; the
+ * Worker serves the page untouched and the browser falls back to Cloudflare's names.
+ */
+function tagHost(html: Buffer, host: HostId) {
+  return Buffer.from(
+    html
+      .toString("utf8")
+      .replace("<head>", `<head><meta name="${HOST_META_NAME}" content="${host}"/>`),
+  );
+}
+
+export function staticAssets(directory: string, host?: HostId) {
   const root = resolve(directory);
   return async (request: Request): Promise<Response> => {
     if (request.method !== "GET" && request.method !== "HEAD")
@@ -51,6 +64,8 @@ export function staticAssets(directory: string) {
         : "no-cache",
       "x-content-type-options": "nosniff",
     });
-    return new Response(request.method === "HEAD" ? null : await readFile(found), { headers });
+    const body = await readFile(found);
+    const page = host && extname(found) === ".html" ? tagHost(body, host) : body;
+    return new Response(request.method === "HEAD" ? null : page, { headers });
   };
 }

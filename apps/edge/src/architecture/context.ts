@@ -15,14 +15,17 @@ import {
   verifyAgentToken,
   type WorkbenchScope,
 } from "@northstar/architecture";
+import { HOST_TERMS } from "@northstar/contracts";
 import { type ArchitectureRepository, type DataPlatform, dataPlatform } from "../platform/data";
-import type { ModelPlatform } from "../platform/models";
+import { type ModelPlatform, serverHost } from "../platform/models";
 
 export type ArchEnv = {
   /** D1 on Cloudflare; absent on Google Cloud, which sets DATA instead (ADR-018). */
   APP_DB?: D1Database;
   DATA?: DataPlatform;
   ENVIRONMENT?: string;
+  /** "google-cloud" on the GCP host; unset on Cloudflare (ADR-018). */
+  HOST?: string;
   /** The Vertex AI models on Google Cloud; Cloudflare uses AI below. */
   MODELS?: ModelPlatform;
   ASSETS?: Fetcher;
@@ -39,6 +42,9 @@ export type ArchEnv = {
    */
   AGENT_CHAMPIONS?: string;
 };
+
+/** What signs people in on this host, for the identity chain's first hop. */
+export const signInName = (env: { HOST?: string }) => HOST_TERMS[serverHost(env)].signIn;
 
 export class ArchError extends Error {
   constructor(
@@ -144,7 +150,7 @@ export async function invoke<T>(
     await log(Date.now() - started);
     throw new ArchError(403, "DENIED", decision.reason, {
       decision,
-      chain: identityChain(full, decision),
+      chain: identityChain(full, decision, { tokenVerified: false, signIn: signInName(ctx.env) }),
     });
   }
   const secret = tokenSecret(ctx.env);
@@ -152,7 +158,11 @@ export async function invoke<T>(
   await verifyAgentToken(secret, token, { action: request.action, user: ctx.user.subject });
   const value = await run();
   await log(Date.now() - started);
-  return { value, decision, chain: identityChain(full, decision, { tokenVerified: true }) };
+  return {
+    value,
+    decision,
+    chain: identityChain(full, decision, { tokenVerified: true, signIn: signInName(ctx.env) }),
+  };
 }
 
 /** Authorizes a model-called orchestrator tool as `tool:<name>`, and logs the decision. */

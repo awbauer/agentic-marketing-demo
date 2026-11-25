@@ -233,7 +233,7 @@ export type ChainHop = {
 export function identityChain(
   request: GatewayRequest,
   decision: Decision,
-  options: { tokenVerified: boolean; partner?: string } = { tokenVerified: false },
+  options: { tokenVerified: boolean; partner?: string; signIn?: string } = { tokenVerified: false },
 ): ChainHop[] {
   const brands = request.user.brands === "all" ? "all brands" : request.user.brands.join(", ");
   const chain: ChainHop[] = [
@@ -241,7 +241,7 @@ export function identityChain(
       hop: "user",
       label: "User",
       identity: request.user.subject,
-      detail: "Cloudflare Access sign-in",
+      detail: `${options.signIn ?? "Cloudflare Access"} sign-in`,
       verified: true,
     },
     {

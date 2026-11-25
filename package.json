@@ -17,6 +17,7 @@
     "deploy:gcp": "scripts/gcp/deploy.sh",
     "dev": "vite",
     "dev:local": "NORTHSTAR_LOCAL=1 vite",
+    "dev:gcp": "scripts/gcp/local.sh",
     "docs:check": "node scripts/check-docs.mjs",
     "eval": "node scripts/run-evals.mjs",
     "eval:calibrate": "node scripts/calibrate-judge.mjs",

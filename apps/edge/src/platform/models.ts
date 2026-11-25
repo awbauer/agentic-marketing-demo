@@ -1,6 +1,7 @@
 // Where the app's models come from. Cloudflare: Workers AI through AI Gateway. Google Cloud: the
 // host sets `env.MODELS` to Vertex AI (ADR-018). Feature code asks for a model by its catalog id
 // (`@cf/openai/gpt-oss-120b`) either way; the Vertex platform maps the id to its own model.
+import { type HostId, isHostId } from "@northstar/contracts";
 import type { LanguageModel } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 
@@ -40,6 +41,11 @@ export type ModelPlatform = {
 };
 
 export type ModelBindings = { AI?: Ai; AI_GATEWAY_ID?: string; MODELS?: ModelPlatform };
+
+/** Which host this server is: the GCP host sets HOST; the Worker leaves it unset. */
+export function serverHost(env: { HOST?: string }): HostId {
+  return isHostId(env.HOST) ? env.HOST : "cloudflare";
+}
 
 /** The models for this environment, or null when none is bound (tests, offline local). */
 export function modelPlatform(env: ModelBindings): ModelPlatform | null {

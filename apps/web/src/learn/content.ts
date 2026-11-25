@@ -499,6 +499,8 @@ The feature code asks \`dataPlatform(env)\` for repositories and \`modelPlatform
 
 **Salesforce.** On Cloudflare, per-user Salesforce OAuth goes through an Access MCP portal. On Google Cloud the chat connects to Salesforce's hosted MCP server directly, with OAuth and PKCE, and stores the tokens encrypted in the chat's own storage. The Lightning surface needs an Access token, so it stays on Cloudflare.
 
+**The page names its host.** One table in \`packages/contracts/src/host.ts\` says what each host calls its sign-in, models, database, storage and scheduler. The Google Cloud server tags the page it serves with \`<meta name="northstar-host" content="google-cloud">\`; the Worker serves the page untouched. The browser reads the tag once, so the same build says *Identity-Aware Proxy*, *Vertex AI* and *Firestore* on Google Cloud and *Cloudflare Access*, *Workers AI* and *D1* on Cloudflare: the route map, the image workflow, the squad's providers, the identity chain, and this course, which is rewritten for Google Cloud lesson by lesson (\`apps/web/src/learn/host.ts\`; \`docs/learn-google-cloud.md\` is that edition).
+
 **Maintenance.** The hourly job (audit pruning, drift sweeps, memory expiry) runs from the Worker's cron on Cloudflare and from Cloud Scheduler on Google Cloud, which calls the service with a Google-signed token only its service account can get. Firestore's time-to-live policies delete expired rows as a backstop.`,
         inDemo: [
           "apps/edge/src/app.ts, apps/edge/src/platform/",

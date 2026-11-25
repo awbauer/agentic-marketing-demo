@@ -113,7 +113,7 @@ import {
   memorySubjects,
 } from "./memory";
 import { auditCutoff, type DataBindings, dataPlatform } from "./platform/data";
-import { type ModelBindings, modelPlatform } from "./platform/models";
+import { type ModelBindings, modelPlatform, serverHost } from "./platform/models";
 import { buildTurnRecord } from "./turn-history";
 import {
   type DraftIntent,
@@ -162,8 +162,7 @@ export {
 } from "./turn-policy";
 
 export type AgentProps = { principalSubject: string; workspaceId: string };
-type OrchestratorBindings = CloudflareBindings &
-  DataBindings &
+type OrchestratorBindings = CloudflareBindings & { HOST?: string } & DataBindings &
   ModelBindings & {
     SALESFORCE_MCP_URL?: string;
     CONFIRMATION_SIGNING_KEY?: string;
@@ -796,7 +795,7 @@ export class MarketingOrchestrator extends AIChatAgent<
   }
   /** Marks turns that ran on Google Cloud, for the route map's labels. */
   private traceHost(): { host?: "google-cloud" } {
-    return modelPlatform(this.env)?.kind === "vertex" ? { host: "google-cloud" } : {};
+    return serverHost(this.env) === "google-cloud" ? { host: "google-cloud" } : {};
   }
   /** Cancels the turn another surface started over HTTP; null when none is running. */
   private surfaceAbort: AbortController | null = null;

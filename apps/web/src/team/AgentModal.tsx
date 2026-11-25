@@ -10,15 +10,19 @@ import {
   type PhaseStep,
   TEAM_AGENTS,
   TEAM_PARTY_LABELS,
-  TEAM_PROVIDER_LABELS,
   type TeamAgentId,
   type TeamEvent,
   type TeamParty,
+  teamProviderLabel,
 } from "@northstar/architecture";
+import { hostTerms } from "@northstar/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArtifactView } from "./TeamLifecycle";
 import { TeamWorkView } from "./TeamWork";
 import { KIND_LABELS, type TeamMessage, type TeamState } from "./team-state";
+
+/** What this host calls its infrastructure (ADR-018). */
+const HOST = hostTerms();
 
 type Prompt = Extract<TeamEvent, { type: "prompt" }>;
 type Tab = "overview" | "prompt" | "usage" | "calls" | "work";
@@ -84,7 +88,7 @@ function Overview({ state, id }: { state: TeamState; id: TeamAgentId }) {
         <dt>Model</dt>
         <dd>
           <code>{state.models[id] ?? "—"}</code>
-          {provider ? ` on ${TEAM_PROVIDER_LABELS[provider]}` : ""}
+          {provider ? ` on ${teamProviderLabel(provider, HOST.id)}` : ""}
           {state.infra?.aiGateway ? ` through AI Gateway ${state.infra.aiGateway}` : ""}
           {state.infra?.scripted ? " (scripted test model)" : ""}
           {effort ? ` · effort ${effort}` : ""}
@@ -168,7 +172,7 @@ function PromptConfig({ state, id }: { state: TeamState; id: TeamAgentId }) {
           </summary>
           <dl className="team-modal-facts">
             <dt>Provider</dt>
-            <dd>{TEAM_PROVIDER_LABELS[prompt.provider]}</dd>
+            <dd>{teamProviderLabel(prompt.provider, HOST.id)}</dd>
             <dt>Settings</dt>
             <dd>
               {Object.entries(prompt.settings).length

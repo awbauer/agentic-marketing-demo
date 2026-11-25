@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./host.ts";
+
 export const PROOF_DEFAULTS = Object.freeze({
   workspaceId: "northstar-demo",
   // The only place the orchestrator model is set; the Worker reads it from here. See ADR-005.

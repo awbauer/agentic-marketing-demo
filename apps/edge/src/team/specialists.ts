@@ -48,6 +48,7 @@ import {
   type TeamRun,
   teamModel,
 } from "./run";
+import { serverHost } from "../platform/models";
 
 const channel = z.enum(MEDIA_CHANNELS);
 const specialist = z.enum(TEAM_SPECIALISTS);
@@ -612,7 +613,8 @@ export async function runSpecialist(
       // The model wouldn't make the call this step required; the next attempt nudges it. Any
       // other failure (a provider or gateway error) ends the run with its real reason.
       const cause = streamError ?? error;
-      if (!isToolChoiceViolation(cause)) throw explainModelError(cause, run.provider);
+      if (!isToolChoiceViolation(cause))
+        throw explainModelError(cause, run.provider, serverHost(run.ctx.env));
       run.emit({
         type: "tool",
         agent,

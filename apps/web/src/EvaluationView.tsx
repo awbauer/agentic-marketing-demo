@@ -1,7 +1,11 @@
+import { hostTerms } from "@northstar/contracts";
 import { formatUsd, PRICING_SOURCE } from "@northstar/evals/pricing";
 import { EVAL_CHECKS, type EvalReport, EvalReportSchema } from "@northstar/evals/report";
 import { useEffect, useMemo, useState } from "react";
 import { tokensLabel, toolCallCount, toolCallsLabel, turnStats } from "./turn-stats";
+
+/** What this host calls its infrastructure (ADR-018). */
+const HOST = hostTerms();
 
 type LoadState =
   | { status: "loading" }
@@ -68,13 +72,21 @@ export function EvaluationView({ onClose }: { onClose: () => void }) {
           Back to workspace
         </button>
       </div>
+      {HOST.id === "google-cloud" && (
+        <p className="evaluation-note" role="note">
+          This evaluation was measured on Cloudflare Workers AI, before the workbench moved to
+          Google Cloud, and its costs are Cloudflare's list prices. On Google Cloud every model call
+          goes to gpt-oss-120b on Vertex AI; run <code>pnpm eval:live</code> against this deployment
+          for Google Cloud numbers.
+        </p>
+      )}
       <div className="evaluations-body">
         {state.status === "loading" && <p role="status">Loading the latest evaluation run…</p>}
         {state.status === "missing" && (
           <div className="evaluation-empty" role="status">
             <strong>No evaluation run has been published yet.</strong>
             <p>
-              Run <code>pnpm eval:live</code> with Workers AI access. It evaluates the production
+              Run <code>pnpm eval:live</code> with model access. It evaluates the production
               orchestrator pipeline across models and writes{" "}
               <code>apps/web/public/evals/latest.json</code>, which this page renders.
             </p>

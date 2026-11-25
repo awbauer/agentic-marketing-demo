@@ -1,3 +1,4 @@
+import { hostTerms } from "@northstar/contracts";
 // The campaign squad page: hand over a brief, then follow a campaign lead and four spokes as
 // they work it one agent at a time — each assignment, hand-back, side question, send-back and
 // tool call — until the proposal goes to the client.
@@ -41,6 +42,9 @@ import { foldTeam, isPeerMessage, KIND_LABELS, TEAM_PHASES, type TeamMessage } f
 import "../architecture/architecture.css";
 import "./team.css";
 
+/** What this host calls its infrastructure (ADR-018). */
+const HOST = hostTerms();
+
 const LAST_RUN = "northstar.team.lastRun";
 const PROVIDER_KEY = "northstar.team.provider";
 const MODE_KEY = "northstar.team.mode";
@@ -59,7 +63,7 @@ type ProviderOption = {
 };
 
 const PROVIDER_SHORT: Record<TeamProvider, { name: string; api: string }> = {
-  cloudflare: { name: "Cloudflare", api: "Workers AI" },
+  cloudflare: { name: HOST.platform, api: HOST.models },
   anthropic: { name: "Anthropic", api: "Claude API" },
   openai: { name: "OpenAI", api: "Responses API" },
 };
@@ -107,7 +111,7 @@ function ProviderSwitch({
         {!current
           ? "Checking which providers can run here…"
           : current.available
-            ? `${current.label}: ${models.map((model) => model.replace("@cf/", "")).join(", ")}, through AI Gateway ${current.gateway ?? ""}${current.id === "cloudflare" ? "" : ", using the key stored on the gateway"}. The tools, gateway, semantic layer and rules are the same on every provider.`
+            ? `${current.label}: ${models.map((model) => model.replace("@cf/", "")).join(", ")}${current.gateway ? `, through AI Gateway ${current.gateway}${current.id === "cloudflare" ? "" : ", using the key stored on the gateway"}` : ""}. The tools, gateway, semantic layer and rules are the same on every provider.`
             : current.reason}
       </p>
     </fieldset>

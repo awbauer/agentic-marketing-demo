@@ -3,8 +3,9 @@
 // back, reconciles the pieces where they disagree, and sends the client one proposal. Spokes answer
 // to the lead and can also put a question straight to another spoke. Each message is logged, and
 // each tool call is checked by the agentic gateway under the policies below.
-import type { AgentOverrides } from "./registry.ts";
+
 import type { Policy } from "./gateway.ts";
+import type { AgentOverrides } from "./registry.ts";
 import type { Persona } from "./state-machine.ts";
 import { MEDIA_CHANNELS, type MediaChannel, teamMarket } from "./team-data.ts";
 import type { TeamScorecard } from "./team-evals.ts";
@@ -21,6 +22,18 @@ export const TEAM_PROVIDER_LABELS: Record<TeamProvider, string> = {
   anthropic: "Anthropic Claude API",
   openai: "OpenAI Responses API",
 };
+/**
+ * A provider's name on a host. On Google Cloud the open-model tier is Vertex AI, not Workers AI
+ * (ADR-018); the vendors are reached through Vertex (Claude) or not at all (OpenAI).
+ */
+export function teamProviderLabel(provider: TeamProvider, host: string = "cloudflare") {
+  if (host !== "google-cloud") return TEAM_PROVIDER_LABELS[provider];
+  return {
+    cloudflare: "Vertex AI (open models)",
+    anthropic: "Claude on Vertex AI",
+    openai: "OpenAI Responses API",
+  }[provider];
+}
 export const isTeamProvider = (value: unknown): value is TeamProvider =>
   (TEAM_PROVIDERS as readonly unknown[]).includes(value);
 

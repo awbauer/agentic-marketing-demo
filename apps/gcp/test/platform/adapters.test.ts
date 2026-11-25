@@ -239,6 +239,17 @@ describe("static assets", () => {
     expect(await (await get("/../../etc/passwd")).text()).toBe("<html>app</html>");
     expect(await (await get("/%2e%2e/%2e%2e/etc/passwd")).text()).toBe("<html>app</html>");
   });
+
+  it("tags the app's page with its host, and nothing else", async () => {
+    const root = await mkdtemp(join(tmpdir(), "northstar-static-"));
+    await writeFile(join(root, "index.html"), "<html><head><title>x</title></head></html>");
+    await writeFile(join(root, "app.js"), "<head>");
+    const serve = staticAssets(root, "google-cloud");
+    expect(await (await serve(new Request("https://x/"))).text()).toBe(
+      '<html><head><meta name="northstar-host" content="google-cloud"/><title>x</title></head></html>',
+    );
+    expect(await (await serve(new Request("https://x/app.js"))).text()).toBe("<head>");
+  });
 });
 
 describe("scheduler token", () => {

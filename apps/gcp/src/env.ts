@@ -5,8 +5,8 @@ import { Firestore } from "@google-cloud/firestore";
 import { Storage } from "@google-cloud/storage";
 import type { WorkbenchEnv } from "../../edge/src/app";
 import { MemorySnapshotStore } from "./agent/snapshots";
-import { gcsObjectStore, gcsSnapshotStore } from "./platform/gcs";
 import { firestoreDataPlatform, firestoreMembers } from "./platform/firestore";
+import { gcsObjectStore, gcsSnapshotStore } from "./platform/gcs";
 import { staticAssets } from "./platform/static";
 import { vertexModels } from "./platform/vertex";
 
@@ -45,6 +45,7 @@ function variables(source: NodeJS.ProcessEnv) {
   );
   return {
     ENVIRONMENT: "proof",
+    HOST: "google-cloud",
     AUTH_MODE: "iap",
     PROOF_WORKSPACE_ID: "northstar-demo",
     CAMPAIGN_IMAGE_MODEL: "gemini-3.1-flash-image",
@@ -56,11 +57,12 @@ function variables(source: NodeJS.ProcessEnv) {
 
 export function buildEnv(config: GcpConfig, source: NodeJS.ProcessEnv = process.env) {
   const vars = variables(source);
-  const firestore = new Firestore({ ...(config.project ? { projectId: config.project } : {}) });
-  const bucket = new Storage({ ...(config.project ? { projectId: config.project } : {}) }).bucket(
-    config.bucket,
-  );
-  const assets = staticAssets(config.staticDir);
+  // Without a project (local runs against the emulator) the clients get placeholder names; the
+  // emulator accepts any project, and SNAPSHOT_STORE=memory keeps chats off Cloud Storage.
+  const projectId = config.project || "northstar-local";
+  const firestore = new Firestore({ projectId });
+  const bucket = new Storage({ projectId }).bucket(config.bucket || "northstar-local-assets");
+  const assets = staticAssets(config.staticDir, "google-cloud");
   let modelMap: Record<string, string> = {};
   try {
     modelMap = JSON.parse(source.VERTEX_MODEL_MAP ?? "{}") as Record<string, string>;

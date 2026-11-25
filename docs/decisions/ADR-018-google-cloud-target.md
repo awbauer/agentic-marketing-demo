@@ -78,6 +78,8 @@ So `deploy.sh` defaults to a **global external HTTPS load balancer** (serverless
 
 ## Consequences
 
+- **The app names its host.** `packages/contracts/src/host.ts` holds one table of what each host calls its sign-in, models, gateway, database, object store and scheduler. The Google Cloud server tags `index.html` with `<meta name="northstar-host" content="google-cloud">`; the Worker serves it untouched, so one build works on both and Cloudflare stays the default. The browser (route map, image workflow, squad providers, use cases), the server (identity chain, squad errors) and the Learn course (rewritten lesson by lesson in `apps/web/src/learn/host.ts`, exported to `docs/learn-google-cloud.md`) all name infrastructure from it. A test fails if a Cloudflare name survives in the Google Cloud course outside the lessons that compare hosts or report the Workers AI evaluation.
+
 - The Node chat host implements what the orchestrator uses, not the whole Agents SDK. It leaves out chat recovery after a crash mid-turn, streams that survive a restart (the resume buffer is in memory), automatic continuation after client tool results, schedules, sub-agents and `@callable` RPC, and MCP's SSE transport. A crash loses up to about two seconds of a chat's writes, the snapshot interval.
 
 - Phase plan and acceptance criteria are in WU-077. `main` stays green throughout: the seam lands first with Cloudflare adapters only.

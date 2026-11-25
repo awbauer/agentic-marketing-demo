@@ -1,4 +1,10 @@
-import { SALESFORCE_AGENTS, type ToolServer, toolServer, toolSystem } from "@northstar/contracts";
+import {
+  pageHost,
+  SALESFORCE_AGENTS,
+  type ToolServer,
+  toolServer,
+  toolSystem,
+} from "@northstar/contracts";
 import type { UIMessage } from "ai";
 import {
   isKnownTool,
@@ -190,7 +196,8 @@ export function routeMap(
     seen?.streamFailed || (finish?.outcome && finish.outcome !== "completed"),
   );
   const thinking = working && viaModel && running.length === 0;
-  const google = seen?.start?.host === "google-cloud";
+  // A turn's trace names its host; before the first turn, the page's host does.
+  const google = (seen?.start ? seen.start.host : pageHost()) === "google-cloud";
 
   const node = (
     id: string,

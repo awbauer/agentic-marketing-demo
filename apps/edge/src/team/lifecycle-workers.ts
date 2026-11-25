@@ -64,6 +64,7 @@ import {
   type TeamRun,
   teamModel,
 } from "./run";
+import { serverHost } from "../platform/models";
 
 type AgentStep = Extract<PhaseStep, { kind: "agent" }>;
 
@@ -696,7 +697,8 @@ export async function runLifecycleWorker(
             });
     } catch (error) {
       const cause = streamError ?? error;
-      if (!isToolChoiceViolation(cause)) throw explainModelError(cause, run.provider);
+      if (!isToolChoiceViolation(cause))
+        throw explainModelError(cause, run.provider, serverHost(run.ctx.env));
       run.emit({
         type: "tool",
         agent,

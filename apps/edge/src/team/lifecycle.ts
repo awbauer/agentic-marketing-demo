@@ -67,6 +67,7 @@ import {
   teamModels,
   addUsage,
 } from "./run";
+import { serverHost } from "../platform/models";
 
 /** Who each person step is, as a party on the message bus. */
 export const GATE_PARTY: Record<TeamGate, TeamParty> = {
@@ -306,7 +307,8 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       messages.push(...(await result.responseMessages));
     } catch (error) {
       const cause = streamError ?? error;
-      if (!isToolChoiceViolation(cause)) throw explainModelError(cause, run.provider);
+      if (!isToolChoiceViolation(cause))
+        throw explainModelError(cause, run.provider, serverHost(run.ctx.env));
       console.warn("[team] the lifecycle lead skipped its required call; nudging it");
     }
   }

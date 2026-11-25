@@ -22,7 +22,7 @@ The slides are not starting from zero. These pieces already exist and the roadma
 
 What is missing is the *shape*: objects with lifelong identity and governance attributes, many narrow agents instead of one orchestrator with many tools, one gateway every call passes through, a registry and catalogs that govern agents, prompts and models, an approval state machine, workspaces composed rather than hand-built, and rendering into more than one surface.
 
-## 2. AWS to Cloudflare
+## 2. AWS to Cloudflare and Google Cloud
 
 | Slide (AWS / Microsoft) | Workbench (Cloudflare) |
 | --- | --- |
@@ -40,6 +40,26 @@ What is missing is the *shape*: objects with lifelong identity and governance at
 | Aprimo as MLR system of record | Salesforce stays the system of record; the workbench holds references and state, never a second records store |
 | Veeva, IQVIA, medical affairs, MLR | Harborstone Wealth compliance: claims, disclosures, approvals, embargoes |
 | Adaptive Cards (Teams, Copilot), LWC | Rendered from the same composition: React, MCP Apps/HXL, Adaptive Card JSON, LWC data |
+
+### The same design on Google Cloud (built, ADR-018)
+
+The contracts above held: the workbench now also runs on Google Cloud from the same code, and the page names the Google Cloud services when served from there. What each Cloudflare piece became:
+
+| Layer | Cloudflare | Google Cloud |
+| --- | --- | --- |
+| Identity, SSO | Cloudflare Access | Identity-Aware Proxy on a global HTTPS load balancer; the IAP assertion verified in `auth.ts`, role from a Firestore `members` collection |
+| Edge, BFF | Worker | One Node server on Cloud Run (ingress through the load balancer only); the route table in `app.ts` is shared |
+| Per-chat state | Durable Objects (SQLite) | A Node agent host speaking the Agents SDK chat protocol; each chat's SQLite saved to Cloud Storage with generation preconditions |
+| Records and audit | D1 | Firestore, with TTL policies behind the hourly prune |
+| Assets and files | R2 | Cloud Storage |
+| Models, routing | Workers AI through AI Gateway | Vertex AI: gpt-oss-120b as a managed model, Gemini image, Claude for the squad; the router and catalog are unchanged |
+| Agentic Gateway, policy, workload identity | `gateway.invoke()` in the Worker | The same code in the Cloud Run service |
+| Observability | Workers traces, AI Gateway logs | Cloud Logging, one line per model call |
+| Secrets | Worker secrets | Secret Manager, mounted as environment variables |
+| Scheduled work | Cron trigger | Cloud Scheduler with an OIDC token the service verifies |
+| Infrastructure as code | Wrangler config | `scripts/gcp/bootstrap.sh` and `deploy.sh` (gcloud), Cloud Build |
+
+See [infra/gcp/README.md](../infra/gcp/README.md) and [ADR-018](decisions/ADR-018-google-cloud-target.md).
 
 ### The same design on AWS
 

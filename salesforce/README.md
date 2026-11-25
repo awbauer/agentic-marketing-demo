@@ -18,6 +18,6 @@ Agentforce authoring bundles live under `force-app/main/default/aiAuthoringBundl
 4. Validate, publish, and activate `Campaign_Readiness_Governance` through Agentforce DX.
 5. Instantiate the Campaign Creation, Content Builder, and Account Discovery agents in the new Agent Script Builder, retrieve their `AiAuthoringBundle` sources, validate/publish/activate them, and replace the target-org-specific default agent user in every bundle.
 6. Configure the focused custom Hosted MCP server and prove it directly with the checked-in Postman collection.
-7. Register the server in the Cloudflare portal with per-user OAuth, compare `tools/list` to the checked-in catalog, then enable the Worker connection.
+7. Register the server in the Cloudflare portal with per-user OAuth, compare `tools/list` to the checked-in catalog, then enable the Worker connection. On Google Cloud there is no portal: set the `SALESFORCE_MCP_URL`, `SALESFORCE_CLIENT_ID` (and secret) secrets and add `https://<host>/agent/salesforce/callback` to the External Client App's callback URLs; the chat connects to Hosted MCP directly with PKCE (ADR-018).
 
 Steps 3–7 are blocked by design if the target is neither the supplied Northstar sandbox nor the exact user-approved Northstar proof org. A business production org or an unrelated sandbox is not an acceptable substitute.

@@ -36,6 +36,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   "two-hosts": [
     "apps/edge/src/app.ts",
     "apps/edge/src/platform/",
+    "packages/contracts/src/host.ts",
     "apps/gcp/",
     "scripts/gcp/",
     "infra/gcp/",
