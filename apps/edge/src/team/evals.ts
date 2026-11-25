@@ -24,20 +24,30 @@ const VENDOR_PRICES: Record<string, { input: number; cachedInput: number; output
   "claude-sonnet-5-5": { input: 2, cachedInput: 0.2, output: 10 },
 };
 
+/** USD per million tokens for a model, or null when it has no recorded price. */
+export function modelPrice(
+  model: string,
+): { input: number; cachedInput: number; output: number } | null {
+  const vendor = VENDOR_PRICES[model];
+  if (vendor) return vendor;
+  try {
+    const price = priceFor(model);
+    return {
+      input: price.input,
+      cachedInput: price.cachedInput ?? price.input,
+      output: price.output,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** What a run's model calls cost, or null when any model in it has no recorded price. */
 export function runCost(events: readonly TeamEvent[]): number | null {
   let usd = 0;
   for (const event of events) {
     if (event.type !== "model") continue;
-    const price =
-      VENDOR_PRICES[event.model] ??
-      (() => {
-        try {
-          return priceFor(event.model);
-        } catch {
-          return null;
-        }
-      })();
+    const price = modelPrice(event.model);
     if (!price) return null;
     const input = event.inputTokens ?? event.tokens;
     const cached = Math.min(event.cachedInputTokens ?? 0, input);

@@ -30,6 +30,7 @@ import { ArchError, type Ctx, invoke } from "../architecture/context";
 import { createOpenAI } from "@ai-sdk/openai";
 import { anthropicModel, DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
 import { bindingCanFetch, GATEWAY_HELD_KEY, gatewayFetch } from "./gateway";
+import { modelPrice } from "./evals";
 import { teamScriptedModel } from "./scripted";
 
 export type Emit = (event: TeamEvent) => void;
@@ -46,6 +47,8 @@ export type TeamRun = {
   brief: CampaignBrief;
   emit: Emit;
   events: TeamEvent[];
+  /** When each event this request emitted was sent (epoch ms), so a replay keeps the run's pacing. */
+  stamps: number[];
   plan: TeamPlan | null;
   /** The latest version of each spoke's work, kept or not. */
   outputs: TeamOutputs;
@@ -90,6 +93,7 @@ export function newTeamRun(
     brief,
     emit: () => undefined,
     events: [],
+    stamps: [],
     plan: null,
     outputs: {},
     versions: {},
@@ -110,6 +114,7 @@ export function newTeamRun(
   };
   run.emit = (event) => {
     run.events.push(event);
+    run.stamps.push(Date.now());
     emitOut(event);
   };
   return run;
@@ -131,6 +136,7 @@ export function restoreTeamRun(
   const run = newTeamRun(ctx, start.brief, emitOut, provider);
   run.id = id;
   run.events = [...events];
+  // The earlier events' times live in the run library; recordRun lines them up again.
   for (const event of events) {
     if (event.type === "plan") run.plan = event.plan;
     else if (event.type === "output") {
@@ -441,8 +447,47 @@ export function metered(
       latencyMs: Date.now() - started,
       ok,
     });
+  // The prompt and settings this agent actually sent, once per distinct system prompt, so the
+  // page can show each agent's real configuration (and a replay carries it).
+  const describe = (
+    params: Parameters<NonNullable<LanguageModelMiddleware["wrapGenerate"]>>[0]["params"],
+  ) => {
+    const system = params.prompt
+      .flatMap((message) => (message.role === "system" ? [message.content] : []))
+      .join("\n\n");
+    const seen = run.events.some(
+      (event) =>
+        event.type === "prompt" &&
+        event.agent === agent &&
+        event.purpose === purpose &&
+        event.system === system,
+    );
+    if (seen) return;
+    const choice = params.toolChoice;
+    run.emit({
+      type: "prompt",
+      agent,
+      purpose,
+      model: name,
+      provider: run.provider,
+      system,
+      tools: (params.tools ?? []).map((item) => item.name),
+      ...(choice
+        ? { toolChoice: choice.type === "tool" ? `tool: ${choice.toolName}` : choice.type }
+        : {}),
+      settings: {
+        ...(run.provider === "anthropic" ? { effort: effortFor(agent) } : {}),
+        ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
+        ...(params.maxOutputTokens !== undefined
+          ? { maxOutputTokens: params.maxOutputTokens }
+          : {}),
+      },
+      price: modelPrice(name),
+    });
+  };
   const middleware: LanguageModelMiddleware = {
-    wrapGenerate: async ({ doGenerate }) => {
+    wrapGenerate: async ({ doGenerate, params }) => {
+      describe(params);
       const started = Date.now();
       try {
         const result = await doGenerate();
@@ -453,7 +498,8 @@ export function metered(
         throw error;
       }
     },
-    wrapStream: async ({ doStream }) => {
+    wrapStream: async ({ doStream, params }) => {
+      describe(params);
       const started = Date.now();
       let result: Awaited<ReturnType<typeof doStream>>;
       try {

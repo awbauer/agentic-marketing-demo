@@ -189,6 +189,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "apps/edge/src/team/lifecycle-workers.ts",
     "apps/web/src/team/TeamLifecycle.tsx",
     "docs/decisions/ADR-015-pharma-campaign-lifecycle.md",
+    "docs/decisions/ADR-017-claims-managed-lifecycle.md",
   ],
   "campaign-squad": [
     "packages/architecture/src/team.ts",
@@ -201,6 +202,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "apps/web/src/team/",
     "docs/decisions/ADR-013-campaign-squad.md",
     "docs/decisions/ADR-014-squad-people-and-evals.md",
+    "docs/decisions/ADR-016-squad-run-library.md",
   ],
   "long-term-memory": [
     "packages/knowledge-graph/src/memory.ts",

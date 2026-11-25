@@ -62,10 +62,19 @@ describe("pharma campaign lifecycle", () => {
     });
     expect(waitingOn(ideation)).toMatchObject({ gate: "concept" });
 
+    // The concept goes to Medical for an early look before anything is built.
+    const review = await events(
+      await decide(id, { gate: "concept", decision: "approve", choice: "1" }, "brand-lead"),
+    );
+    expect(waitingOn(review)).toMatchObject({ gate: "concept-review", persona: "reviewer" });
+    expect(
+      (await decide(id, { gate: "concept-review", decision: "approve" }, "brand-lead")).status,
+    ).toBe(403);
+
     // Content: the first draft reaches for a claim the library refuses; the service says why, the
     // copy lead drops it, and the MLR coordinator submits a job whose checks all pass.
     const content = await events(
-      await decide(id, { gate: "concept", decision: "approve", choice: "1" }, "brand-lead"),
+      await decide(id, { gate: "concept-review", decision: "approve" }, "reviewer"),
     );
     const drafts = content.filter(
       (event) => event.type === "tool" && event.step.tool === "draft_modules",
@@ -83,6 +92,8 @@ describe("pharma campaign lifecycle", () => {
       (event) => event.type === "artifact" && event.name === "submit_mlr_job",
     );
     expect(job.data.checks.every((check: Json) => check.ok)).toBe(true);
+    expect(job.data.tier.tier).toBe("C");
+    expect(modules.data.modules[0].claims[0].claimId).toMatch(/^CLM-CRD-/);
     expect(waitingOn(content)).toMatchObject({ gate: "medical", persona: "reviewer" });
 
     // Medical asks for changes: the phase starts again, and the resubmitted job is a new round.
@@ -124,6 +135,12 @@ describe("pharma campaign lifecycle", () => {
     );
     expect(approval.data.documentNumber).toMatch(/-A$/);
     expect(approval.data.expiresOn).toBeTruthy();
+    expect(approval.data.materials[0].materialId).toMatch(/-A-EM\d$/);
+    // Every built variant is checked against the approved version before anything is scheduled.
+    expect(
+      audience.find((event) => event.type === "artifact" && event.name === "final_form_check").data
+        .allMatch,
+    ).toBe(true);
 
     // Audience: consent and do-not-contact are applied; marketing operations approves.
     const list = audience.find(
@@ -136,9 +153,11 @@ describe("pharma campaign lifecycle", () => {
     const publish = await events(
       await decide(id, { gate: "audience", decision: "approve" }, "marketer"),
     );
-    expect(
-      publish.find((event) => event.type === "artifact" && event.name === "schedule_deployment"),
-    ).toBeTruthy();
+    const schedule = publish.find(
+      (event) => event.type === "artifact" && event.name === "schedule_deployment",
+    );
+    // The placements carry their material and claim IDs into the channels.
+    expect(schedule.data.placements[0].claimIds[0]).toMatch(/^CLM-CRD-/);
     expect(waitingOn(publish)).toMatchObject({ gate: "go-live" });
     const form = await events(
       await decide(id, { gate: "go-live", decision: "approve" }, "brand-lead"),
@@ -173,6 +192,10 @@ describe("pharma campaign lifecycle", () => {
       ),
     );
     expect(end.find((event) => event.type === "done").summary).toMatch(/focus to analytics/);
+    // Where every claim is live, by ID, with its re-review date.
+    const trace = end.find((event) => event.type === "artifact" && event.name === "claim_trace");
+    expect(trace.data.decision).toBe("optimize");
+    expect(trace.data.claims[0].placements.length).toBeGreaterThan(0);
     const scorecard = end.find((event) => event.type === "evaluation").scorecard;
     expect(scorecard.checks.find((check: Json) => check.id === "outcome").score).toBe(1);
     // Medical asked for changes once, and approved the resubmitted job.

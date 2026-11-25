@@ -44,6 +44,23 @@ export type AgentView = {
   revisions: number;
 };
 
+/** What each kind of message is called on the page. */
+export const KIND_LABELS: Record<TeamMessageKind, string> = {
+  brief: "Brief",
+  plan: "Work plan",
+  directive: "Assignment",
+  report: "Hand-back",
+  question: "Side question",
+  answer: "Reply",
+  review: "Kept",
+  revision: "Sent back",
+  proposal: "Reconciled",
+  delivery: "Proposal",
+  "approval-request": "Review request",
+  decision: "Decision",
+  handoff: "Routed",
+};
+
 /** The phases a run moves through, shown as a progress strip. */
 export const TEAM_PHASES = [
   { id: "brief", label: "Brief in" },
@@ -86,9 +103,14 @@ export type TeamState = {
     model: string;
     purpose: string;
     tokens: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    cachedInputTokens?: number;
     latencyMs: number;
     ok: boolean;
   }>;
+  /** Each distinct system prompt an agent sent, with its tools and settings. */
+  prompts: Array<Extract<TeamEvent, { type: "prompt" }>>;
   semantic: Array<{
     agent: TeamAgentId;
     tool: string;
@@ -215,6 +237,7 @@ export function emptyTeamState(): TeamState {
     denied: 0,
     infra: null,
     modelCalls: [],
+    prompts: [],
     semantic: [],
     rules: { accepted: 0, refused: 0 },
     saved: null,
@@ -341,11 +364,19 @@ export function reduceTeam(state: TeamState, event: TeamEvent): TeamState {
           model: event.model,
           purpose: event.purpose,
           tokens: event.tokens,
+          ...(event.inputTokens !== undefined ? { inputTokens: event.inputTokens } : {}),
+          ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
+          ...(event.cachedInputTokens !== undefined
+            ? { cachedInputTokens: event.cachedInputTokens }
+            : {}),
           latencyMs: event.latencyMs,
           ok: event.ok,
         },
       ];
       next.layer = "models";
+      return next;
+    case "prompt":
+      next.prompts = [...state.prompts, event];
       return next;
     case "semantic":
       next.semantic = [

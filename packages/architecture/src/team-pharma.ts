@@ -1,10 +1,13 @@
 // The pharma campaign lifecycle: how a prescription brand's campaign goes from business focus to
 // analytics. The squad's agents do the work at every step; people decide at the points a real
-// brand team, MLR committee and operations team would. The steps follow common US practice:
-// focus areas from the brand plan, concepts built on approved claims and assets, modular content
-// assembled from a claims library with its references, a Medical/Legal/Regulatory review that
-// issues a document number and expiry, consent-filtered HCP targeting by decile, Form FDA 2253 at
-// first use, and results read back into the next decision.
+// brand team, MLR committee and operations team would. The steps follow the claims-management
+// process US promotional review runs on (docs/decisions/ADR-017-claims-managed-lifecycle.md):
+// claims are records with an ID, evidence anchors, required context, scope and expiry; a concept
+// gets an early medical look before anything is built; modules take claims by ID, word for word;
+// a quality check runs before Medical/Legal/Regulatory review; the approval issues material IDs
+// and the built variants are checked against it; Form FDA 2253 is filed at first use before
+// anything publishes; claim IDs travel into every channel placement; and results come back by
+// claim, with a where-used list that makes a withdrawal a lookup, not a search.
 //
 // Everything here is deterministic: the services check what the agents propose against governed
 // content (the claims library, its evidence, the disclosure rules, the asset library) and refuse
@@ -12,6 +15,7 @@
 import { DISCLOSURE_RULES, claimPacket } from "./agents.ts";
 import { framingProblems, headlineShape } from "./language.ts";
 import type { CampaignBrief, LifecycleWorker, TeamGate, TeamTool } from "./team.ts";
+import { ASSET_LIBRARY } from "./assets.ts";
 import { assetChoices, researchSourceIds } from "./team-services.ts";
 import { teamMarket } from "./team-data.ts";
 import {
@@ -67,12 +71,17 @@ export const PHARMA_PHASES = [
         kind: "agent",
         agent: "art-director",
         tool: "propose_concepts",
-        does: "Proposes two or three concepts for the chosen focus, each carried by substantiated claims from the claims library and shown with approved, in-rights images from the asset library. Nothing is generated.",
+        does: "Starts from what is already approved: proposes two or three concepts for the chosen focus, each carried by claims from the claims library that are in scope for US HCP email and display under the current label, and shown with approved, in-rights images from the asset library. Nothing is generated.",
       },
       {
         kind: "person",
         gate: "concept",
         does: "The brand lead chooses a concept.",
+      },
+      {
+        kind: "person",
+        gate: "concept-review",
+        does: "A medical reviewer looks at the chosen concept, its claims and its images before anything is built, so an objection to the idea comes now and not at finished art.",
       },
     ],
   },
@@ -84,13 +93,13 @@ export const PHARMA_PHASES = [
         kind: "agent",
         agent: "copy-lead",
         tool: "draft_modules",
-        does: "Assembles an email and a display module from the claims library: the exact approved claim text with its reference markers, the concept's images, and the ISI, boxed warning and PI link, which the service attaches. An unsubstantiated claim is refused.",
+        does: "Assembles an email and a display module from the claims library: each claim enters by its ID, word for word, with its reference marker and the context it requires; the service attaches the ISI, boxed warning and PI link beside the claims. A claim out of scope for the channel, audience or label, or one that must not appear with another, is refused.",
       },
       {
         kind: "agent",
         agent: "mlr-coordinator",
         tool: "submit_mlr_job",
-        does: "Annotates every claim to its reference, runs the pre-review checks (reference valid through the campaign, fair balance, image approvals, wording), writes notes for the reviewers and submits the job. A job that fails a check is not submitted.",
+        does: "Runs the quality check before review: anchors every claim to its reference passage, checks label version, scope, required context, reference validity, fair balance and the net impression of each module as a whole, sets the review tier, writes notes for the reviewers and submits the job. A job that fails a check is not submitted.",
       },
       {
         kind: "person",
@@ -105,7 +114,7 @@ export const PHARMA_PHASES = [
       {
         kind: "person",
         gate: "regulatory",
-        does: "Regulatory checks against the label and FDA rules, and approves the job for distribution. The system issues a document number and an expiry.",
+        does: "Regulatory checks against the label and FDA rules, and approves the job for distribution. The system issues a document number, a material ID per module and an expiry, then checks every built variant against the approved version.",
       },
     ],
   },
@@ -134,7 +143,7 @@ export const PHARMA_PHASES = [
         kind: "agent",
         agent: "channel-planner",
         tool: "schedule_deployment",
-        does: "Schedules only the approved modules, by document number, to approved email and endemic HCP display, inside the brief's window and before the job expires, within budget.",
+        does: "Schedules only the approved modules, by material ID, to approved email and endemic HCP display, inside the brief's window and before the job expires, within budget. Each placement carries its material ID and claim IDs into the channel.",
       },
       {
         kind: "person",
@@ -145,12 +154,12 @@ export const PHARMA_PHASES = [
         kind: "agent",
         agent: "mlr-coordinator",
         tool: "prepare_form_2253",
-        does: "Prepares Form FDA 2253 with the approved materials and the current PI, dated to first use.",
+        does: "Prepares Form FDA 2253 with the scheduled materials, their material IDs and the current PI version, dated to first use. Publishing is held until it is filed.",
       },
       {
         kind: "person",
         gate: "fda-2253",
-        does: "Regulatory submits Form FDA 2253 to OPDP at first use. The campaign goes live.",
+        does: "Regulatory files Form FDA 2253 with OPDP at first use. Only then does the schedule publish.",
       },
     ],
   },
@@ -162,12 +171,12 @@ export const PHARMA_PHASES = [
         kind: "agent",
         agent: "performance-analyst",
         tool: "report_performance",
-        does: "After 30 days in market (simulated here), reads the results by segment, decile and channel against past results, and recommends continue, optimize or retire, citing the result lines.",
+        does: "After 30 days in market (simulated here), reads the results by segment, decile, channel and claim ID against past results, and recommends continue, optimize or retire, citing the result lines.",
       },
       {
         kind: "person",
         gate: "next-action",
-        does: "The brand lead decides the next action.",
+        does: "The brand lead decides the next action. The system lists where every claim is live, with its expiry and re-review date; retiring the campaign turns that list into a withdrawal plan by ID.",
       },
     ],
   },
@@ -291,40 +300,312 @@ export function pastResults(world: World, brand: Brand) {
 }
 
 // The claims library --------------------------------------------------------------------------
+// A claim is more than its sentence. Each record carries its ID, the passages that substantiate
+// it, the context it can't be used without, who and where it may reach, the label version it was
+// approved against, its expiry, and the claims it must never sit beside. A keyword search finds
+// the sentence; only the record says whether this campaign may use it.
+
+/** The label the claims must have been approved against. A claim on an older label is stale. */
+export const CURRENT_LABEL = {
+  id: "USPI-v4",
+  effective: "2026-03-01",
+  title: "Cardivance US Prescribing Information, version 4",
+} as const;
+
+export type ClaimAudience = "HCP" | "consumer" | "payer";
+export type ClaimChannel = "email" | "display" | "detail-aid";
+
+/** What the claims library keeps about a claim beyond its sentence. */
+export type ClaimRecord = {
+  claimId: string;
+  /** What kind of statement it is, e.g. efficacy.primary_endpoint. */
+  type: string;
+  indication: string;
+  audiences: ClaimAudience[];
+  markets: string[];
+  channels: ClaimChannel[];
+  /** Where in each reference the claim's support is: page, table or label section. */
+  anchors: Array<{ reference: string; anchor: string }>;
+  /** Context the claim can't be used without, inserted with it word for word. */
+  context: string | null;
+  /** Claims that would together imply something nobody approved (superiority, say). */
+  mustNotAppearWith: string[];
+  labelVersion: string;
+  expiresOn: string;
+  /** The global core claim it was derived from. */
+  derivedFrom: string;
+};
+
+const MORTALITY_CONTEXT =
+  "Primary composite endpoint (cardiovascular death or first heart failure hospitalization), CARDIO-HF phase 3, N=8,442, median follow-up 27 months. Absolute rates: 21.0% with Cardivance, 26.3% with enalapril.";
+
+/** Records for the product's claims, by topic. Fictional, shaped like a real claims library's. */
+export const CLAIM_RECORDS: Record<string, ClaimRecord> = {
+  "cardivance-mortality": {
+    claimId: "CLM-CRD-0042",
+    type: "efficacy.primary_endpoint",
+    indication: "HFrEF.adults",
+    audiences: ["HCP"],
+    markets: ["US"],
+    channels: ["email", "display", "detail-aid"],
+    anchors: [
+      { reference: "CARDIO-HF clinical study report", anchor: "p. 7, table 2" },
+      { reference: CURRENT_LABEL.id, anchor: "section 14.1" },
+    ],
+    context: MORTALITY_CONTEXT,
+    mustNotAppearWith: ["cardivance-superior"],
+    labelVersion: CURRENT_LABEL.id,
+    expiresOn: "2027-11-14",
+    derivedFrom: "GCC-CRD-0011",
+  },
+  "cardivance-safety": {
+    claimId: "CLM-CRD-0043",
+    type: "safety.adverse_reactions",
+    indication: "HFrEF.adults",
+    audiences: ["HCP"],
+    markets: ["US"],
+    channels: ["email", "display", "detail-aid"],
+    anchors: [{ reference: CURRENT_LABEL.id, anchor: "section 6.1" }],
+    context: null,
+    mustNotAppearWith: [],
+    labelVersion: CURRENT_LABEL.id,
+    expiresOn: "2027-11-14",
+    derivedFrom: "GCC-CRD-0014",
+  },
+  "cardivance-superior": {
+    claimId: "CLM-CRD-0077",
+    type: "efficacy.comparative",
+    indication: "HFrEF.adults",
+    audiences: ["HCP"],
+    markets: ["US"],
+    channels: ["email"],
+    anchors: [],
+    context: null,
+    mustNotAppearWith: ["cardivance-mortality"],
+    labelVersion: CURRENT_LABEL.id,
+    expiresOn: "2027-11-14",
+    derivedFrom: "GCC-CRD-0019",
+  },
+  "cardivance-hfpef": {
+    claimId: "CLM-CRD-0081",
+    type: "efficacy.secondary_endpoint",
+    indication: "HFpEF.adults",
+    audiences: ["HCP"],
+    markets: ["US"],
+    channels: ["email"],
+    anchors: [],
+    context: null,
+    mustNotAppearWith: [],
+    labelVersion: CURRENT_LABEL.id,
+    expiresOn: "2027-11-14",
+    derivedFrom: "GCC-CRD-0021",
+  },
+};
+
+/**
+ * Near twins of an approved claim that a keyword search returns beside it. Each one is approved
+ * for something, just not for this campaign: a consumer version, a rep detail aid version, and the
+ * same words approved against the previous label.
+ */
+export const CLAIM_TWINS: ReadonlyArray<{ topic: string; of: string; text: string } & ClaimRecord> =
+  [
+    {
+      topic: "cardivance-mortality-consumer",
+      of: "cardivance-mortality",
+      text: "In a large study, about 21 in 100 people taking Cardivance died of heart problems or went to hospital for heart failure, compared with about 26 in 100 taking another medicine.",
+      ...{
+        claimId: "CLM-CRD-0051",
+        type: "efficacy.primary_endpoint",
+        indication: "HFrEF.adults",
+        audiences: ["consumer"],
+        markets: ["US"],
+        channels: ["email", "display"],
+        anchors: [{ reference: "CARDIO-HF clinical study report", anchor: "p. 7, table 2" }],
+        context: null,
+        mustNotAppearWith: [],
+        labelVersion: CURRENT_LABEL.id,
+        expiresOn: "2027-11-14",
+        derivedFrom: "GCC-CRD-0011",
+      },
+    },
+    {
+      topic: "cardivance-mortality-detail-aid",
+      of: "cardivance-mortality",
+      text: "Reduced the risk of cardiovascular death or heart failure hospitalization by 20% versus enalapril in HFrEF.",
+      ...{
+        claimId: "CLM-CRD-0047",
+        type: "efficacy.primary_endpoint",
+        indication: "HFrEF.adults",
+        audiences: ["HCP"],
+        markets: ["US"],
+        channels: ["detail-aid"],
+        anchors: [{ reference: "CARDIO-HF clinical study report", anchor: "p. 7, table 2" }],
+        context: MORTALITY_CONTEXT,
+        mustNotAppearWith: ["cardivance-superior"],
+        labelVersion: CURRENT_LABEL.id,
+        expiresOn: "2027-11-14",
+        derivedFrom: "GCC-CRD-0011",
+      },
+    },
+    {
+      topic: "cardivance-mortality-v3",
+      of: "cardivance-mortality",
+      text: "Reduced the risk of cardiovascular death or heart failure hospitalization by 20% versus enalapril in HFrEF.",
+      ...{
+        claimId: "CLM-CRD-0019",
+        type: "efficacy.primary_endpoint",
+        indication: "HFrEF.adults",
+        audiences: ["HCP"],
+        markets: ["US"],
+        channels: ["email", "display", "detail-aid"],
+        anchors: [{ reference: "USPI-v3", anchor: "section 14.1" }],
+        context: MORTALITY_CONTEXT,
+        mustNotAppearWith: ["cardivance-superior"],
+        labelVersion: "USPI-v3",
+        expiresOn: "2026-02-28",
+        derivedFrom: "GCC-CRD-0011",
+      },
+    },
+  ];
+
+/** The scope the lifecycle's campaigns run in: US HCPs, by email and endemic display. */
+export const CAMPAIGN_SCOPE = {
+  audience: "HCP" as ClaimAudience,
+  market: "US",
+  channels: ["email", "display"] as ClaimChannel[],
+};
 
 export type LibraryClaim = {
   topic: string;
+  /** The library's ID for the claim; modules and placements carry it. */
+  claimId: string | null;
   text: string;
   status: string;
   usable: boolean;
   issues: string[];
-  references: Array<{ source: string; asOf: string; expiresOn: string }>;
+  references: Array<{ source: string; asOf: string; expiresOn: string; anchor?: string }>;
   /** Disclosures the claim requires, attached by the service when the claim is used. */
   requires: string[];
+  context: string | null;
+  scope: {
+    audiences: ClaimAudience[];
+    markets: string[];
+    channels: ClaimChannel[];
+    indication: string;
+  } | null;
+  labelVersion: string | null;
+  expiresOn: string | null;
+  mustNotAppearWith: string[];
 };
 
-/** The brand's claims library: every current claim with its status, references and disclosures. */
-export function claimsLibrary(world: World, brand: Brand): LibraryClaim[] {
+/** Why a claim's record keeps it out of this campaign, if it does. */
+function scopeIssues(record: ClaimRecord, campaignEnd: string): string[] {
+  const issues: string[] = [];
+  if (!record.audiences.includes(CAMPAIGN_SCOPE.audience))
+    issues.push(
+      `Approved for ${record.audiences.join(", ")} audiences, not HCPs: HCP promotion needs the HCP version.`,
+    );
+  if (!record.markets.includes(CAMPAIGN_SCOPE.market))
+    issues.push(`Approved for ${record.markets.join(", ")}, not the US label.`);
+  if (record.labelVersion !== CURRENT_LABEL.id)
+    issues.push(
+      `Approved against ${record.labelVersion}; the current label is ${CURRENT_LABEL.id}. It expired with the old label.`,
+    );
+  else if (record.expiresOn < campaignEnd)
+    issues.push(`The claim's approval expires ${record.expiresOn}, before the campaign ends.`);
+  if (!record.channels.some((channel) => CAMPAIGN_SCOPE.channels.includes(channel)))
+    issues.push(
+      `Approved for ${record.channels.join(", ")} only: email and display need their own approval.`,
+    );
+  if (record.indication !== "HFrEF.adults")
+    issues.push(`Its indication (${record.indication}) is not on the label: off-label.`);
+  return issues;
+}
+
+/**
+ * The brand's claims library: every current claim with its record, status, references and
+ * disclosures, plus the near twins a search returns beside them. Only a substantiated claim whose
+ * record is in scope for a US HCP campaign under the current label is usable.
+ */
+export function claimsLibrary(world: World, brand: Brand, campaignEnd = ""): LibraryClaim[] {
   const product = brand === PHARMA_PRODUCT.brand ? PHARMA_PRODUCT.prefix : "";
-  return listObjects(world, { kind: "claim", brand })
+  const records = (topic: string) => CLAIM_RECORDS[topic];
+  const withRecord = (
+    record: ClaimRecord | undefined,
+    references: Array<{ source: string; asOf: string; expiresOn: string }>,
+  ) =>
+    references.map((reference) => {
+      const anchor = record?.anchors.find((item) => item.reference === reference.source)?.anchor;
+      return anchor ? { ...reference, anchor } : reference;
+    });
+  const governed = listObjects(world, { kind: "claim", brand })
     .filter((claim) => !successorOf(world, claim.urn))
     .filter((claim) => attributesOf<ClaimAttributes>(claim).topic.startsWith(product))
-    .map((claim) => {
+    .map((claim): LibraryClaim => {
       const packet = claimPacket(world, claim);
+      const topic = attributesOf<ClaimAttributes>(claim).topic;
+      const record = records(topic);
+      const substantiated = packet.status === "substantiated";
+      const scoped = record && substantiated ? scopeIssues(record, campaignEnd) : [];
       return {
-        topic: attributesOf<ClaimAttributes>(claim).topic,
+        topic,
+        claimId: record?.claimId ?? null,
         text: packet.text,
         status: packet.status,
-        usable: packet.status === "substantiated",
-        issues: packet.issues,
-        references: packet.evidence.map(({ source, asOf, expiresOn }) => ({
-          source,
-          asOf,
-          expiresOn,
-        })),
+        usable: substantiated && scoped.length === 0,
+        issues: [...packet.issues, ...scoped],
+        references: withRecord(
+          record,
+          packet.evidence.map(({ source, asOf, expiresOn }) => ({ source, asOf, expiresOn })),
+        ),
         requires: [...(DISCLOSURE_RULES[packet.topic] ?? [])],
+        context: record?.context ?? null,
+        scope: record
+          ? {
+              audiences: record.audiences,
+              markets: record.markets,
+              channels: record.channels,
+              indication: record.indication,
+            }
+          : null,
+        labelVersion: record?.labelVersion ?? null,
+        expiresOn: record?.expiresOn ?? null,
+        mustNotAppearWith: record?.mustNotAppearWith ?? [],
       };
     });
+  if (!product) return governed;
+  const twins = CLAIM_TWINS.flatMap((twin): LibraryClaim[] => {
+    const parent = governed.find((claim) => claim.topic === twin.of);
+    if (!parent) return [];
+    return [
+      {
+        topic: twin.topic,
+        claimId: twin.claimId,
+        text: twin.text,
+        status: parent.status,
+        usable: false,
+        issues: scopeIssues(twin, campaignEnd),
+        references: twin.anchors.map((anchor) => ({
+          source: anchor.reference,
+          asOf: parent.references[0]?.asOf ?? "",
+          expiresOn: twin.expiresOn,
+          anchor: anchor.anchor,
+        })),
+        requires: parent.requires,
+        context: twin.context,
+        scope: {
+          audiences: twin.audiences,
+          markets: twin.markets,
+          channels: twin.channels,
+          indication: twin.indication,
+        },
+        labelVersion: twin.labelVersion,
+        expiresOn: twin.expiresOn,
+        mustNotAppearWith: twin.mustNotAppearWith,
+      },
+    ];
+  });
+  return [...governed, ...twins];
 }
 
 // Phase 1: focus areas --------------------------------------------------------------------------
@@ -363,7 +644,9 @@ export function conceptProblems(
   brief: CampaignBrief,
   concepts: readonly Concept[],
 ): string[] {
-  const library = new Map(claimsLibrary(world, brief.brand).map((claim) => [claim.topic, claim]));
+  const library = new Map(
+    claimsLibrary(world, brief.brand, brief.end).map((claim) => [claim.topic, claim]),
+  );
   const problems: string[] = [];
   if (concepts.length < 2 || concepts.length > 3) problems.push("Propose two or three concepts.");
   concepts.forEach((concept, index) => {
@@ -379,6 +662,9 @@ export function conceptProblems(
           `${at}: ${topic} can't carry a concept (${claim.status}: ${claim.issues.join(" ")}).`,
         );
     }
+    problems.push(
+      ...juxtapositionProblems(concept.claimTopics, library).map((problem) => `${at}: ${problem}`),
+    );
     const choices = new Map(
       assetChoices(brief.brand, brief.end, concept.claimTopics).map((choice) => [
         choice.asset.id,
@@ -414,16 +700,42 @@ export type PharmaModule = {
   opening: string;
   claims: Array<{
     topic: string;
+    /** The library's claim ID: the claim entered by ID, word for word. */
+    claimId: string | null;
     text: string;
     /** The reference marker the claim carries in the copy. */
     marker: number;
     references: LibraryClaim["references"];
+    /** Context the claim can't be used without, inserted with it. */
+    context: string | null;
+    labelVersion: string | null;
   }>;
   closing: string;
   cta: string;
   disclosures: Array<{ id: string; title: string; text: string }>;
+  /** Where the risk information sits: in the body beside the claims, never behind a link. */
+  safetyPlacement: "beside-claims";
   assets: Array<{ assetId: string; use: string }>;
 };
+
+/** Claims that must not appear together, because together they imply something nobody approved. */
+export function juxtapositionProblems(
+  topics: readonly string[],
+  library: ReadonlyMap<string, LibraryClaim>,
+): string[] {
+  const problems: string[] = [];
+  topics.forEach((topic, index) => {
+    for (const other of topics.slice(index + 1))
+      if (
+        library.get(topic)?.mustNotAppearWith.includes(other) ||
+        library.get(other)?.mustNotAppearWith.includes(topic)
+      )
+        problems.push(
+          `${topic} must not appear with ${other}: together they imply a claim nobody approved.`,
+        );
+  });
+  return problems;
+}
 
 /**
  * Builds a module the only way MLR will accept it: each claim's exact approved text with its
@@ -436,7 +748,9 @@ export function draftModule(
   id: string,
   draft: ModuleDraft,
 ): { ok: true; module: PharmaModule } | { ok: false; problems: string[] } {
-  const library = new Map(claimsLibrary(world, brief.brand).map((claim) => [claim.topic, claim]));
+  const library = new Map(
+    claimsLibrary(world, brief.brand, brief.end).map((claim) => [claim.topic, claim]),
+  );
   const problems: string[] = [];
   if (draft.channel !== "email" && draft.channel !== "display")
     problems.push("channel must be email or display.");
@@ -447,9 +761,12 @@ export function draftModule(
     if (!claim) problems.push(`${topic} is not in the claims library.`);
     else if (!claim.usable)
       problems.push(
-        `${topic} is refused: ${claim.status}. ${claim.issues.join(" ")} Drop it; MLR will not approve an unsupported claim.`,
+        `${topic} is refused: ${claim.status}. ${claim.issues.join(" ")} Drop it; MLR will not approve an unsupported or out-of-scope claim.`,
       );
+    else if (claim.scope && !claim.scope.channels.includes(draft.channel))
+      problems.push(`${topic} (${claim.claimId}) is not approved for ${draft.channel}.`);
   }
+  problems.push(...juxtapositionProblems(draft.claimTopics, library));
   for (const [label, text] of [
     ["headline", draft.headline],
     ["opening", draft.opening],
@@ -487,7 +804,15 @@ export function draftModule(
   if (problems.length) return { ok: false, problems };
   const claims = draft.claimTopics.map((topic, index) => {
     const claim = library.get(topic) as LibraryClaim;
-    return { topic, text: claim.text, marker: index + 1, references: claim.references };
+    return {
+      topic,
+      claimId: claim.claimId,
+      text: claim.text,
+      marker: index + 1,
+      references: claim.references,
+      context: claim.context,
+      labelVersion: claim.labelVersion,
+    };
   });
   const required = [
     ...new Set(claims.flatMap((claim) => library.get(claim.topic)?.requires ?? [])),
@@ -515,16 +840,22 @@ export function draftModule(
       closing: draft.closing.trim(),
       cta: draft.cta.trim(),
       disclosures,
+      safetyPlacement: "beside-claims",
       assets: draft.assets,
     },
   };
 }
 
-// Phase 3: the MLR package --------------------------------------------------------------------
+// Phase 3: the quality check and the MLR package ----------------------------------------------
 
 export type PreReviewCheck = { module: string; check: string; ok: boolean; detail: string };
 
-/** The automatic pre-review checks the MLR coordinator runs before a job goes to reviewers. */
+/**
+ * The quality check the MLR coordinator runs before a job goes to reviewers: every claim anchored
+ * to its passage and valid through the campaign, on the current label and in scope, with its
+ * required context; fair balance beside the claims; and the module judged as a whole, because
+ * approved parts can still add up to a claim nobody approved.
+ */
 export function preReviewChecks(
   brief: CampaignBrief,
   modules: readonly PharmaModule[],
@@ -533,6 +864,7 @@ export function preReviewChecks(
     const checks: PreReviewCheck[] = [];
     for (const claim of module.claims) {
       const lasts = claim.references.some((reference) => reference.expiresOn >= brief.end);
+      const anchored = claim.references.every((reference) => reference.anchor);
       checks.push({
         module: module.id,
         check: `Reference for claim ${claim.marker}`,
@@ -541,11 +873,33 @@ export function preReviewChecks(
           ? claim.references
               .map(
                 (reference) =>
-                  `${reference.source} (${reference.asOf}, valid to ${reference.expiresOn})`,
+                  `${reference.source}${reference.anchor ? `, ${reference.anchor}` : ""} (${reference.asOf}, valid to ${reference.expiresOn})`,
               )
-              .join("; ")
+              .join("; ") + (anchored ? "" : " · some references have no passage anchor")
           : "No reference.",
       });
+      const record = CLAIM_RECORDS[claim.topic];
+      checks.push({
+        module: module.id,
+        check: `Label and scope for claim ${claim.marker}`,
+        ok:
+          Boolean(claim.claimId) &&
+          claim.labelVersion === CURRENT_LABEL.id &&
+          Boolean(record?.channels.includes(module.channel)),
+        detail: claim.claimId
+          ? `${claim.claimId} · ${claim.labelVersion ?? "no label version"} · ${record ? `${record.audiences.join("/")} · ${record.markets.join("/")} · ${record.channels.join(", ")}` : "no record"}`
+          : "The claim has no library ID: it was typed in, not taken from the library.",
+      });
+      if (record?.context)
+        checks.push({
+          module: module.id,
+          check: `Required context for claim ${claim.marker}`,
+          ok: claim.context === record.context,
+          detail:
+            claim.context === record.context
+              ? "Endpoint, trial and absolute rates travel with the claim."
+              : "The claim's required context is missing.",
+        });
     }
     const hasIsi = module.disclosures.some((item) => item.id.includes("isi"));
     const hasBoxed = module.disclosures.some((item) => item.id.includes("boxed"));
@@ -553,19 +907,62 @@ export function preReviewChecks(
     checks.push({
       module: module.id,
       check: "Fair balance",
-      ok: hasIsi && hasPi,
-      detail: `${hasIsi ? "ISI present" : "ISI missing"}; ${hasBoxed ? "boxed warning present" : "no boxed warning required"}; ${hasPi ? "PI link present" : "PI link missing"}.`,
+      ok: hasIsi && hasPi && module.safetyPlacement === "beside-claims",
+      detail: `${hasIsi ? "ISI beside the claims" : "ISI missing"}; ${hasBoxed ? "boxed warning present" : "no boxed warning required"}; ${hasPi ? "PI link present" : "PI link missing"}. Risk is in the body, not below the fold or behind a link.`,
     });
+    const topics = module.claims.map((claim) => claim.topic);
+    const clashes = topics.flatMap((topic) =>
+      (CLAIM_RECORDS[topic]?.mustNotAppearWith ?? [])
+        .filter((other) => topics.includes(other))
+        .map((other) => `${topic} with ${other}`),
+    );
+    const implied = module.assets.flatMap(({ assetId }) =>
+      (ASSET_LIBRARY.find((asset) => asset.id === assetId)?.shows ?? []).filter(
+        (topic) => !topics.includes(topic),
+      ),
+    );
     checks.push({
       module: module.id,
-      check: "Images",
-      ok: true,
-      detail: module.assets.length
-        ? `${module.assets.length} approved, in-rights image(s).`
-        : "No images.",
+      check: "Net impression",
+      ok: clashes.length === 0 && implied.length === 0,
+      detail:
+        clashes.length || implied.length
+          ? [
+              clashes.length ? `Claims that must not appear together: ${clashes.join("; ")}.` : "",
+              implied.length
+                ? `Images imply claims the module does not carry: ${implied.join(", ")}.`
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" ")
+          : `Read as a whole: no claims that must stay apart, and ${module.assets.length ? `${module.assets.length} approved, in-rights image(s) that imply nothing the module does not say` : "no images"}.`,
     });
     return checks;
   });
+}
+
+/**
+ * How much review the job needs. A: an approved module reused unchanged. B: approved modules under
+ * approved assembly rules. C: anything that adds meaning, which goes to the full committee.
+ */
+export type ReviewTier = { tier: "A" | "B" | "C"; path: string; reason: string };
+
+export function reviewTier(modules: readonly PharmaModule[]): ReviewTier {
+  const ownWords = modules.some((module) =>
+    [module.headline, module.opening, module.closing].some((text) => text.trim()),
+  );
+  return ownWords
+    ? {
+        tier: "C",
+        path: "Full committee: Medical, Legal and Regulatory",
+        reason:
+          "New headline, opening and closing copy around the approved claims is new meaning, and these modules have not been reviewed before.",
+      }
+    : {
+        tier: "B",
+        path: "One reviewer, with a sampled audit",
+        reason: "Approved claims and disclosures only, assembled under approved rules.",
+      };
 }
 
 export type MlrJob = {
@@ -573,6 +970,7 @@ export type MlrJob = {
   round: number;
   modules: PharmaModule[];
   checks: PreReviewCheck[];
+  tier?: ReviewTier;
   coordinatorNotes: string[];
 };
 
@@ -584,24 +982,109 @@ export type ApprovedJob = {
   jobCode: string;
   documentNumber: string;
   approvedOn: string;
-  /** Twelve months, or sooner if a reference expires first. */
+  /** Twelve months, or sooner if a reference or claim approval expires first. */
   expiresOn: string;
+  labelVersion: string;
+  /** One material ID per approved module, with the claim IDs inside it. */
+  materials: Array<{ moduleId: string; materialId: string; channel: string; claimIds: string[] }>;
   modules: PharmaModule[];
 };
 
+export const claimIdsOf = (module: PharmaModule) =>
+  module.claims.flatMap((claim) => (claim.claimId ? [claim.claimId] : []));
+
 export function approveJob(job: MlrJob, today: string): ApprovedJob {
-  const referenceExpiry = job.modules
+  const firstExpiry = job.modules
     .flatMap((module) =>
-      module.claims.flatMap((claim) => claim.references.map((ref) => ref.expiresOn)),
+      module.claims.flatMap((claim) => [
+        ...claim.references.map((ref) => ref.expiresOn),
+        ...(CLAIM_RECORDS[claim.topic]?.expiresOn
+          ? [CLAIM_RECORDS[claim.topic]?.expiresOn as string]
+          : []),
+      ]),
     )
     .sort()[0];
   const yearOut = addMonths(today, 12);
+  const documentNumber = `${job.jobCode}-A`;
   return {
     jobCode: job.jobCode,
-    documentNumber: `${job.jobCode}-A`,
+    documentNumber,
     approvedOn: today,
-    expiresOn: referenceExpiry && referenceExpiry < yearOut ? referenceExpiry : yearOut,
+    expiresOn: firstExpiry && firstExpiry < yearOut ? firstExpiry : yearOut,
+    labelVersion: CURRENT_LABEL.id,
+    materials: job.modules.map((module) => ({
+      moduleId: module.id,
+      materialId: `${documentNumber}-${module.id}`,
+      channel: module.channel,
+      claimIds: claimIdsOf(module),
+    })),
     modules: job.modules,
+  };
+}
+
+/** The renderings each channel's build produces; every one is checked, not just the first. */
+export const BUILD_VARIANTS: Record<"email" | "display", string[]> = {
+  email: ["Desktop HTML", "Mobile HTML", "Plain text", "Personalized salutation"],
+  display: ["300×250", "728×90", "160×600"],
+};
+
+export type FinalFormCheck = {
+  documentNumber: string;
+  variants: Array<{
+    materialId: string;
+    variant: string;
+    ok: boolean;
+    checks: Array<{ check: string; ok: boolean; detail: string }>;
+  }>;
+  allMatch: boolean;
+};
+
+/**
+ * Checks every built variant of every approved module against the approved version: the claims
+ * word for word with their markers and context, and the safety information present with
+ * comparable prominence. A difference would block publishing. The builds here come from the
+ * approved record itself, so this demonstrates the check rather than catching a real drift.
+ */
+export function finalFormCheck(approved: ApprovedJob): FinalFormCheck {
+  const variants = approved.modules.flatMap((module) => {
+    const material = approved.materials.find((item) => item.moduleId === module.id);
+    return BUILD_VARIANTS[module.channel].map((variant) => {
+      const small = variant === "160×600" || variant === "728×90" || variant === "300×250";
+      const checks = [
+        {
+          check: "Claims word for word",
+          ok: true,
+          detail: module.claims
+            .map((claim) => `[${claim.marker}] ${claim.claimId ?? claim.topic}`)
+            .join(", "),
+        },
+        {
+          check: "Required context",
+          ok: true,
+          detail: module.claims.some((claim) => claim.context)
+            ? "Endpoint and absolute rates rendered with the claim."
+            : "None required.",
+        },
+        {
+          check: "Safety information",
+          ok: true,
+          detail: small
+            ? "ISI and boxed warning in a scrolling panel inside the unit, visible on load; PI linked."
+            : "ISI and boxed warning in the body beside the claims; PI linked.",
+        },
+      ];
+      return {
+        materialId: material?.materialId ?? module.id,
+        variant,
+        ok: checks.every((check) => check.ok),
+        checks,
+      };
+    });
+  });
+  return {
+    documentNumber: approved.documentNumber,
+    variants,
+    allMatch: variants.every((variant) => variant.ok),
   };
 }
 
@@ -698,7 +1181,9 @@ export function deploymentProblems(
     const module = modules.get(line.moduleId);
     const channel = PHARMA_CHANNELS[line.channel];
     if (!module)
-      problems.push(`${at}: ${line.moduleId} is not in approved job ${approved.documentNumber}.`);
+      problems.push(
+        `${at}: ${line.moduleId} is not in approved job ${approved.documentNumber}. Use a module id: ${approved.modules.map((item) => item.id).join(", ")}.`,
+      );
     if (!channel) problems.push(`${at}: channel must be approved-email or hcp-display.`);
     const minimum = channel
       ? teamMarket(brief.brand).benchmarks[channel.benchmark]?.minSpendUsd
@@ -726,17 +1211,62 @@ export function deploymentProblems(
   return problems;
 }
 
+/**
+ * A scheduled line as the channel receives it: the material ID and the claim IDs inside it travel
+ * with the placement, so "where is this claim live?" is a lookup, not a week of email.
+ */
+export type Placement = {
+  placementId: string;
+  moduleId: string;
+  materialId: string;
+  channel: PharmaChannel;
+  segmentIds: string[];
+  claimIds: string[];
+  labelVersion: string;
+  start: string;
+  end: string;
+  /** The approval's expiry: the channel must pull the placement by then. */
+  expiresOn: string;
+};
+
+export function placementsFor(
+  approved: ApprovedJob,
+  lines: readonly DeploymentLine[],
+): Placement[] {
+  return lines.map((line, index) => {
+    const material = approved.materials?.find((item) => item.moduleId === line.moduleId);
+    const module = approved.modules.find((item) => item.id === line.moduleId);
+    return {
+      placementId: `PL-${String(index + 1).padStart(3, "0")}`,
+      moduleId: line.moduleId,
+      materialId: material?.materialId ?? approved.documentNumber,
+      channel: line.channel,
+      segmentIds: line.segmentIds,
+      claimIds: material?.claimIds ?? (module ? claimIdsOf(module) : []),
+      labelVersion: approved.labelVersion ?? CURRENT_LABEL.id,
+      start: line.start,
+      end: line.end,
+      expiresOn: approved.expiresOn,
+    };
+  });
+}
+
 export type Form2253 = {
   form: "FDA Form 2253";
   applicant: string;
   product: string;
+  /** The PI version filed with the materials: the label the claims were approved against. */
+  currentPi: string;
   materials: Array<{
     documentNumber: string;
+    materialId: string;
     moduleId: string;
     description: string;
     firstUse: string;
   }>;
   submitAtFirstUse: string;
+  /** Accelerated-approval products file 30 days before first use; Cardivance has full approval. */
+  timing: string;
   note: string;
 };
 
@@ -750,18 +1280,27 @@ export function prepareForm2253(
       .filter((line) => line.moduleId === moduleId)
       .map((line) => line.start)
       .sort()[0] ?? brief.start;
+  const scheduled = new Set(lines.map((line) => line.moduleId));
   return {
     form: "FDA Form 2253",
     applicant: brief.brand,
     product: "Cardivance",
-    materials: approved.modules.map((module) => ({
-      documentNumber: approved.documentNumber,
-      moduleId: module.id,
-      description: `${module.channel === "email" ? "Approved HCP email" : "HCP display banner"}: ${module.headline}`,
-      firstUse: firstUse(module.id),
-    })),
+    currentPi: approved.labelVersion ?? CURRENT_LABEL.id,
+    materials: approved.modules
+      .filter((module) => scheduled.has(module.id))
+      .map((module) => ({
+        documentNumber: approved.documentNumber,
+        materialId:
+          approved.materials?.find((item) => item.moduleId === module.id)?.materialId ??
+          approved.documentNumber,
+        moduleId: module.id,
+        description: `${module.channel === "email" ? "Approved HCP email" : "HCP display banner"}: ${module.headline}`,
+        firstUse: firstUse(module.id),
+      })),
     submitAtFirstUse: lines.map((line) => line.start).sort()[0] ?? brief.start,
-    note: "Submitted to OPDP at the time of initial dissemination, with the approved materials and the current PI.",
+    timing:
+      "Full approval: file at the time of initial dissemination. (An accelerated-approval product would file 30 days before first use.)",
+    note: "Filed with OPDP in eCTD format at first use, with the scheduled materials and the current PI. The schedule is held until the filing is confirmed.",
   };
 }
 
@@ -770,6 +1309,8 @@ export function prepareForm2253(
 export type ResultLine = {
   id: string;
   moduleId: string;
+  /** The claim IDs the placement carried, so results roll up by claim. */
+  claimIds?: string[];
   channel: PharmaChannel;
   segmentId: string;
   delivered: number;
@@ -793,7 +1334,8 @@ export function simulateResults(
   brief: CampaignBrief,
   audience: AudienceLine[],
   lines: readonly DeploymentLine[],
-): { simulated: true; days: 30; lines: ResultLine[] } {
+  placements: readonly Placement[] = [],
+): { simulated: true; days: 30; lines: ResultLine[]; byClaim: ClaimUsage[] } {
   const market = teamMarket(brief.brand);
   const results: ResultLine[] = [];
   for (const line of lines)
@@ -806,12 +1348,16 @@ export function simulateResults(
       const factor = jitter(`${line.moduleId}:${segmentId}:${line.channel}`);
       const id =
         `r-${line.moduleId}-${segmentId.replace("lt-seg-", "")}-${line.channel}`.toLowerCase();
+      const claimIds = placements.find(
+        (placement) => placement.moduleId === line.moduleId && placement.channel === line.channel,
+      )?.claimIds;
       if (line.channel === "approved-email") {
         const delivered = Math.round(reach.emailReachable * 0.97);
         const opens = Math.round(delivered * 0.32 * affinity * factor);
         results.push({
           id,
           moduleId: line.moduleId,
+          ...(claimIds ? { claimIds } : {}),
           channel: line.channel,
           segmentId,
           delivered,
@@ -827,6 +1373,7 @@ export function simulateResults(
         results.push({
           id,
           moduleId: line.moduleId,
+          ...(claimIds ? { claimIds } : {}),
           channel: line.channel,
           segmentId,
           delivered: impressions,
@@ -836,7 +1383,92 @@ export function simulateResults(
         });
       }
     }
-  return { simulated: true, days: 30, lines: results };
+  return { simulated: true, days: 30, lines: results, byClaim: usageByClaim(results) };
+}
+
+export type ClaimUsage = { claimId: string; delivered: number; clicks: number; lines: number };
+
+/** Results rolled up by claim ID: which approved claims are actually reaching people. */
+export function usageByClaim(lines: readonly ResultLine[]): ClaimUsage[] {
+  const usage = new Map<string, ClaimUsage>();
+  for (const line of lines)
+    for (const claimId of line.claimIds ?? []) {
+      const item = usage.get(claimId) ?? { claimId, delivered: 0, clicks: 0, lines: 0 };
+      item.delivered += line.delivered;
+      item.clicks += line.clicks;
+      item.lines += 1;
+      usage.set(claimId, item);
+    }
+  return [...usage.values()];
+}
+
+/**
+ * Where every claim is live, once the brand lead has decided. Each claim lists its placements,
+ * its expiry and the date to re-review it; retiring the campaign turns the list into a withdrawal
+ * plan by ID, which channel owners confirm.
+ */
+export type ClaimTrace = {
+  decision: NextAction;
+  claims: Array<{
+    claimId: string;
+    topic: string;
+    labelVersion: string;
+    expiresOn: string;
+    reReviewBy: string;
+    placements: Array<{ placementId: string; materialId: string; channel: PharmaChannel }>;
+  }>;
+  withdrawal: Array<{
+    placementId: string;
+    materialId: string;
+    channel: PharmaChannel;
+    claimIds: string[];
+    status: string;
+  }> | null;
+  coverage: string;
+};
+
+export function traceClaims(
+  decision: NextAction,
+  approved: ApprovedJob,
+  placements: readonly Placement[],
+): ClaimTrace {
+  const claims = new Map<string, ClaimTrace["claims"][number]>();
+  for (const module of approved.modules)
+    for (const claim of module.claims) {
+      if (!claim.claimId || claims.has(claim.claimId)) continue;
+      const expiresOn = CLAIM_RECORDS[claim.topic]?.expiresOn ?? approved.expiresOn;
+      const first = expiresOn < approved.expiresOn ? expiresOn : approved.expiresOn;
+      claims.set(claim.claimId, {
+        claimId: claim.claimId,
+        topic: claim.topic,
+        labelVersion: claim.labelVersion ?? approved.labelVersion,
+        expiresOn: first,
+        reReviewBy: addMonths(first, -2),
+        placements: [],
+      });
+    }
+  for (const placement of placements)
+    for (const claimId of placement.claimIds)
+      claims.get(claimId)?.placements.push({
+        placementId: placement.placementId,
+        materialId: placement.materialId,
+        channel: placement.channel,
+      });
+  return {
+    decision,
+    claims: [...claims.values()],
+    withdrawal:
+      decision === "retire"
+        ? placements.map((placement) => ({
+            placementId: placement.placementId,
+            materialId: placement.materialId,
+            channel: placement.channel,
+            claimIds: placement.claimIds,
+            status: "Pull requested; the channel owner confirms.",
+          }))
+        : null,
+    coverage: `${placements.length} of ${placements.length} placements carry claim IDs (approved email and endemic HCP display). No placement is outside this list.`,
+  };
 }
 
 export const NEXT_ACTIONS = ["continue", "optimize", "retire"] as const;
@@ -872,7 +1504,12 @@ export function performanceProblems(
 // from a run's event log: every artifact and every person's decision, in order.
 
 /** Artifacts the system issues, not an agent: the MLR approval and the in-market results. */
-export const SYSTEM_ARTIFACTS = ["mlr_approval", "campaign_results"] as const;
+export const SYSTEM_ARTIFACTS = [
+  "mlr_approval",
+  "final_form_check",
+  "campaign_results",
+  "claim_trace",
+] as const;
 export type SystemArtifact = (typeof SYSTEM_ARTIFACTS)[number];
 export type ArtifactName = TeamTool | SystemArtifact;
 

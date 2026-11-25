@@ -57,6 +57,11 @@ export async function createArchitectureTables(db: D1Database) {
         default: string;
       }
     ).default,
+    (
+      (await import("../../../migrations/0008_team_run_library.sql?raw")) as {
+        default: string;
+      }
+    ).default,
   ].join("\n\n");
   const statements = sql
     .split("\n")

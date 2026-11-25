@@ -270,8 +270,8 @@ export const TEAM_AGENTS: readonly TeamAgent[] = [
     modes: ["lifecycle"],
     taskClass: "orchestrate",
     summary:
-      "Runs the Medical, Legal and Regulatory review: annotates every claim to its reference, runs the pre-review checks, submits the job to the reviewers, and prepares Form FDA 2253 at first use.",
-    use: "the MLR job: claim-to-reference annotation, pre-review checks, submission to the reviewers, and Form FDA 2253",
+      "Runs the Medical, Legal and Regulatory review: anchors every claim to its reference passage, runs the quality check on each module as a whole, sets the review tier, submits the job to the reviewers, and prepares Form FDA 2253 at first use.",
+    use: "the MLR job: claim-to-reference anchoring, the quality check and review tier, submission to the reviewers, and Form FDA 2253",
     tools: [
       "get_claims_library",
       "get_approved_job",
@@ -383,6 +383,12 @@ export const TEAM_GATES = {
     decider: "Brand lead",
     personas: ["brand-lead", "admin"],
     action: "team:decide_concept",
+  },
+  "concept-review": {
+    label: "Early concept review",
+    decider: "Medical reviewer",
+    personas: ["reviewer", "admin"],
+    action: "team:review_concept",
   },
   medical: {
     label: "Medical review",
@@ -703,6 +709,20 @@ export type TeamEvent =
       tokens: number;
       latencyMs: number;
       ok: boolean;
+    }
+  /** The system prompt, tools and settings an agent sent, once per distinct prompt. */
+  | {
+      type: "prompt";
+      agent: TeamAgentId;
+      purpose: "lead" | "work" | "answer" | "report";
+      model: string;
+      provider: TeamProvider;
+      system: string;
+      tools: string[];
+      toolChoice?: string;
+      settings: { effort?: string; temperature?: number; maxOutputTokens?: number };
+      /** USD per million tokens, or null when the model has no recorded price. */
+      price?: { input: number; cachedInput: number; output: number } | null;
     }
   | {
       type: "semantic";
