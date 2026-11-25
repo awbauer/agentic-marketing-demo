@@ -22,7 +22,7 @@ The slides are not starting from zero. These pieces already exist and the roadma
 
 What is missing is the *shape*: objects with lifelong identity and governance attributes, many narrow agents instead of one orchestrator with many tools, one gateway every call passes through, a registry and catalogs that govern agents, prompts and models, an approval state machine, workspaces composed rather than hand-built, and rendering into more than one surface.
 
-## 2. AWS to Cloudflare
+## 2. AWS to Cloudflare and Google Cloud
 
 | Slide (AWS / Microsoft) | Workbench (Cloudflare) |
 | --- | --- |
@@ -30,7 +30,7 @@ What is missing is the *shape*: objects with lifelong identity and governance at
 | AgentCore Registry | Agent registry: source-controlled manifest, seeded into D1, served by the Worker |
 | AgentCore Identity workload tokens | Per-invocation agent tokens minted by the gateway with `jose` (RFC 8693-style `act` claim for the user) |
 | Agentic Gateway | A single `gateway.invoke()` choke point in the Worker in front of every tool, MCP, A2A and service call; Cloudflare MCP server portal and AI Gateway stay behind it |
-| Cedar policy | Cedar, evaluated in the Worker with `@cedar-policy/cedar-wasm` (spike first; fall back to a typed default-deny evaluator) |
+| Cedar policy | Cedar, evaluated with `@cedar-policy/cedar-wasm` on both hosts (done, ADR-020): one set of policy files decides which tools are offered and whether each call is allowed |
 | Bedrock / SageMaker model catalog | Workers AI models through AI Gateway (dynamic routes for routing and champion/challenger) |
 | AgentCore Evaluations, MLflow | The existing evals package and report, extended to named evaluators, per-agent baselines and drift |
 | Prompt Catalog, prompt caching | Versioned prompt catalog in source, published to KV; AI Gateway caching |
@@ -40,6 +40,26 @@ What is missing is the *shape*: objects with lifelong identity and governance at
 | Aprimo as MLR system of record | Salesforce stays the system of record; the workbench holds references and state, never a second records store |
 | Veeva, IQVIA, medical affairs, MLR | Harborstone Wealth compliance: claims, disclosures, approvals, embargoes |
 | Adaptive Cards (Teams, Copilot), LWC | Rendered from the same composition: React, MCP Apps/HXL, Adaptive Card JSON, LWC data |
+
+### The same design on Google Cloud (built, ADR-018)
+
+The contracts above held: the workbench now also runs on Google Cloud from the same code, and the page names the Google Cloud services when served from there. What each Cloudflare piece became:
+
+| Layer | Cloudflare | Google Cloud |
+| --- | --- | --- |
+| Identity, SSO | Cloudflare Access | Identity-Aware Proxy on a global HTTPS load balancer; the IAP assertion verified in `auth.ts`, role from a Firestore `members` collection |
+| Edge, BFF | Worker | One Node server on Cloud Run (ingress through the load balancer only); the route table in `app.ts` is shared |
+| Per-chat state | Durable Objects (SQLite) | A Node agent host speaking the Agents SDK chat protocol; each chat's SQLite saved to Cloud Storage with generation preconditions |
+| Records and audit | D1 | Firestore, with TTL policies behind the hourly prune |
+| Assets and files | R2 | Cloud Storage |
+| Models, routing | Workers AI through AI Gateway | Vertex AI: gpt-oss-120b as a managed model, Gemini image, Claude for the squad; the router and catalog are unchanged |
+| Agentic Gateway, policy, workload identity | `gateway.invoke()` in the Worker | The same code in the Cloud Run service |
+| Observability | Workers traces, AI Gateway logs | Cloud Logging, one line per model call |
+| Secrets | Worker secrets | Secret Manager, mounted as environment variables |
+| Scheduled work | Cron trigger | Cloud Scheduler with an OIDC token the service verifies |
+| Infrastructure as code | Wrangler config | `scripts/gcp/bootstrap.sh` and `deploy.sh` (gcloud), Cloud Build |
+
+See [infra/gcp/README.md](../infra/gcp/README.md) and [ADR-018](decisions/ADR-018-google-cloud-target.md).
 
 ### The same design on AWS
 
@@ -55,7 +75,7 @@ The workbench is built on Cloudflare, but each layer keeps a provider-neutral co
 | Caches | Durable Object state, KV | ElastiCache or DynamoDB with TTL (session, global, semantic) | Cache interface |
 | Vector and semantic search | Vectorize (embedder interface, hashing fallback) | OpenSearch Serverless or Aurora pgvector, Bedrock Titan embeddings | Implement the embedder and index interface |
 | Agentic Gateway | `gateway.invoke()` in the Worker, MCP server portal and AI Gateway behind it | AgentCore Gateway (MCP tool invocation, A2A) fronted by API Gateway | Gateway adapter; policies move to AgentCore Policy, which is Cedar |
-| Policy | Cedar-shaped policies, default-deny evaluator | Cedar in AgentCore Policy or Amazon Verified Permissions | Policies are already Cedar-shaped; load them into the service |
+| Policy | Cedar policy files evaluated by the Cedar engine (ADR-020) | Cedar in AgentCore Policy or Amazon Verified Permissions | The policies are already Cedar; load them into the service |
 | Workload identity | Per-invocation tokens minted with `jose` | AgentCore Identity workload tokens, STS and token exchange | Replace mint and verify; the `act` claim carries over |
 | Agent registry | Source manifest seeded into D1 | AgentCore Registry | Sync the manifest into the registry on deploy |
 | Agent runtime | Worker functions and the Agents SDK | AgentCore Runtime or Lambda | Agents are pure functions over the world; wrap them |

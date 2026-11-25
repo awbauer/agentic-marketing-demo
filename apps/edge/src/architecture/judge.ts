@@ -1,4 +1,5 @@
 import { routeModel } from "@northstar/architecture";
+import { modelPlatform } from "../platform/models";
 import type { ArchEnv } from "./context";
 
 // The answer-quality judge for sampled agent runs. Clef answers typed questions with
@@ -47,24 +48,21 @@ export async function judgeRun(
   env: ArchEnv,
   run: { agent: string; task: string; input: unknown; summary: string; result: unknown },
 ): Promise<number | undefined> {
-  if (!env.AI || env.AGENT_MODEL === "scripted") return undefined;
+  const models = modelPlatform(env);
+  if (!models?.judge || env.AGENT_MODEL === "scripted") return undefined;
   const { model } = routeModel("score");
   try {
-    const verdict = (await env.AI.run(
-      model as Parameters<Ai["run"]>[0],
-      {
-        model: "clef",
-        state: {
-          agent: run.agent,
-          task: run.task,
-          input: run.input,
-          summary: run.summary,
-          result: JSON.stringify(run.result ?? null).slice(0, 6000),
-        },
-        questions: QUESTIONS,
-      } as never,
-      env.AI_GATEWAY_ID ? { gateway: { id: env.AI_GATEWAY_ID } } : {},
-    )) as Verdict;
+    const verdict = (await models.judge(model, {
+      model: "clef",
+      state: {
+        agent: run.agent,
+        task: run.task,
+        input: run.input,
+        summary: run.summary,
+        result: JSON.stringify(run.result ?? null).slice(0, 6000),
+      },
+      questions: QUESTIONS,
+    })) as Verdict;
     return judgeScoreFrom(verdict);
   } catch (failure) {
     console.error("Answer-quality judge failed", failure);

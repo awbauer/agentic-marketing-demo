@@ -26,6 +26,40 @@ function requiredKeys(params: CallParams, toolName: string): string[] {
   return Array.isArray(required) ? required.filter((key) => typeof key === "string") : [];
 }
 
+/** Steps that must end in a call: a forced tool, or `required` (any offered tool). */
+function mustCall(params: CallParams) {
+  return params.toolChoice?.type === "tool" || params.toolChoice?.type === "required";
+}
+
+/**
+ * The one offered tool a JSON object leaked into reasoning or text is a call to: the tool whose
+ * required keys it has, preferring the most specific. Null when no tool fits or two fit equally
+ * (ADR-019: steps are no longer forced, so the tool is inferred rather than known).
+ */
+export function inferToolFromInput(
+  source: string,
+  tools: ReadonlyArray<{ name: string; required: string[] }>,
+): { name: string; required: string[]; input: string } | null {
+  // A tool with no required keys fits any JSON object, so it is inferred only when it is the
+  // only tool on offer.
+  const candidates = tools.length === 1 ? tools : tools.filter((tool) => tool.required.length > 0);
+  const fits = candidates
+    .flatMap((tool) => {
+      const input = salvageToolInput(source, tool.required);
+      return input ? [{ ...tool, input }] : [];
+    })
+    .sort((a, b) => b.required.length - a.required.length);
+  const [best, next] = fits;
+  return best && (!next || next.required.length < best.required.length) ? best : null;
+}
+
+function offeredTools(params: CallParams) {
+  return (params.tools ?? []).map((tool) => ({
+    name: tool.name,
+    required: requiredKeys(params, tool.name),
+  }));
+}
+
 /**
  * gpt-oss on Workers AI sometimes writes a forced tool call's JSON arguments at the end of its
  * reasoning instead of emitting a structured tool call. Returns those arguments when the
@@ -251,6 +285,32 @@ export function repairForcedToolStep(
   ];
 }
 
+/**
+ * Completes a step that must call some tool, any of those offered. Keeps the held parts when they
+ * already hold valid calls to offered tools; otherwise recovers the one call the reasoning or
+ * text fits (see inferToolFromInput), or returns null.
+ */
+export function repairRequiredStep(
+  held: StreamPart[],
+  reasoning: string,
+  tools: ReadonlyArray<{ name: string; required: string[] }>,
+): StreamPart[] | null {
+  if (held.some((part) => part.type === "error")) return held;
+  const calls = held.filter((part) => part.type === "tool-call");
+  if (
+    calls.length > 0 &&
+    calls.every(
+      (part) =>
+        tools.some((tool) => tool.name === part.toolName) &&
+        repairToolInput(part.input) === part.input,
+    )
+  )
+    return held;
+  const text = held.map((part) => (part.type === "text-delta" ? part.delta : "")).join("");
+  const target = inferToolFromInput(reasoning, tools) ?? inferToolFromInput(text.trim(), tools);
+  return target ? repairForcedToolStep(held, reasoning, target.name, target.required) : null;
+}
+
 function emptyUsage() {
   return {
     inputTokens: {
@@ -325,13 +385,15 @@ function answerWithoutTools(
 }
 
 /**
- * Makes forced tool-call steps dependable: caps their output, streams reasoning live while
- * holding back the rest of the step, recovers a tool call that leaked into reasoning, and
- * retries once when no call can be recovered.
+ * Makes tool-calling steps dependable without forcing which tool is called (ADR-019). A step that
+ * must call (a forced tool, or `required`) has its output capped, streams reasoning live while
+ * holding back the rest, recovers a call that leaked into reasoning, and retries once when none
+ * can be recovered. A free step streams live and recovers a leaked call only when it produced
+ * nothing else. An answer step that offers no tools has stray calls dropped.
  */
 export const forcedToolCallMiddleware: LanguageModelMiddleware = {
   transformParams: async ({ params }) =>
-    forcedToolName(params)
+    mustCall(params)
       ? {
           ...params,
           maxOutputTokens: Math.min(
@@ -344,20 +406,44 @@ export const forcedToolCallMiddleware: LanguageModelMiddleware = {
     const toolName = forcedToolName(params);
     const normalize = callNormalizer(params);
     if (!toolName && offersNoTools(params)) return answerWithoutTools(await doStream(), doStream);
-    if (!toolName) {
+    const tools = offeredTools(params);
+    if (!toolName && !mustCall(params)) {
+      // A free step: stream it live. If it ends with no call and no text, but its reasoning ends
+      // with the arguments of exactly one offered tool, that was the call it meant to make.
       const result = await doStream();
+      let reasoning = "";
+      let wrote = false;
+      let called = false;
       return {
         ...result,
         stream: result.stream.pipeThrough(
           new TransformStream<StreamPart, StreamPart>({
-            transform(part, controller) {
-              controller.enqueue(normalize(part));
+            transform(raw, controller) {
+              const part = normalize(raw);
+              if (part.type === "reasoning-delta") reasoning += part.delta;
+              if (part.type === "text-delta" && part.delta.trim()) wrote = true;
+              if (part.type === "tool-call") called = true;
+              if (part.type === "finish" && !called && !wrote) {
+                const target = inferToolFromInput(reasoning, tools);
+                const repaired = target
+                  ? repairForcedToolStep([part], reasoning, target.name, target.required)
+                  : null;
+                if (repaired) {
+                  console.warn(
+                    `[orchestrator] recovered ${target?.name} call from model reasoning`,
+                  );
+                  for (const item of repaired) controller.enqueue(item);
+                  return;
+                }
+              }
+              controller.enqueue(part);
             },
           }),
         ),
       };
     }
-    const required = requiredKeys(params, toolName);
+    const required = toolName ? requiredKeys(params, toolName) : [];
+    const label = toolName ?? "a required tool";
     const first = await doStream();
     const stream = new ReadableStream<StreamPart>({
       async start(controller) {
@@ -374,21 +460,19 @@ export const forcedToolCallMiddleware: LanguageModelMiddleware = {
                 controller.enqueue(part);
               else if (part.type !== "stream-start") held.push(part);
             }
-            const repaired = repairForcedToolStep(held, reasoning, toolName, required);
+            const repaired = toolName
+              ? repairForcedToolStep(held, reasoning, toolName, required)
+              : repairRequiredStep(held, reasoning, tools);
             if (repaired && repaired !== held)
-              console.warn(`[orchestrator] recovered ${toolName} call from model reasoning`);
+              console.warn(`[orchestrator] recovered ${label} call from model reasoning`);
             if (repaired || attempt >= MAX_ATTEMPTS) {
               if (!repaired)
-                console.warn(
-                  `[orchestrator] forced ${toolName} call missing after ${attempt} attempts`,
-                );
+                console.warn(`[orchestrator] ${label} call missing after ${attempt} attempts`);
               for (const part of repaired ?? held) controller.enqueue(part);
               controller.close();
               return;
             }
-            console.warn(
-              `[orchestrator] forced ${toolName} call missing on attempt ${attempt}; retrying`,
-            );
+            console.warn(`[orchestrator] ${label} call missing on attempt ${attempt}; retrying`);
             result = await doStream();
           }
         } catch (error) {

@@ -125,7 +125,7 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
     emitOut(event);
   };
   const route = routeModel("orchestrate", { champions: championsFrom(ctx.env) });
-  const model = modelFactory(ctx.env)(route.model);
+  const model = modelFactory(ctx.env, ctx.aiPlatform)(route.model);
   let paused: { moduleUrn: string } | null = null;
   let finished: string | null = null;
   let stopped = false;
@@ -343,7 +343,8 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
       system: systemFor(brand),
       messages: state.messages,
       tools,
-      toolChoice: { type: "tool", toolName: "next_step" },
+      // next_step is how the orchestrator acts; it isn't forced, and a step that ends in prose
+      // gets the reminder above (ADR-019).
       stopWhen: [stepCountIs(16), () => Boolean(paused || finished || stopped)],
       ...AGENT_GENERATION,
     });
@@ -386,7 +387,7 @@ export async function startOrchestration(ctx: Ctx, flowId: string) {
     messages: [{ role: "user", content: `${goal.goal}\n\nInput: ${JSON.stringify({ flowId })}` }],
     events: [],
   };
-  modelFactory(ctx.env);
+  modelFactory(ctx.env, ctx.aiPlatform);
   return async (emit: Emit) => {
     const event: FlowEvent = {
       type: "start",

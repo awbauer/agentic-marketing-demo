@@ -57,7 +57,7 @@ Ask a human only when one of these conditions is true:
 - A login, MFA prompt, credential, consent grant, or account-level authorization requires a person.
 - The next action is irreversible, affects production, publishes/sends/activates content, spends beyond the fixed proof cap, or changes an external system outside the three allowed sandbox writes.
 - A required choice would change Section 17, the proof acceptance criteria, data handling, legal/IP posture, or the set of external systems.
-- Required Salesforce or Cloudflare capability is actually absent and no in-scope fallback exists.
+- Required Salesforce, Google Cloud or Cloudflare capability is actually absent and no in-scope fallback exists.
 - Three evidence-backed attempts have reached the same external blocker and safe alternatives are exhausted.
 - Final Phase 5 evaluation requires the named Salesforce owner or marketing evaluator.
 

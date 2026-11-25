@@ -9,6 +9,7 @@ import {
   CHALLENGERS,
   CHAMPIONS,
   canPromote,
+  CEDAR_SCHEMA,
   detectDrift,
   EVALUATORS,
   effectiveAgent,
@@ -29,7 +30,7 @@ import {
   TASK_CLASSES,
   toCedar,
 } from "@northstar/architecture";
-import { type Ctx, overridesFor } from "./context";
+import { signInName, type Ctx, overridesFor } from "./context";
 
 export async function registryView(ctx: Ctx) {
   const overrides = await overridesFor(ctx);
@@ -56,7 +57,9 @@ export async function registryView(ctx: Ctx) {
       owner: STAGE_OWNERS[stage],
     })),
     agents,
+    // The Cedar policies in force, as their files have them (file and @id on each).
     policies: buildPolicies(overrides).map((policy) => ({ ...policy, cedar: toCedar(policy) })),
+    schema: CEDAR_SCHEMA,
     lifecycle: ["introduce", "test", "monitor", "constrain", "retire"],
   };
 }
@@ -236,7 +239,10 @@ export async function trustView(ctx: Ctx) {
       principal: `${row.principalType}:${row.principalId}`,
       decision: row.decision,
       correlationId: row.correlationId,
-      chain: identityChain(request, decision, { tokenVerified: row.decision === "allow" }),
+      chain: identityChain(request, decision, {
+        tokenVerified: row.decision === "allow",
+        signIn: signInName(ctx.env),
+      }),
     };
   });
   return {
@@ -245,7 +251,7 @@ export async function trustView(ctx: Ctx) {
     gateway: stats,
     retention: PROOF_RETENTION,
     kinds: [
-      "Entra-style SSO is Cloudflare Access here; every other hop is verified in the gateway.",
+      `Entra-style SSO is ${signInName(ctx.env)} here; every other hop is verified in the gateway.`,
     ],
   };
 }

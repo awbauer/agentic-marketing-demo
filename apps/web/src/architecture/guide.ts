@@ -1,4 +1,8 @@
 import { type Brand, type Persona, STAGE_OWNERS, type Stage } from "@northstar/architecture";
+import { hostTerms } from "@northstar/contracts";
+
+/** What this host calls its infrastructure (ADR-018). */
+const HOST = hostTerms();
 
 // Plain-language orientation for the architecture workspaces: what each one is, why it beats
 // how the work is done today, where it sits in a person's day, and something to try for the
@@ -198,8 +202,7 @@ export const JOURNEY_GUIDE: Omit<TabGuide, "group"> = {
     "Lumera Therapeutics":
       "Run the congress flow: the superiority claim is refused and filed as a gap, the boxed warning is attached for you, and approval waits for you as the MLR reviewer.",
   },
-  technical:
-    "The orchestrator and every subagent run on Workers AI models the router picks. Subagents get their catalog prompt and only their granted tools; each tool call passes the gateway as that agent, acting for the step's owner. The services behind the tools enforce cite-or-refuse.",
+  technical: `The orchestrator and every subagent run on ${HOST.models} models the router picks. Subagents get their catalog prompt and only their granted tools; each tool call passes the gateway as that agent, acting for the step's owner. The services behind the tools enforce cite-or-refuse.`,
 };
 
 export const TAB_ORDER = Object.keys(TAB_GUIDES) as Tab[];

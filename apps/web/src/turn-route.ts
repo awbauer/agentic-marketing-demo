@@ -1,5 +1,12 @@
-import { SALESFORCE_AGENTS, type ToolServer, toolServer, toolSystem } from "@northstar/contracts";
+import {
+  pageHost,
+  SALESFORCE_AGENTS,
+  type ToolServer,
+  toolServer,
+  toolSystem,
+} from "@northstar/contracts";
 import type { UIMessage } from "ai";
+import { currentAiPlatform } from "./ai-platform";
 import {
   isKnownTool,
   plural,
@@ -190,6 +197,14 @@ export function routeMap(
     seen?.streamFailed || (finish?.outcome && finish.outcome !== "completed"),
   );
   const thinking = working && viaModel && running.length === 0;
+  // A turn's trace names its host; before the first turn, the page's host does.
+  const google = (seen?.start ? seen.start.host : pageHost()) === "google-cloud";
+  // The models run where the turn's trace says (ADR-021); before the first turn, where the top
+  // bar points; failing both, on the host's own platform.
+  const vertex =
+    (seen?.start?.aiPlatform ??
+      (seen?.start ? null : currentAiPlatform()) ??
+      (google ? "vertex" : "workers-ai")) === "vertex";
 
   const node = (
     id: string,
@@ -251,17 +266,26 @@ export function routeMap(
           ...(surface === "lightning"
             ? [node("relay", "Apex relay", reached ? "done" : "idle")]
             : []),
-          node("access", "Cloudflare Access", reached ? "done" : "idle"),
+          node(
+            "access",
+            google ? "Identity-Aware Proxy" : "Cloudflare Access",
+            reached ? "done" : "idle",
+          ),
           node(
             "router",
             "Policy router",
             started ? "done" : working ? "active" : "idle",
             started && !viaModel ? "Answered here" : "",
           ),
-          node("ai-gateway", "AI Gateway", modelState),
+          // The classifier's labels decide, through policy, which tools the model is offered.
+          ...(seen?.start?.intents?.length
+            ? [node("classifier", "Classifier", "done", seen.start.intents.join(", "))]
+            : []),
+          // Vertex AI is called directly, from either host; only Workers AI goes through AI Gateway.
+          ...(vertex ? [] : [node("ai-gateway", "AI Gateway", modelState)]),
           node(
             "model",
-            "Workers AI",
+            vertex ? "Vertex AI" : "Workers AI",
             modelState,
             viaModel ? (seen?.start?.model.split("/").pop() ?? "") : "",
           ),
@@ -291,9 +315,14 @@ function routeSummary(
   if (working) {
     if (!seen?.start) return "The policy router is reading the request";
     if (running.length > 0) return runningSummary(running);
-    if (seen.open.text.size > 0) return "Workers AI is writing the answer";
-    if (seen.open.reasoning.size > 0) return "Workers AI is reasoning";
-    return "Workers AI is choosing the next step";
+    const models =
+      (seen.start.aiPlatform ?? (seen.start.host === "google-cloud" ? "vertex" : "workers-ai")) ===
+      "vertex"
+        ? "Vertex AI"
+        : "Workers AI";
+    if (seen.open.text.size > 0) return `${models} is writing the answer`;
+    if (seen.open.reasoning.size > 0) return `${models} is reasoning`;
+    return `${models} is choosing the next step`;
   }
   if (!seen?.start) return "Send a message to see which components it passes through";
   const finish = seen.finish;

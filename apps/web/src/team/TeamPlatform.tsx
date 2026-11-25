@@ -1,20 +1,24 @@
 // What the squad stands on, drawn from the run's own records: the semantic layer every agent reads
 // through, and the infrastructure layers each message, model call and tool call passes.
 import {
+  JUDGE_CRITERIA,
+  type JudgeCriterion,
   SEMANTIC_ENTITIES,
   SEMANTIC_METRIC_IDS,
   SEMANTIC_METRICS,
   SEMANTIC_SOURCES,
-  JUDGE_CRITERIA,
-  type JudgeCriterion,
   TEAM_GATES,
   TEAM_PARTY_LABELS,
-  TEAM_PROVIDER_LABELS,
   type TeamAgentId,
   type TeamScorecard,
+  teamProviderLabel,
 } from "@northstar/architecture";
+import { hostTerms } from "@northstar/contracts";
 import { resetSessionMetrics, type SessionRun, useSessionMetrics } from "./session-metrics";
 import { type InfraLayer, isPeerMessage, type TeamState } from "./team-state";
+
+/** What this host calls its infrastructure (ADR-018). */
+const HOST = hostTerms();
 
 const short = (id: TeamAgentId) => TEAM_PARTY_LABELS[id];
 
@@ -182,7 +186,9 @@ export function InfrastructurePanel({ state }: { state: TeamState }) {
               ? "Claude on the Anthropic API, through the official SDK and the AI Gateway, which supplies the key stored on it: adaptive thinking replayed turn to turn, effort set per agent, server-side refusal fallback and prompt caching"
               : infra?.provider === "openai"
                 ? "OpenAI's Responses API through the AI Gateway, which supplies the key stored on it, with reasoning effort set per agent"
-                : "Cloudflare Workers AI; a router binds each agent's task class to a champion model"
+                : HOST.id === "google-cloud"
+                  ? "Vertex AI on Google Cloud (gpt-oss-120b); a router binds each agent's task class to a champion model, which Vertex serves"
+                  : "Cloudflare Workers AI; a router binds each agent's task class to a champion model"
           }${infra?.aiGateway ? `, through AI Gateway (${infra.aiGateway}) for caching, rate limits and logs` : ""}. Every call is metered. The switch above changes only this layer.`,
       stats: [
         ["Model calls", calls.length],
@@ -237,7 +243,7 @@ export function InfrastructurePanel({ state }: { state: TeamState }) {
     {
       id: "state",
       name: "State and memory",
-      what: "A shared folder holds each spoke's versions for the others to read; the whole run is saved to D1 so a reload or replay finds it.",
+      what: `A shared folder holds each spoke's versions for the others to read; the whole run is saved to ${HOST.database} so a reload or replay finds it.`,
       stats: [
         ["Versions saved", versions],
         ["Run persisted", state.saved === null ? "—" : state.saved ? "yes" : "failed"],
@@ -307,8 +313,8 @@ function Scorecard({ scorecard }: { scorecard: TeamScorecard }) {
           <small>/100</small>
         </p>
         <p className="arch-note">
-          {TEAM_PROVIDER_LABELS[scorecard.provider]} · {scorecard.tokens.toLocaleString("en-US")}{" "}
-          tokens
+          {teamProviderLabel(scorecard.provider, HOST.id)} ·{" "}
+          {scorecard.tokens.toLocaleString("en-US")} tokens
           {scorecard.costUsd === null
             ? " · cost not priced"
             : ` · about $${scorecard.costUsd.toFixed(2)}`}{" "}
@@ -453,7 +459,7 @@ function RunsCompared() {
                 );
                 return (
                   <tr key={provider}>
-                    <th scope="row">{TEAM_PROVIDER_LABELS[provider]}</th>
+                    <th scope="row">{teamProviderLabel(provider, HOST.id)}</th>
                     <td>{cards.length}</td>
                     <td>{Math.round(average(cards.map((card) => card.overall)) ?? 0)}</td>
                     <td>{judge === null ? "—" : `${judge.toFixed(1)}/5`}</td>
@@ -488,7 +494,7 @@ function RunsCompared() {
                   {run.source === "replay" ? "Replay" : "Live"}
                   {run.scripted ? " · scripted" : ""}
                 </td>
-                <td>{TEAM_PROVIDER_LABELS[run.provider]}</td>
+                <td>{teamProviderLabel(run.provider, HOST.id)}</td>
                 <td>{STATUS_LABELS[run.status]}</td>
                 <td>{run.scorecard ? run.scorecard.overall : "—"}</td>
               </tr>

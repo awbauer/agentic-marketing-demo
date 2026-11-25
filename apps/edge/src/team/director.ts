@@ -49,9 +49,10 @@ import {
   teamModels,
 } from "./run";
 import { evaluateRun } from "./evals";
-import { recordRun } from "./library";
+import { dataPlatform, storeLabel } from "../platform/data";
 import { continueLifecycleRun } from "./lifecycle";
 import { runSpecialist } from "./specialists";
+import { serverHost } from "../platform/models";
 
 /** How many times the lead may send one spoke's work back. */
 const REVISION_LIMIT = 2;
@@ -409,7 +410,8 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       system: systemFor(run.brief),
       messages,
       tools,
-      toolChoice: { type: "tool", toolName: "next_step" },
+      // next_step is how the lead acts; it isn't forced, and a turn that ends in prose gets a
+      // nudge (ADR-019).
       stopWhen: [stepCountIs(24), halted],
       ...AGENT_GENERATION,
     });
@@ -421,7 +423,8 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
     } catch (error) {
       // The SDK reports a failed call as "no output"; the real reason is the stream's error.
       const cause = streamError ?? error;
-      if (!isToolChoiceViolation(cause)) throw explainModelError(cause, run.provider);
+      if (!isToolChoiceViolation(cause))
+        throw explainModelError(cause, run.provider, serverHost(run.ctx.env));
       console.warn("[team] the lead skipped its required call; nudging it");
     }
   }
@@ -468,19 +471,23 @@ export async function settle(run: TeamRun, messages: ModelMessage[], emit: Emit)
       return false;
     });
   // Sent after the save, so the page knows whether a reload will find this run.
-  emit({ type: "saved", ok: saved, store: "D1" });
+  emit({ type: "saved", ok: saved, store: storeLabel(ctx.env) });
   // The shared library of recent runs, for anyone to replay. Its own failure never fails the run.
-  await recordRun(
-    ctx.env.APP_DB,
-    {
-      ...run,
-      status: run.waiting ? "waiting" : run.finished ? "done" : "stopped",
-      scripted: ctx.env.AGENT_MODEL === "scripted",
-    },
-    ISO(ctx),
-  ).catch((error: unknown) =>
-    console.error("[team] run library save failed", error instanceof Error ? error.message : error),
-  );
+  await dataPlatform(ctx.env)
+    .teamLibrary.record(
+      {
+        ...run,
+        status: run.waiting ? "waiting" : run.finished ? "done" : "stopped",
+        scripted: ctx.env.AGENT_MODEL === "scripted",
+      },
+      ISO(ctx),
+    )
+    .catch((error: unknown) =>
+      console.error(
+        "[team] run library save failed",
+        error instanceof Error ? error.message : error,
+      ),
+    );
 }
 
 /**
@@ -516,7 +523,7 @@ export async function startTeamRun(
               (agent) => policy.principal.ids !== "*" && policy.principal.ids.includes(agent.id),
             ),
         ).length,
-        store: "D1",
+        store: storeLabel(ctx.env),
         scripted: ctx.env.AGENT_MODEL === "scripted",
       },
     });

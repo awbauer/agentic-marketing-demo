@@ -69,7 +69,9 @@ export async function judgeRun(run: TeamRun): Promise<JudgeResult | null> {
   const { ctx } = run;
   const modelId = routeModel("judge", { champions: championsFrom(ctx.env) }).model;
   const base =
-    ctx.env.AGENT_MODEL === "scripted" ? teamScriptedModel() : modelFactory(ctx.env)(modelId);
+    ctx.env.AGENT_MODEL === "scripted"
+      ? teamScriptedModel()
+      : modelFactory(ctx.env, ctx.aiPlatform)(modelId);
   let captured: JudgeResult | null = null;
   await generateText({
     model: wrapLanguageModel({ model: base, middleware: forcedToolCallMiddleware }),
@@ -102,7 +104,7 @@ export async function judgeRun(run: TeamRun): Promise<JudgeResult | null> {
         },
       }),
     },
-    toolChoice: { type: "tool", toolName: "score_proposal" },
+    // Its only tool, not forced (ADR-019): a judge that doesn't score leaves the run unscored.
     ...AGENT_GENERATION,
   });
   return captured;

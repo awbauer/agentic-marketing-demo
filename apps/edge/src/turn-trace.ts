@@ -53,6 +53,12 @@ export type TurnTraceOptions = {
   toolCount: number;
   requiredTool?: string;
   route?: TurnRoute;
+  /** Set on Google Cloud, so the route map shows IAP and Vertex AI instead of Cloudflare's hops. */
+  host?: "google-cloud";
+  /** Where the turn's models ran, when it called any (ADR-021). */
+  aiPlatform?: "workers-ai" | "vertex";
+  /** The classifier's labels for the request, and which stage produced them (ADR-020). */
+  classification?: { intents: string[]; by: "rules" | "model" | "rules+model" | "none" };
   timeoutSeconds: number;
   /**
    * The answer to use when a completed turn wrote no text but the caller can say what happened
@@ -89,6 +95,11 @@ export function createTurnTracer(writer: UIMessageStreamWriter, options: TurnTra
     toolCount: options.toolCount,
     ...(options.requiredTool ? { requiredTool: options.requiredTool } : {}),
     ...(options.route ? { route: options.route } : {}),
+    ...(options.host ? { host: options.host } : {}),
+    ...(options.aiPlatform ? { aiPlatform: options.aiPlatform } : {}),
+    ...(options.classification
+      ? { intents: options.classification.intents, classifiedBy: options.classification.by }
+      : {}),
   });
 
   return {

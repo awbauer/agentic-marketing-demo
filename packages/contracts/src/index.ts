@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./host.ts";
+
 export const PROOF_DEFAULTS = Object.freeze({
   workspaceId: "northstar-demo",
   // The only place the orchestrator model is set; the Worker reads it from here. See ADR-005.
@@ -969,6 +971,13 @@ export const TurnTraceEventSchema = z.discriminatedUnion("kind", [
     route: z
       .enum(["model", "confirmation-required", "unsupported", "catalog-unavailable", "memory"])
       .optional(),
+    /** Where the turn ran; absent means Cloudflare (ADR-018). The route map names hops by it. */
+    host: z.enum(["cloudflare", "google-cloud"]).optional(),
+    /** Where the turn's models ran; absent means the host's own (ADR-021). */
+    aiPlatform: z.enum(["workers-ai", "vertex"]).optional(),
+    /** What the classifier labelled the request, and which stage did (ADR-020). */
+    intents: z.array(z.string()).optional(),
+    classifiedBy: z.enum(["rules", "model", "rules+model", "none"]).optional(),
   }),
   z.object({ kind: z.literal("step-start"), at: z.number(), step: z.number().int() }),
   z.object({

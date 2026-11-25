@@ -6,15 +6,18 @@ import {
   type Persona,
 } from "@northstar/architecture";
 import { useEffect, useState } from "react";
+import { useAiPlatform } from "./ai-platform";
 import { useScope } from "./scope";
 
 /**
  * The brand and role every page, chat message and tool call follows. Choosing a brand also
  * withholds the other brands' tools from the model, and the role sets the emphasis of its answers
  * and which decisions the Architecture workspaces offer. Neither changes what Salesforce allows.
+ * The AI platform picks where the models run (ADR-021); the server lists only what it can reach.
  */
 export function ScopeBar() {
   const { scope, setBrand, setPersona } = useScope();
+  const ai = useAiPlatform();
   const [admin, setAdmin] = useState(false);
   useEffect(() => {
     fetch("/api/session")
@@ -30,7 +33,7 @@ export function ScopeBar() {
   }, [admin, scope.persona, setPersona]);
   return (
     <fieldset className="scope-bar">
-      <legend className="sr-only">Brand and role</legend>
+      <legend className="sr-only">Brand, role and AI platform</legend>
       <label>
         <span>Brand</span>
         <select
@@ -58,6 +61,29 @@ export function ScopeBar() {
           ))}
         </select>
       </label>
+      {ai.options && ai.options.platforms.length > 0 ? (
+        <label>
+          <span>AI platform</span>
+          <select
+            value={ai.platform ?? ""}
+            disabled={ai.options.platforms.filter((platform) => platform.available).length < 2}
+            title={ai.options.platforms
+              .filter((platform) => !platform.available && platform.reason)
+              .map((platform) => `${platform.label}: ${platform.reason}`)
+              .join("\n")}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (next === "workers-ai" || next === "vertex") ai.setPlatform(next);
+            }}
+          >
+            {ai.options.platforms.map((platform) => (
+              <option key={platform.id} value={platform.id} disabled={!platform.available}>
+                {platform.available ? platform.label : `${platform.label} (not set up)`}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
     </fieldset>
   );
 }

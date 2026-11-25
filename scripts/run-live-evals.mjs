@@ -318,7 +318,22 @@ async function runCase(model, tools, suite, testCase, trial, judging) {
           ),
           requestedChannel(testCase.prompt),
         ),
-        prepareStep: ({ stepNumber }) => stepToolChoice(toolPlan, stepNumber),
+        // The same scenario toolsets as the orchestrator: what ran, and whether it worked.
+        prepareStep: ({ stepNumber, steps }) =>
+          stepToolChoice(
+            toolPlan,
+            stepNumber,
+            MAX_TURN_STEPS,
+            steps.flatMap((step) =>
+              step.content.flatMap((part) =>
+                part.type === "tool-result"
+                  ? [{ tool: part.toolName, ok: true }]
+                  : part.type === "tool-error"
+                    ? [{ tool: part.toolName, ok: false }]
+                    : [],
+              ),
+            ),
+          ),
         stopWhen: stepCountIs(MAX_TURN_STEPS),
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         timeout: TURN_TIMEOUT,

@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "../Markdown";
-import {
-  GLOSSARY,
-  LEARN_LEDE,
-  LEARN_PARTS,
-  LEARN_TITLE,
-  type LearnPart,
-  type LearnSection,
-} from "./content";
+import { pageHost } from "@northstar/contracts";
+import type { LearnPart, LearnSection } from "./content";
 import { Diagram } from "./diagrams";
+import { learnFor } from "./host";
 import { PART_LESSONS, type PartLesson, SECTION_LESSONS, type TryIt } from "./lessons";
 import { LEARN_REFERENCE, REFERENCE_KINDS, type ReferenceKind } from "./reference";
 import "./learn.css";
+
+// The course as written for the host this page came from (ADR-018).
+const {
+  title: LEARN_TITLE,
+  lede: LEARN_LEDE,
+  parts: LEARN_PARTS,
+  glossary: GLOSSARY,
+} = learnFor(pageHost());
 
 type View = "graph" | "history" | "evaluations" | "journeys" | "architecture" | "team";
 const READ_KEY = "northstar.learn.read.v1";
