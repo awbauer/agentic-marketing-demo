@@ -6,6 +6,7 @@ allowBuilds:
   '@biomejs/biome': true
   core-js-pure: true
   esbuild: true
+  protobufjs: false
   workerd: true
 
 minimumReleaseAgeExclude:

@@ -1,7 +1,9 @@
 // Runs an architecture agent on a real model. The agent gets its catalog prompt (with its hard
-// rules), the model the router binds to its task class, and only the tools its registry grants
-// name. Every tool call passes the gateway; the services behind the tools enforce the rules.
+// rules), the model the router binds to its task class, and only the tools the gateway would
+// allow it (its registry grants, less what an operator withheld). Every tool call passes the
+// gateway; the services behind the tools enforce the rules.
 import {
+  ACTION_RISK,
   type AgentManifest,
   type Brand,
   claimPacket,
@@ -22,10 +24,11 @@ import {
   type World,
 } from "@northstar/architecture";
 import { generateText, type LanguageModel, stepCountIs, streamText, wrapLanguageModel } from "ai";
-import { createWorkersAI } from "workers-ai-provider";
+import type { AiPlatformId } from "@northstar/contracts";
+import { modelPlatform } from "../platform/models";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import { objectView, type RunState, type ToolStep, toolsFor } from "./agent-tools";
-import { type ArchEnv, ArchError, type Ctx } from "./context";
+import { type ArchEnv, ArchError, type Ctx, offerTools } from "./context";
 import { scriptedModel } from "./scripted-model";
 
 export type ModelFactory = (modelId: string) => Exclude<LanguageModel, string>;
@@ -44,20 +47,16 @@ export const AGENT_GENERATION = {
  * The models the agents run on: Workers AI through AI Gateway. `AGENT_MODEL=scripted` selects a
  * scripted stand-in that only the hermetic worker tests set; no deployed environment sets it.
  */
-export function modelFactory(env: ArchEnv): ModelFactory {
+export function modelFactory(env: ArchEnv, aiPlatform?: AiPlatformId): ModelFactory {
   if (env.AGENT_MODEL === "scripted") return () => scriptedModel();
-  const ai = env.AI;
-  if (!ai)
+  const models = modelPlatform(env, aiPlatform);
+  if (!models)
     throw new ArchError(
       503,
       "NO_MODEL",
-      "Workers AI is not bound here, so the agents cannot run. Run `pnpm dev:local` for local development with real models.",
+      "No model is bound here, so the agents cannot run. Run `pnpm dev:local` for local development with real models.",
     );
-  const workersAI = createWorkersAI({
-    binding: ai,
-    ...(env.AI_GATEWAY_ID ? { gateway: { id: env.AI_GATEWAY_ID } } : {}),
-  });
-  return (modelId) => workersAI(modelId as Parameters<typeof workersAI>[0]);
+  return (modelId) => models.chat(modelId);
 }
 
 /** Champion overrides from AGENT_CHAMPIONS, limited to catalog models that can call tools. */
@@ -272,11 +271,19 @@ export async function runModelAgent(
   const prompt = agent.promptId ? promptById(agent.promptId) : undefined;
   if (!prompt) throw new ArchError(400, "BAD_REQUEST", `${agent.id} has no catalog prompt.`);
   const route = modelFor(agent, ctx.env);
-  const model = modelFactory(ctx.env)(route.model);
+  const model = modelFactory(ctx.env, ctx.aiPlatform)(route.model);
   const started = Date.now();
+  // Offered exactly the capabilities the gateway allows this agent on its kind of object and this
+  // brand (agents.cedar); each call is then checked the same way.
+  const kind = agent.scope === "any" ? undefined : agent.scope;
+  const { allowed } = await offerTools(ctx, {
+    principal: { type: "agent", id: agent.id },
+    candidates: Object.keys(ACTION_RISK),
+    resource: { ...(kind ? { kind } : {}), brand: options.brand },
+  });
   const tools = toolsFor({
     ctx,
-    agent,
+    agent: { ...agent, grants: allowed as AgentManifest["grants"] },
     brand: options.brand,
     run: options.run,
     ...(options.runTag ? { runTag: options.runTag } : {}),
@@ -312,11 +319,10 @@ export async function runModelAgent(
   ]
     .filter(Boolean)
     .join("\n\n");
-  // Until the action's own tool has succeeded, it is the tool to call: a model may otherwise
-  // describe the work in prose, or bury the call in its reasoning, without doing it. If a forced
-  // step yields no call at all (the model wanted to read something first), try once more letting it
-  // call any tool; the next step is forced again.
-  const attempt = async (loose: boolean) => {
+  // The agent has only the tools its grants allow (ADR-019), and chooses among them. Its first
+  // step must use one, any one, so it acts rather than describing the work in prose; after that it
+  // reads and works as it sees fit. If it ends without calling anything, it gets one more try.
+  const attempt = async (_retry: boolean) => {
     const result = streamText({
       model: wrapLanguageModel({ model, middleware: forcedToolCallMiddleware }),
       system,
@@ -329,11 +335,9 @@ export async function runModelAgent(
         () => done() && agent.id !== "adversarial-farm",
       ],
       prepareStep: ({ stepNumber }) =>
-        done() || !(primaryTool in tools)
+        done() || !(primaryTool in tools) || stepNumber > 0
           ? {}
-          : loose && stepNumber === 0
-            ? { toolChoice: "required" as const }
-            : { toolChoice: { type: "tool" as const, toolName: primaryTool } },
+          : { toolChoice: "required" as const },
       ...AGENT_GENERATION,
     });
     await result.consumeStream();

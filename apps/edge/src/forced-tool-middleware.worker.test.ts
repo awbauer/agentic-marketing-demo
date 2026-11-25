@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FORCED_TOOL_MAX_OUTPUT_TOKENS,
   forcedToolCallMiddleware,
+  inferToolFromInput,
   normalizeToolName,
   repairForcedToolStep,
   repairToolInput,
@@ -336,5 +337,54 @@ describe("forced tool call middleware", () => {
     expect(withText.calls()).toBe(1);
     expect(withText.parts.some((part) => part.type === "tool-call")).toBe(false);
     expect(withText.parts.at(-1)).toMatchObject({ finishReason: { unified: "stop" } });
+  });
+
+  it("infers which offered tool a leaked call was for, and refuses to guess between equals", () => {
+    const tools = [
+      { name: "get_weather", required: ["city"] },
+      { name: "get_forecast", required: ["city", "days"] },
+      { name: "list_all", required: [] },
+    ];
+    expect(inferToolFromInput('call it {"city":"Boston","days":3}', tools)?.name).toBe(
+      "get_forecast",
+    );
+    expect(inferToolFromInput('{"city":"Boston"}', tools)?.name).toBe("get_weather");
+    expect(inferToolFromInput("{}", tools)).toBeNull();
+    expect(inferToolFromInput("{}", [{ name: "only", required: [] }])?.name).toBe("only");
+    expect(inferToolFromInput("no json here", tools)).toBeNull();
+  });
+
+  it("caps and recovers a step that must call some tool, without knowing which", async () => {
+    const required = { ...params, toolChoice: { type: "required" } } as Params;
+    await expect(
+      transformParams({ params: required, type: "stream", model: {} as WrapOptions["model"] }),
+    ).resolves.toMatchObject({ maxOutputTokens: FORCED_TOOL_MAX_OUTPUT_TOKENS });
+    const { parts, calls } = await run([leaked], required);
+    expect(calls()).toBe(1);
+    expect(parts.find((part) => part.type === "tool-call")).toMatchObject({
+      toolName: "salesforce_summarize_campaign",
+    });
+    const retried = await run([empty, structured], required);
+    expect(retried.calls()).toBe(2);
+  });
+
+  it("recovers a free step's call from reasoning only when the step produced nothing else", async () => {
+    const auto = { ...params, toolChoice: { type: "auto" } } as Params;
+    const { parts, calls } = await run([leaked], auto);
+    expect(calls()).toBe(1);
+    expect(parts.find((part) => part.type === "tool-call")).toMatchObject({
+      toolName: "salesforce_summarize_campaign",
+      input: '{"message":"Summarize the sample campaign"}',
+    });
+    // A step that answered in text is an answer, whatever its reasoning held.
+    const answered: Part[] = [
+      ...leaked.slice(0, -1),
+      { type: "text-start", id: "t" },
+      { type: "text-delta", id: "t", delta: "Here is the summary." },
+      { type: "text-end", id: "t" },
+      leaked.at(-1) as Part,
+    ];
+    const text = await run([answered], auto);
+    expect(text.parts.some((part) => part.type === "tool-call")).toBe(false);
   });
 });

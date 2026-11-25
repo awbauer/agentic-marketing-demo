@@ -47,11 +47,12 @@ Stable commands and their scope are listed in the root [`README.md`](../README.m
 
 ## 4. Reconstruct external state from authoritative read-back
 
-External state can drift independently of Git. Before changing Salesforce or Cloudflare:
+External state can drift independently of Git. Before changing Salesforce, Google Cloud or Cloudflare:
 
 - Read the current evidence in `artifacts/reports/<work-unit-id>/`, but verify any state needed for the next action live.
 - Pass `--target-org northstar-pot` to every Salesforce command. Read the approved proof-org ID from the protected `SF_APPROVED_PROOF_ORG_ID` execution environment; the user's explicit proof classification for this org overrides `Organization.IsSandbox` only for that exact ID.
 - Treat every Salesforce artifact that predates this proof as read-only. Never use or modify Fizi, Agent Two, `ABCampaigns`, `abmcpaug31`, `Cloudflare_MCP`, or another existing artifact without explicit permission.
+- On Google Cloud, change only the `northstar-workbench-*` resources in the proof project (WU-077), and only through `scripts/gcp/`. The organization's policies (load-balancer-only ingress, required invoker IAM, organization-only members, an explicit SSL policy, regional locations) are external constraints: work within them, never ask to relax them.
 - Change only the net-new Northstar resources identified in WU-003. The shared Cloudflare Access policy `AWB` may be attached by its verified ID but must not be renamed, edited, or deleted.
 - Use command-line interfaces only unless the user explicitly authorizes computer or browser control. A human completes login, MFA, and OAuth consent prompts.
 - Keep tokens and generated credentials out of Git, logs, reports, screenshots, and prompts. Missing ephemeral credentials are a human authorization boundary, not a reason to bypass per-user OAuth.
@@ -91,7 +92,7 @@ Before reporting completion or pausing at a human boundary:
 4. Update the plan, active work unit, generated reports, and rollback notes with demonstrated results only.
 5. Run `pnpm security:blocked-words`; stop on missing configuration or any match.
 6. Commit one coherent change, run the blocked-word gate again, push the feature branch, rerun the gate immediately before opening or updating its PR, and never bypass the pre-push hook.
-7. Read back the PR head/body/checks and any deployed Salesforce or Cloudflare state.
+7. Read back the PR head/body/checks and any deployed Salesforce, Google Cloud or Cloudflare state.
 8. State the one precise human action required, if any. Do not hand routine agent work back to the user.
 
 The completion report format in `AGENTS.md` is mandatory. A green local test run alone does not complete a work unit.

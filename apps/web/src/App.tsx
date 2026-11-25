@@ -4,6 +4,7 @@ import {
   currentFocusVersion,
   type GeneratedCampaignImage,
   GeneratedCampaignImageSchema,
+  hostTerms,
   initialOrchestratorState,
   type OperationControls,
   OperationControlsSchema,
@@ -31,19 +32,23 @@ import { GraphView } from "./graph/GraphView";
 import { HistoryView } from "./HistoryView";
 import { LearnView } from "./learn/LearnView";
 import { Markdown } from "./Markdown";
-import { SalesforceAgentsPanel } from "./SalesforceAgents";
-import { ScopeBar } from "./ScopeBar";
-import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
 import { RouteMapPanel } from "./RouteMapPanel";
+import { SalesforceAgentsPanel } from "./SalesforceAgents";
+import { currentAiPlatform } from "./ai-platform";
+import { ScopeBar } from "./ScopeBar";
 import { SourceList } from "./SourceList";
+import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
 import { TechnicalTrace } from "./TechnicalTrace";
 import { ToolActivity } from "./ToolActivity";
+import { TeamView } from "./team/TeamView";
 import { latestRoute } from "./turn-route";
 import { executionTrace } from "./turn-trace";
-import { TeamView } from "./team/TeamView";
 import { UseCasesView } from "./usecases/UseCasesView";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { WriteProgress } from "./WriteProgress";
+
+/** What this host calls its infrastructure (ADR-018). */
+const HOST = hostTerms();
 
 function rawMessageText(message: UIMessage) {
   return message.parts
@@ -1188,7 +1193,11 @@ export function App() {
               event.preventDefault();
               const text = input.trim();
               if (!text || busy || resetting) return;
-              void sendMessage({ text }, { body: { scope } });
+              const aiPlatform = currentAiPlatform();
+              void sendMessage(
+                { text },
+                { body: { scope, ...(aiPlatform ? { aiPlatform } : {}) } },
+              );
               setInput("");
             }}
           >
@@ -1252,7 +1261,7 @@ export function App() {
                 </h3>
                 <p>
                   {openCampaign
-                    ? `For ${openCampaign.title}. Workers AI creates a private seven-day draft; nothing is attached or published.`
+                    ? `For ${openCampaign.title}. ${HOST.imageModel} creates a private seven-day draft; nothing is attached or published.`
                     : "Open a campaign in the chat to create a visual for it. Drafts stay private for seven days."}
                 </p>
               </div>
@@ -1277,10 +1286,10 @@ export function App() {
                     Orchestrator bounded the prompt
                   </li>
                   <li className={imageBusy ? "active" : "complete"}>
-                    Workers AI generated a 1024×1024 PNG
+                    {`${HOST.models} generated a 1024×1024 PNG`}
                   </li>
                   <li className={imageBusy ? "pending" : "complete"}>
-                    R2 stored the private draft and D1 provenance
+                    {`${HOST.objectStore} stored the private draft and ${HOST.database} its provenance`}
                   </li>
                 </ol>
               )}
@@ -1354,7 +1363,7 @@ export function App() {
                       <pre>
                         {JSON.stringify(
                           {
-                            provider: "Cloudflare Workers AI binding",
+                            provider: HOST.imageModel,
                             model: generatedImage.model,
                             input: {
                               campaignId: generatedImage.campaignId,
@@ -1370,7 +1379,10 @@ export function App() {
                               authorizedAssetUrl: generatedImage.imageUrl,
                               expiresAt: generatedImage.expiresAt,
                             },
-                            storage: ["R2 private object", "D1 provenance row"],
+                            storage: [
+                              `${HOST.objectStore} private object`,
+                              `${HOST.database} provenance row`,
+                            ],
                           },
                           null,
                           2,

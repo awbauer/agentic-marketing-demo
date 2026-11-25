@@ -1,10 +1,10 @@
 import { env, SELF } from "cloudflare:test";
 import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
-import { AGENT_REGISTRY, AGENT_TOOL_NAMES } from "@northstar/architecture";
+import { AGENT_REGISTRY, AGENT_TOOL_NAMES, buildTeamPolicies } from "@northstar/architecture";
 import { beforeAll, describe, expect, it } from "vitest";
 import { newRunState, toolsFor } from "./architecture/agent-tools";
-import { authorizeTool, makeCtx } from "./architecture/context";
+import { authorizeTool, chatToolsAllowed, makeCtx, offerTools } from "./architecture/context";
 import { judgeScoreFrom } from "./architecture/judge";
 import { createWorkbenchMcpServer } from "./architecture/mcp";
 import { ArchitectureStore, pruneArchitecture } from "./architecture/store";
@@ -429,9 +429,13 @@ describe("architecture API", () => {
     expect(new Set(registry.body.agents.map((agent: Json) => agent.domain))).toEqual(
       new Set(["commercial", "platform", "partner"]),
     );
-    expect(registry.body.policies.some((policy: Json) => policy.cedar.startsWith("forbid"))).toBe(
-      true,
+    // The real Cedar text, each with the file it lives in.
+    const guard = registry.body.policies.find(
+      (policy: Json) => policy.id === "forbid-out-of-scope-brand",
     );
+    expect(guard).toMatchObject({ effect: "forbid", file: "guards.cedar" });
+    expect(guard.cedar).toContain('@id("forbid-out-of-scope-brand")');
+    expect(registry.body.schema).toContain("action call appliesTo");
     expect((await call("/api/arch/prompts")).body.prompts.length).toBeGreaterThan(8);
     const models = await call("/api/arch/models");
     expect(
@@ -470,7 +474,7 @@ describe("architecture API", () => {
 describe("agentic gateway at the edge", () => {
   it("authorizes a model-called tool as tool:<name> and honors the operator kill switch", async () => {
     const allowed = await authorizeTool(env, "local-evaluator", "get_graph_overview", "t1");
-    expect(allowed).toMatchObject({ decision: "allow", policyId: "agent-orchestrator-tools" });
+    expect(allowed).toMatchObject({ decision: "allow", policyId: "orchestrator-tools" });
     const killed = await authorizeTool(
       { ...env, DISABLED_AGENTS: "orchestrator" },
       "local-evaluator",
@@ -483,6 +487,35 @@ describe("agentic gateway at the edge", () => {
       action: "tool:get_graph_overview",
       decision: "deny",
       principalId: "orchestrator",
+    });
+  });
+
+  it("offers the orchestrator exactly the tools each call would be allowed, by Cedar in workerd", async () => {
+    const scope = { brand: "Lumera Therapeutics", persona: "reviewer" } as const;
+    const context = { intents: ["claims"], done: [] };
+    const names = ["get_graph_overview", "graph_check_clinical_claims", "prepare_deal_release"];
+    const offer = await chatToolsAllowed(env, "offer-user", names, scope, context);
+    // Claims first (orchestrator.cedar): only the claims check is on offer until it has run; the
+    // deal release is another brand's tool and stays out either way.
+    expect(offer.allowed).toEqual(["graph_check_clinical_claims"]);
+    for (const name of names)
+      expect(
+        (await authorizeTool(env, "offer-user", name, `o-${name}`, scope, context)).decision,
+      ).toBe(offer.decisions[name]?.decision);
+  });
+
+  it("offers a lifecycle step its reads and save, and refuses the rest at call time", async () => {
+    const ctx = makeCtx(env, { subject: "offer-user", persona: "marketer", brands: "all" }, "o");
+    const step = { surface: "lifecycle", stage: "build_audience" };
+    const offer = await offerTools(ctx, {
+      principal: { type: "agent", id: "audience-analyst" },
+      candidates: ["team:get_hcp_universe", "team:get_competitors", "team:build_audience"],
+      context: step,
+      extraPolicies: buildTeamPolicies,
+    });
+    expect(offer.allowed).toEqual(["team:get_hcp_universe", "team:build_audience"]);
+    expect(offer.decisions["team:get_competitors"]).toMatchObject({
+      policyId: "lifecycle-build_audience",
     });
   });
 
@@ -696,7 +729,8 @@ describe("orchestration", () => {
     );
     const denied = await post("/api/arch/orchestrations", { flowId: "lumera-congress" });
     expect(denied.status).toBe(403);
-    expect(((await denied.json()) as Json).error.decision.policyId).toBe("default-deny");
+    // A retired agent is withheld by a forbid, so no other policy can open it up again.
+    expect(((await denied.json()) as Json).error.decision.policyId).toBe("forbid-withheld-agent");
     await store.setLifecycle("orchestrator", "monitor", "Restored.", new Date().toISOString());
     const restored = await post("/api/arch/orchestrations", { flowId: "lumera-congress" });
     expect(restored.status).toBe(200);

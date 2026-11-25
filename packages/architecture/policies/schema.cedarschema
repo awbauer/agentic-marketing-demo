@@ -1,0 +1,87 @@
+// The agentic gateway's Cedar schema. Every call that passes the gateway is one request:
+// a principal (a person's role, or an agent acting for them) calls one thing, in a context.
+// scripts/generate-policies.mjs validates every policy file against this schema.
+
+// A signed-in person's role, such as Persona::"compliance". Roles carry no attributes: what a
+// role may do is written in the policies.
+entity Persona;
+
+// An agent: the registry's architecture agents, the chat orchestrator and the campaign team.
+// The gateway fills these attributes from the registry with the operator's overrides applied.
+entity Agent = {
+  // Display name, for decision reasons.
+  name: String,
+  // What the registry grants: capability names for architecture agents, tool names for the team.
+  // Already narrowed by the lifecycle: constrain keeps reads, retire and disable keep nothing.
+  grants: Set<String>,
+  // The kind of object the agent is scoped to, or "any".
+  scope: String,
+  // introduce | test | monitor | constrain | retire
+  lifecycle: String,
+  // The operator's kill switch (DISABLED_AGENTS).
+  disabled: Bool,
+  // Campaign team only: "hub" (the lead) or "spoke".
+  role?: String,
+  // Campaign team spokes only: the tool that saves the spoke's squad deliverable.
+  deliverable?: String,
+};
+
+// A workbench capability, the gateway action an architecture agent or a person takes on a
+// governed object, such as Capability::"author_module". Risk is the registry's ACTION_RISK:
+// read, draft, propose or decide.
+entity Capability = {
+  name: String,
+  risk: String,
+};
+
+// A tool the chat orchestrator's model calls (gateway action tool:<name>), such as
+// Tool::"check_clinical_claims". brand is set for a tool that belongs to one brand.
+entity Tool = {
+  name: String,
+  brand?: String,
+  risk?: String,
+};
+
+// A campaign team tool or a person's decision on a team run (gateway action team:<name>), such
+// as TeamTool::"write_copy" or TeamTool::"decide_proposal". Risk: read, draft or decide.
+entity TeamTool = {
+  name: String,
+  risk: String,
+};
+
+// What a call touches, when the caller knows: the governed object's kind and brand, or the
+// brand a brand-specific tool belongs to.
+type Target = {
+  kind?: String,
+  brand?: String,
+};
+
+type CallContext = {
+  // The signed-in person's role, also when an agent acts for them.
+  persona: String,
+  // The brand chosen in the header, or "all".
+  brand: String,
+  // The brands the person may work on; contains "all" when unrestricted.
+  brands: Set<String>,
+  // Where the call comes from: workbench, chat, team, squad or lifecycle.
+  surface: String,
+  // The chat scenario the request runs under, when the orchestrator knows it.
+  scenario?: String,
+  // The pharma lifecycle step: that step's save tool, such as "propose_concepts".
+  stage?: String,
+  // The request classifier's labels for this turn, such as "claims".
+  intents: Set<String>,
+  // Tools that already ran and worked this turn (chat) or this step (team).
+  done: Set<String>,
+  // Chat: the tools a scenario runs before it drafts in Marketing Cloud (ADR-020).
+  prerequisites?: Set<String>,
+  target?: Target,
+};
+
+// One action. What is called is the resource, so a policy names tools as entities
+// (resource == Tool::"check_clinical_claims") and the registry's grants stay data.
+action call appliesTo {
+  principal: [Persona, Agent],
+  resource: [Capability, Tool, TeamTool],
+  context: CallContext,
+};

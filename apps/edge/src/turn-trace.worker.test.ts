@@ -178,14 +178,15 @@ describe("turn tracer", () => {
     );
   });
 
-  it("sends no tools to text-only steps and only the required tool to forced steps", () => {
+  it("offers a scenario's tools without forcing one, and none on text-only steps", () => {
     expect(stepToolChoice(undefined, 0)).toBeUndefined();
     expect(stepToolChoice(undefined, MAX_TURN_STEPS - 1)).toEqual({
       toolChoice: "none",
       activeTools: [],
     });
+    // The first step must look something up; which tool is the model's choice.
     expect(stepToolChoice("sf_summarize_campaign", 0)).toEqual({
-      toolChoice: { type: "tool", toolName: "sf_summarize_campaign" },
+      toolChoice: "required",
       activeTools: ["sf_summarize_campaign"],
     });
     expect(stepToolChoice("sf_summarize_campaign", 1)).toEqual({

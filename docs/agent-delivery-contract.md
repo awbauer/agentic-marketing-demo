@@ -19,10 +19,10 @@ An agent may mark a work unit `complete` only when:
 
 ## Repository invariants
 
-- `packages/contracts` owns cross-boundary schemas. The web app, Worker, tests, fixtures, Salesforce action wrappers, and HXL mappings consume or validate against the same versioned definitions.
+- `packages/contracts` owns cross-boundary schemas and the host terms (`host.ts`) every surface names infrastructure by. The web app, server (Worker or Cloud Run), tests, fixtures, Salesforce action wrappers, and HXL mappings consume or validate against the same versioned definitions.
 - Agent prompts and tool descriptions are versioned and evaluated like code.
 - Salesforce metadata lives under `salesforce/`; no manually configured behavior is considered delivered until its metadata or reproducible setup record is checked in.
-- Cloudflare proof configuration and its read-back record live under `infra/cloudflare/pot/`.
+- Google Cloud deployment notes live under `infra/gcp/` (the `gcloud` scripts in `scripts/gcp/` are the source of truth); Cloudflare proof configuration and its read-back record live under `infra/cloudflare/pot/`.
 - UI components consume typed tile contracts and shared tokens from `packages/ui`.
 - Demonstration evidence is immutable and stored under `artifacts/evidence/<work-unit-id>/`; secrets and customer data are forbidden there.
 - Architecture changes require a short decision record in `docs/decisions/` that states context, decision, consequences, and superseded assumptions.

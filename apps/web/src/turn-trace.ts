@@ -1,4 +1,6 @@
 import {
+  AI_PLATFORM_TERMS,
+  hostTerms,
   ORCHESTRATOR_TOOLS,
   SALESFORCE_AGENTS,
   SALESFORCE_TOOL_DETAILS,
@@ -9,6 +11,9 @@ import {
 } from "@northstar/contracts";
 import type { UIMessage } from "ai";
 import { turnStats } from "./turn-stats";
+
+/** What this host calls its infrastructure (ADR-018). */
+const HOST = hostTerms();
 
 export type TraceRow = {
   key: string;
@@ -245,8 +250,11 @@ function rowsFromTrace(message: UIMessage, trace: TurnTrace): TraceRow[] {
             detail: [
               event.route && event.route !== "model"
                 ? ROUTE_DETAIL[event.route]
-                : `Model ${event.model}`,
+                : `Model ${event.model}${event.aiPlatform ? ` on ${AI_PLATFORM_TERMS[event.aiPlatform].label}` : ""}`,
               `${plural(event.toolCount, "governed tool")} available`,
+              event.intents?.length
+                ? `classified as ${event.intents.join(", ")}${event.classifiedBy && event.classifiedBy !== "none" ? ` (${event.classifiedBy})` : ""}`
+                : null,
               event.requiredTool
                 ? `routed to ${event.requiredTool.split(" → ").map(readableToolName).join(" → ")}`
                 : null,
@@ -264,7 +272,7 @@ function rowsFromTrace(message: UIMessage, trace: TurnTrace): TraceRow[] {
             key,
             kind: "step",
             label: `Step ${event.step + 1} started`,
-            detail: "Model call sent to Workers AI",
+            detail: `Model call sent to ${HOST.models}`,
             state: "complete",
             elapsed,
           },
@@ -438,7 +446,7 @@ function rowsFromParts(message: UIMessage): TraceRow[] {
           key,
           kind: "step",
           label: `Step ${step} started`,
-          detail: "Model call sent to Workers AI",
+          detail: `Model call sent to ${HOST.models}`,
           state: "complete",
         },
       ];

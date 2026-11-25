@@ -5,6 +5,10 @@
  */
 
 import type { Brand } from "@northstar/architecture";
+import { hostTerms } from "@northstar/contracts";
+
+/** What this host calls its infrastructure (ADR-018). */
+const HOST = hostTerms();
 
 export type Team = "Marketing" | "Sales" | "Service";
 export type Industry = "Financial services" | "Life sciences";
@@ -15,7 +19,7 @@ export type SystemKind =
   | "Knowledge graph"
   | "MCP server"
   | "External API"
-  | "Workers AI"
+  | "Models"
   | "Workbench";
 
 export type UseCaseSystem = { name: string; kind: SystemKind; role: string };
@@ -71,8 +75,9 @@ const READINESS_AGENT: UseCaseSystem = {
   role: "Custom agent: campaign context, consent summary, content validation (Apex)",
 };
 const ORCHESTRATOR: UseCaseSystem = {
-  name: "Northstar orchestrator (gpt-oss-20b)",
-  kind: "Workers AI",
+  // Vertex AI has no gpt-oss-20b, so the orchestrator runs on 120b on Google Cloud (ADR-018).
+  name: `Northstar orchestrator (${HOST.id === "google-cloud" ? "gpt-oss-120b" : "gpt-oss-20b"})`,
+  kind: "Models",
   role: "Routes the request, calls the tools in order, writes the answer",
 };
 
@@ -990,8 +995,7 @@ export const USE_CASES: UseCase[] = [
     title: "Campaign visual, attached in Salesforce",
     team: "Marketing",
     status: "available",
-    summary:
-      "Generate an on-brand image with Workers AI and attach the one you approve to the campaign.",
+    summary: `Generate an on-brand image with ${HOST.imageModel} and attach the one you approve to the campaign.`,
     scenario:
       "A marketer needs a hero image for the campaign and wants it stored with the campaign record.",
     prompts: [
@@ -1001,7 +1005,7 @@ export const USE_CASES: UseCase[] = [
       },
     ],
     systems: [
-      { name: "Workers AI (FLUX)", kind: "Workers AI", role: "Image generation" },
+      { name: HOST.imageModel, kind: "Models", role: "Image generation" },
       {
         name: "NorthstarAttachCampaignImage",
         kind: "Salesforce action",
@@ -1009,8 +1013,8 @@ export const USE_CASES: UseCase[] = [
       },
     ],
     flow: [
-      { from: "Workspace", to: "Workers AI", carries: "A governed image prompt" },
-      { from: "Workers AI", to: "Workspace", carries: "Draft images (private)" },
+      { from: "Workspace", to: HOST.models, carries: "A governed image prompt" },
+      { from: HOST.models, to: "Workspace", carries: "Draft images (private)" },
       { from: "You", to: "Salesforce", carries: "Confirmed attachment, hash-verified" },
     ],
     writes: "A file on the Salesforce Campaign, only after you confirm.",

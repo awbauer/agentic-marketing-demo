@@ -33,6 +33,17 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "apps/edge/src/surface.ts",
     "salesforce/workbench-surface/",
   ],
+  "two-hosts": [
+    "apps/edge/src/app.ts",
+    "apps/edge/src/platform/",
+    "packages/contracts/src/host.ts",
+    "apps/gcp/",
+    "scripts/gcp/",
+    "infra/gcp/",
+    "docs/decisions/ADR-018-google-cloud-target.md",
+    "docs/decisions/ADR-021-ai-platform-apart-from-host.md",
+    "apps/web/src/ai-platform.ts",
+  ],
   workspace: [
     "apps/edge/src/working-set.ts",
     "apps/edge/src/focus.ts",
@@ -56,7 +67,11 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "salesforce/force-app/main/default/classes/NorthstarValidateCampaignContent.cls",
     "salesforce/force-app/main/default/classes/NorthstarCreateCampaignReviewRequest.cls",
   ],
-  routing: ["apps/edge/src/turn-policy.ts"],
+  routing: [
+    "apps/edge/src/turn-policy.ts",
+    "apps/edge/src/classifier.ts",
+    "docs/decisions/ADR-019-scoped-tools-not-forced-calls.md",
+  ],
   reliability: ["apps/edge/src/forced-tool-middleware.ts", "apps/edge/src/turn-trace.ts"],
   governance: [
     "apps/edge/src/draft-review.ts",
@@ -152,6 +167,9 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "apps/edge/src/architecture/api.ts",
     "apps/edge/src/architecture/mcp.ts",
     "apps/edge/src/architecture/store.ts",
+    "packages/architecture/src/cedar/",
+    "packages/architecture/policies/",
+    "scripts/generate-policies.mjs",
     "migrations/0006_architecture_roadmap.sql",
   ],
   lifecycle: [
@@ -214,6 +232,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
 /** Roots whose code files (.ts, .tsx, .mjs, .cls) must each be mapped above or listed as untaught. */
 export const TAUGHT_ROOTS = [
   "apps/edge/src/",
+  "apps/gcp/",
   "apps/web/src/",
   "packages/",
   "salesforce/force-app/",

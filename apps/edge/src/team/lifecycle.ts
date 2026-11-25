@@ -45,6 +45,7 @@ import { type ModelMessage, stepCountIs, streamText, tool, wrapLanguageModel } f
 import { z } from "zod";
 import { AGENT_GENERATION } from "../architecture/agent-runtime";
 import { ArchError, type Ctx, invoke, overridesFor } from "../architecture/context";
+import { storeLabel } from "../platform/data";
 import { ISO } from "../architecture/objects";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import { settle } from "./director";
@@ -66,6 +67,7 @@ import {
   teamModels,
   addUsage,
 } from "./run";
+import { serverHost } from "../platform/models";
 
 /** Who each person step is, as a party on the message bus. */
 export const GATE_PARTY: Record<TeamGate, TeamParty> = {
@@ -295,7 +297,8 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       system: systemFor(run.brief),
       messages,
       tools,
-      toolChoice: { type: "tool", toolName: "lifecycle_step" },
+      // lifecycle_step is how the lead acts; it isn't forced, and a turn that ends in prose gets
+      // a nudge (ADR-019).
       stopWhen: [stepCountIs(16), halted],
       ...AGENT_GENERATION,
     });
@@ -305,7 +308,8 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       messages.push(...(await result.responseMessages));
     } catch (error) {
       const cause = streamError ?? error;
-      if (!isToolChoiceViolation(cause)) throw explainModelError(cause, run.provider);
+      if (!isToolChoiceViolation(cause))
+        throw explainModelError(cause, run.provider, serverHost(run.ctx.env));
       console.warn("[team] the lifecycle lead skipped its required call; nudging it");
     }
   }
@@ -383,7 +387,7 @@ export async function startLifecycleRun(
               (agent) => policy.principal.ids !== "*" && policy.principal.ids.includes(agent.id),
             ),
         ).length,
-        store: "D1",
+        store: storeLabel(ctx.env),
         scripted: ctx.env.AGENT_MODEL === "scripted",
       },
     });

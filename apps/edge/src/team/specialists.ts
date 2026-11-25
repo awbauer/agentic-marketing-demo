@@ -5,6 +5,8 @@
 import {
   assetChoices,
   type Brand,
+  buildTeamPolicies,
+  type GatewayContext,
   copyProblems,
   defineTerm,
   SEMANTIC_METRICS,
@@ -36,6 +38,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { AGENT_GENERATION } from "../architecture/agent-runtime";
+import { offerTools } from "../architecture/context";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import {
   addUsage,
@@ -48,6 +51,7 @@ import {
   type TeamRun,
   teamModel,
 } from "./run";
+import { serverHost } from "../platform/models";
 
 const channel = z.enum(MEDIA_CHANNELS);
 const specialist = z.enum(TEAM_SPECIALISTS);
@@ -231,6 +235,16 @@ function used(run: TeamRun, agent: TeamSpecialist, tool: string, result: Semanti
  * The spokes' data tools. Each is a named query on the semantic layer: the agent gets governed
  * rows plus the definition of every metric in them, never a raw table.
  */
+/** A squad spoke's call, checked in the squad context its tools were offered in (squad.cedar). */
+const SQUAD: GatewayContext = { surface: "squad" };
+const squadGated = (
+  run: TeamRun,
+  agent: TeamSpecialist,
+  tool: string,
+  input: unknown,
+  body: () => Promise<unknown> | unknown,
+) => gated(run, agent, tool, input, body, SQUAD);
+
 function dataTools(run: TeamRun, agent: TeamSpecialist): ToolSet {
   const brand = run.brief.brand;
   const market = teamMarket(brand);
@@ -238,7 +252,7 @@ function dataTools(run: TeamRun, agent: TeamSpecialist): ToolSet {
     tool({
       description,
       inputSchema: z.object({}),
-      execute: async (input) => gated(run, agent, name, input, value),
+      execute: async (input) => squadGated(run, agent, name, input, value),
     });
   const query = (name: string, entity: SemanticEntityId) =>
     used(run, agent, name, semanticQuery(brand, { entity }));
@@ -341,10 +355,7 @@ function dataTools(run: TeamRun, agent: TeamSpecialist): ToolSet {
       },
     ),
   };
-  const granted = teamAgentById(agent)?.tools ?? [];
-  return Object.fromEntries(
-    Object.entries(all).filter(([name]) => granted.includes(name as never)),
-  );
+  return all;
 }
 
 function deliverableTool(run: TeamRun, agent: TeamSpecialist, saved: { done: boolean }): ToolSet {
@@ -365,7 +376,7 @@ function deliverableTool(run: TeamRun, agent: TeamSpecialist, saved: { done: boo
       inputSchema: DELIVERABLE_SCHEMAS[name] as z.ZodType<Record<string, unknown>>,
       execute: async (raw) => {
         const input = normalize(name, raw, run.brief.brand);
-        return gated(run, agent, name, input, () => {
+        return squadGated(run, agent, name, input, () => {
           const problems =
             agent === "audience-analyst"
               ? researchProblems(run.brief.brand, input as never)
@@ -418,7 +429,7 @@ function sharedTools(run: TeamRun, agent: TeamSpecialist, asked: { count: number
       description: "Read a teammate's latest saved work.",
       inputSchema: z.object({ agent: specialist }),
       execute: async (input) =>
-        gated(run, agent, "read_team_output", input, () => ({
+        squadGated(run, agent, "read_team_output", input, () => ({
           agent: input.agent,
           work: run.outputs[input.agent] ?? null,
           note: run.outputs[input.agent] ? undefined : `${input.agent} has not saved work yet.`,
@@ -432,7 +443,7 @@ function sharedTools(run: TeamRun, agent: TeamSpecialist, asked: { count: number
         ids: z.array(z.string()).optional(),
       }),
       execute: async (input) =>
-        gated(run, agent, "query_semantic_layer", input, () =>
+        squadGated(run, agent, "query_semantic_layer", input, () =>
           used(
             run,
             agent,
@@ -446,7 +457,7 @@ function sharedTools(run: TeamRun, agent: TeamSpecialist, asked: { count: number
         'Look up what a business term means here (for example "CPC", "reach", "lapsed loyalty members" or "paid social"): the governed metric or entity, its definition and its formula.',
       inputSchema: z.object({ term: z.string().min(2) }),
       execute: async (input) =>
-        gated(run, agent, "define_term", input, () => {
+        squadGated(run, agent, "define_term", input, () => {
           const matches = defineTerm(run.brief.brand, input.term);
           run.emit({
             type: "semantic",
@@ -469,7 +480,7 @@ function sharedTools(run: TeamRun, agent: TeamSpecialist, asked: { count: number
         "Ask one teammate one specific question about their work. They answer from what they have saved.",
       inputSchema: z.object({ to: specialist, question: z.string().min(5) }),
       execute: async (input) =>
-        gated(run, agent, "ask_teammate", input, async () => {
+        squadGated(run, agent, "ask_teammate", input, async () => {
           if (input.to === agent) return { error: "Ask a teammate, not yourself." };
           if (asked.count >= QUESTION_LIMIT)
             return {
@@ -491,7 +502,9 @@ export async function answerTeammate(
   from: TeamSpecialist,
   question: string,
 ): Promise<string> {
-  const gate = await gated(run, agent, "answer_teammate", { from, question }, () => ({ ok: true }));
+  const gate = await squadGated(run, agent, "answer_teammate", { from, question }, () => ({
+    ok: true,
+  }));
   if (gate && typeof gate === "object" && "error" in gate) {
     const text = `${TEAM_PARTY_LABELS[agent]} could not answer: ${String((gate as { error: unknown }).error)}`;
     say(run, agent, from, "answer", text);
@@ -543,11 +556,23 @@ export async function runSpecialist(
     run.plan?.assignments.find((item) => item.agent === agent)?.dependsOn ?? []
   ).filter((id) => id !== agent && run.outputs[id]);
   setStatus(run, agent, feedback ? "revising" : "working");
-  const tools: ToolSet = {
+  // Every squad tool a spoke could use; the gateway decides which this spoke is offered, and the
+  // same decision allows each call (team.cedar grants, narrowed by squad.cedar).
+  const candidates: ToolSet = {
     ...dataTools(run, agent),
     ...sharedTools(run, agent, asked),
     ...deliverableTool(run, agent, saved),
   };
+  const { allowed } = await offerTools(run.ctx, {
+    principal: { type: "agent", id: agent },
+    candidates: Object.keys(candidates).map((name) => `team:${name}`),
+    context: SQUAD,
+    resource: { brand: run.brief.brand },
+    extraPolicies: buildTeamPolicies,
+  });
+  const tools: ToolSet = Object.fromEntries(
+    Object.entries(candidates).filter(([name]) => allowed.includes(`team:${name}`)),
+  );
   const previous = run.outputs[agent];
   const prompt = [
     `Your assignment from the campaign lead: ${directive}`,
@@ -566,7 +591,7 @@ export async function runSpecialist(
   const model = teamModel(run, agent);
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
   // A model can end a step in prose without calling a tool, which ends the loop. Give it up to two
-  // nudges, each forcing the save from its first step.
+  // nudges, each offering only the save (ADR-019).
   for (let attempt = 0; attempt < 3 && !saved.done; attempt += 1) {
     if (attempt > 0)
       messages.push({
@@ -586,16 +611,17 @@ export async function runSpecialist(
       messages,
       tools,
       stopWhen: [stepCountIs(10), () => saved.done],
-      // Read first. If the piece builds on work another spoke has saved, the second step is a
-      // question to that spoke (the model writes it). From the fifth step, only saving is left.
+      // The spoke's own tools, its choice of order: the first step must use one of them, and from
+      // the fifth step (or on a nudge) only saving is on offer. Asking an upstream spoke first is
+      // guidance in its prompt, not a mandate.
       prepareStep: ({ stepNumber }) =>
         saved.done
           ? {}
           : attempt > 0 || stepNumber >= 4
-            ? { toolChoice: { type: "tool" as const, toolName: deliverable } }
-            : stepNumber === 1 && upstream.length > 0 && asked.count === 0
-              ? { toolChoice: { type: "tool" as const, toolName: "ask_teammate" } }
-              : { toolChoice: "required" as const },
+            ? { activeTools: [deliverable] }
+            : stepNumber === 0
+              ? { toolChoice: "required" as const }
+              : {},
       ...AGENT_GENERATION,
     });
     let usage: Awaited<typeof result.totalUsage>;
@@ -612,7 +638,8 @@ export async function runSpecialist(
       // The model wouldn't make the call this step required; the next attempt nudges it. Any
       // other failure (a provider or gateway error) ends the run with its real reason.
       const cause = streamError ?? error;
-      if (!isToolChoiceViolation(cause)) throw explainModelError(cause, run.provider);
+      if (!isToolChoiceViolation(cause))
+        throw explainModelError(cause, run.provider, serverHost(run.ctx.env));
       run.emit({
         type: "tool",
         agent,

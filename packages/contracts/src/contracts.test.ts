@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { routingCases } from "../../evals/src/cases";
 import {
   classifyPolicyIntent,
+  HOST_META_NAME,
+  hostTerms,
+  pageHost,
   initialOrchestratorState,
   OrchestratorStateSchema,
   POLICY_RESPONSES,
@@ -147,5 +150,25 @@ describe("follow-up policy replies", () => {
     expect(policyResponse("confirmation-required", null)).toBe(
       POLICY_RESPONSES["confirmation-required"],
     );
+  });
+});
+
+describe("host terms (ADR-018)", () => {
+  const page = (content?: string) => ({
+    querySelector: (selector: string) =>
+      content && selector === `meta[name="${HOST_META_NAME}"]`
+        ? ({ getAttribute: () => content } as unknown as Element)
+        : null,
+  });
+  it("reads the host from the page and falls back to Cloudflare", () => {
+    expect(pageHost(page("google-cloud"))).toBe("google-cloud");
+    expect(pageHost(page())).toBe("cloudflare");
+    expect(pageHost(page("somewhere-else"))).toBe("cloudflare");
+    expect(hostTerms("google-cloud")).toMatchObject({
+      signIn: "Identity-Aware Proxy",
+      models: "Vertex AI",
+      modelGateway: null,
+    });
+    expect(hostTerms("cloudflare")).toMatchObject({ signIn: "Cloudflare Access", database: "D1" });
   });
 });

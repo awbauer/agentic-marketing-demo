@@ -1,36 +1,41 @@
 // A squad run: the brief, what each spoke has saved, and the event log every message and tool
 // call lands on. The lead and the spokes share this state the way
 // an agency shares a project folder; each agent still reaches it only through its tools.
+
+import { createOpenAI } from "@ai-sdk/openai";
 import {
   buildTeamPolicies,
   type CampaignBrief,
   type CampaignStrategy,
+  type LifecycleState,
+  newLifecycle,
   TEAM_AGENTS,
+  TEAM_PROVIDER_LABELS,
+  TEAM_PROVIDERS,
+  TEAM_SPECIALISTS,
   type TeamAgentId,
   type TeamAgentState,
   type TeamEvent,
+  type TeamGate,
   type TeamMessageKind,
+  type TeamMode,
   type TeamOutputs,
   type TeamParty,
   type TeamPlan,
-  type TeamGate,
-  TEAM_SPECIALISTS,
-  TEAM_PROVIDER_LABELS,
-  TEAM_PROVIDERS,
   type TeamProvider,
   type TeamSpecialist,
   type TeamToolStep,
-  type LifecycleState,
-  newLifecycle,
-  type TeamMode,
+  teamProviderLabel,
+  type GatewayContext,
 } from "@northstar/architecture";
+import type { HostId } from "@northstar/contracts";
 import { type LanguageModel, type LanguageModelMiddleware, wrapLanguageModel } from "ai";
 import { modelFactory } from "../architecture/agent-runtime";
 import { ArchError, type Ctx, invoke } from "../architecture/context";
-import { createOpenAI } from "@ai-sdk/openai";
+import { modelPlatform, serverHost } from "../platform/models";
 import { anthropicModel, DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
-import { bindingCanFetch, GATEWAY_HELD_KEY, gatewayFetch } from "./gateway";
 import { modelPrice } from "./evals";
+import { bindingCanFetch, GATEWAY_HELD_KEY, gatewayFetch } from "./gateway";
 import { teamScriptedModel } from "./scripted";
 
 export type Emit = (event: TeamEvent) => void;
@@ -245,10 +250,13 @@ export function teamModels(
       worker: env.OPENAI_WORKER_MODEL ?? MODEL_TIERS.openai.worker,
     },
   }[provider];
+  // On Vertex the open-model tier is served by the models Vertex hosts; show those (ADR-018).
+  const models = provider === "cloudflare" ? modelPlatform(ctx.env, ctx.aiPlatform) : null;
+  const served = (id: string) => (models ? models.served(id) : id);
   return Object.fromEntries(
     TEAM_AGENTS.map((agent) => [
       agent.id,
-      agent.tier === "coordinator" ? tiers.coordinator : tiers.worker,
+      served(agent.tier === "coordinator" ? tiers.coordinator : tiers.worker),
     ]),
   ) as Record<TeamAgentId, string>;
 }
@@ -257,8 +265,13 @@ export function teamModels(
 export function providerStatus(ctx: Ctx) {
   const env = providerEnv(ctx);
   const scripted = ctx.env.AGENT_MODEL === "scripted";
-  const vendor = (): { available: boolean; reason?: string } => {
+  const platform = modelPlatform(ctx.env);
+  const vendor = (id: "anthropic" | "openai"): { available: boolean; reason?: string } => {
     if (scripted) return { available: true };
+    if (platform?.vendor) {
+      const route = platform.vendor(id, {});
+      return "reason" in route ? { available: false, reason: route.reason } : { available: true };
+    }
     if (!ctx.env.AI)
       return { available: false, reason: "The AI binding is not set here. Run pnpm dev:local." };
     if (!ctx.env.AI_GATEWAY_ID)
@@ -276,21 +289,39 @@ export function providerStatus(ctx: Ctx) {
   };
   const status: Record<TeamProvider, { available: boolean; reason?: string }> = {
     cloudflare:
-      scripted || ctx.env.AI
+      scripted || platform
         ? { available: true }
-        : { available: false, reason: "Workers AI is not bound here. Run pnpm dev:local." },
-    anthropic: vendor(),
-    openai: vendor(),
+        : {
+            available: false,
+            reason:
+              serverHost(ctx.env) === "google-cloud"
+                ? "Vertex AI is not configured here. Set GCP_PROJECT and sign in to Google Cloud."
+                : "Workers AI is not bound here. Run pnpm dev:local.",
+          },
+    anthropic: vendor("anthropic"),
+    openai: vendor("openai"),
   };
-  return TEAM_PROVIDERS.map((id) => ({
-    id,
-    label: TEAM_PROVIDER_LABELS[id],
-    ...status[id],
-    models: teamModels(ctx, id),
-    gateway: ctx.env.AI_GATEWAY_ID ?? null,
-    /** Vendor keys are the ones stored on the gateway; Workers AI needs none. */
-    keys: id === "cloudflare" ? "none needed" : "stored on the AI Gateway",
-  }));
+  // The open-model tier runs on the AI platform chosen in the top bar; the vendors keep the
+  // server's own route (the AI Gateway on Cloudflare, Claude on Vertex on Google Cloud).
+  const chosen = modelPlatform(ctx.env, ctx.aiPlatform) ?? platform;
+  return TEAM_PROVIDERS.map((id) => {
+    const vertex = (id === "cloudflare" ? chosen : platform)?.kind === "vertex";
+    return {
+      id,
+      label: teamProviderLabel(id, vertex ? "google-cloud" : "cloudflare"),
+      ...status[id],
+      models: teamModels(ctx, id),
+      gateway: vertex ? null : (ctx.env.AI_GATEWAY_ID ?? null),
+      /** Vendor keys are the ones stored on the gateway; Workers AI needs none. Vertex uses IAM. */
+      keys: vertex
+        ? serverHost(ctx.env) === "google-cloud"
+          ? "none needed (Google Cloud IAM)"
+          : "none stored (Workload Identity Federation)"
+        : id === "cloudflare"
+          ? "none needed"
+          : "stored on the AI Gateway",
+    };
+  });
 }
 
 /** Refuses a provider that can't run here, before anything streams. */
@@ -316,7 +347,26 @@ export function teamModel(
   const { ctx, provider } = run;
   if (ctx.env.AGENT_MODEL === "scripted") return teamScriptedModel();
   const modelId = teamModels(ctx, provider)[agent];
-  if (provider === "cloudflare") return modelFactory(ctx.env)(modelId);
+  if (provider === "cloudflare") return modelFactory(ctx.env, ctx.aiPlatform)(modelId);
+  const platform = modelPlatform(ctx.env);
+  if (platform?.vendor) {
+    const route = platform.vendor(provider, { run: run.id, agent });
+    if ("reason" in route) throw new ArchError(503, "PROVIDER_UNAVAILABLE", route.reason);
+    return provider === "anthropic"
+      ? anthropicModel({
+          apiKey: GATEWAY_HELD_KEY,
+          model: modelId,
+          effort: effortFor(agent),
+          fetch: route.fetch,
+        })
+      : openaiModel({
+          apiKey: GATEWAY_HELD_KEY,
+          model: modelId,
+          effort: effortFor(agent),
+          fetch: route.fetch,
+          promptCacheKey: `${run.id}:${agent}`,
+        });
+  }
   const env = providerEnv(ctx);
   if (!ctx.env.AI || !ctx.env.AI_GATEWAY_ID)
     throw new ArchError(503, "NO_GATEWAY", "Vendor models run only through the AI Gateway.");
@@ -339,14 +389,24 @@ export function teamModel(
       });
 }
 
-/** The gateway check for one team tool call, as `team:<tool>`, on the brief's brand. */
-export async function authorizeTeam(ctx: Ctx, agent: TeamAgentId, tool: string, brand = "") {
+/**
+ * The gateway check for one team tool call, as `team:<tool>`, on the brief's brand, in the
+ * context the tool was offered in (a squad spoke's work, or a lifecycle step).
+ */
+export async function authorizeTeam(
+  ctx: Ctx,
+  agent: TeamAgentId,
+  tool: string,
+  brand = "",
+  context: GatewayContext = {},
+) {
   const { decision } = await invoke(
     ctx,
     {
       principal: { type: "agent", id: agent },
       action: `team:${tool}`,
       ...(brand ? { resource: { brand: brand as never } } : {}),
+      context: { surface: "team", ...context },
     },
     () => null,
     { extraPolicies: buildTeamPolicies },
@@ -364,10 +424,11 @@ export async function gated(
   tool: string,
   input: unknown,
   body: () => Promise<unknown> | unknown,
+  context: GatewayContext = {},
 ): Promise<unknown> {
   let decision: TeamToolStep["decision"];
   try {
-    decision = await authorizeTeam(run.ctx, agent, tool, run.brief.brand);
+    decision = await authorizeTeam(run.ctx, agent, tool, run.brief.brand, context);
   } catch (failure) {
     const reason = failure instanceof Error ? failure.message : String(failure);
     const extra = failure instanceof ArchError ? failure.extra.decision : undefined;
@@ -532,8 +593,20 @@ export function metered(
  * A provider or gateway failure in words a person can act on. The most likely one when switching
  * to a vendor is a missing stored key: the gateway answers 2044 because requests never carry one.
  */
-export function explainModelError(error: unknown, provider: TeamProvider): Error {
+export function explainModelError(
+  error: unknown,
+  provider: TeamProvider,
+  host: HostId = "cloudflare",
+): Error {
   const message = error instanceof Error ? error.message : String(error);
+  if (host === "google-cloud") {
+    const label = teamProviderLabel(provider, host);
+    if (/\b404\b|not found or your project does not have access/i.test(message))
+      return new Error(
+        `${label} is not enabled for this project. Enable the model in Vertex AI Model Garden, then run again.`,
+      );
+    return new Error(`${label} call failed on Vertex AI: ${message}`);
+  }
   const detail = JSON.stringify((error as { error?: unknown })?.error ?? "");
   if (/2044|provider credentials are required/i.test(`${message} ${detail}`))
     return new Error(

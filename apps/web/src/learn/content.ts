@@ -133,6 +133,26 @@ const R = {
     url: "https://modelcontextprotocol.io/specification/2025-06-18",
     kind: "Spec",
   },
+  cloudRun: {
+    label: "Cloud Run documentation",
+    url: "https://cloud.google.com/run/docs",
+    kind: "Docs",
+  },
+  firestore: {
+    label: "Firestore documentation",
+    url: "https://cloud.google.com/firestore/docs",
+    kind: "Docs",
+  },
+  vertexGptOss: {
+    label: "gpt-oss-120b on Vertex AI (managed API)",
+    url: "https://cloud.google.com/vertex-ai/generative-ai/docs/maas/openai/gpt-oss-120b",
+    kind: "Docs",
+  },
+  iapCloudRun: {
+    label: "Identity-Aware Proxy for Cloud Run",
+    url: "https://cloud.google.com/iap/docs/enabling-cloud-run",
+    kind: "Docs",
+  },
   cfAgents: {
     label: "Cloudflare Agents SDK",
     url: "https://developers.cloudflare.com/agents/",
@@ -177,6 +197,11 @@ const R = {
   aiSdk: {
     label: "AI SDK: introduction",
     url: "https://ai-sdk.dev/docs/introduction",
+    kind: "Docs",
+  },
+  aiSdkRegistry: {
+    label: "AI SDK: provider and model management (provider registry)",
+    url: "https://ai-sdk.dev/docs/ai-sdk-core/provider-management",
     kind: "Docs",
   },
   aiSdkTools: {
@@ -432,6 +457,7 @@ Every evidence path an answer used is shown twice: in words under the answer, an
         body: `The **orchestrator** is a Cloudflare **Agents SDK** chat agent running in a **Durable Object**: a single-threaded, stateful instance with its own SQLite storage.
 - Each user gets their own instance, keyed by a hash of their Access identity and the workspace, so conversations and history are isolated by construction.
 - Each turn streams to the browser over a WebSocket, and the stream is **resumable** if the tab reconnects.
+- On Google Cloud the same class runs in a Node agent host that speaks the same protocol, with each chat's storage saved to Cloud Storage (see *Two hosts*).
 
 A turn runs a **tool loop** of up to 6 steps. On each step the model either calls a tool or writes the answer. Its tools come from four MCP servers, connected per turn: Salesforce, campaign context, the knowledge graph, and external services (public holidays and weather alerts). The orchestrator decides which tools are available on each step (see *Routing*) and records a **turn trace** of every event.
 
@@ -451,6 +477,53 @@ Around the loop, the orchestrator also handles the events the model must not: it
           "“Behind the scenes · technical trace” at the top of each answer",
         ],
         resources: [R.cfAgents, R.cfChatAgents, R.durableObjects, R.aiSdk, R.react],
+      },
+      {
+        id: "two-hosts",
+        title: "Two hosts: Cloudflare and Google Cloud",
+        summary:
+          "The same code runs as a Cloudflare Worker or as a Node server on Cloud Run, behind a thin platform seam.",
+        body: `The workbench can run on either of two hosts from the same commit. On **Cloudflare** it is one Worker; on **Google Cloud** it is one Node server on **Cloud Run**. Nothing in the routes, the orchestrator, the gateway, or the agents knows which host it is on (ADR-018).
+
+**The seam.** Only four things differ between hosts, and each sits behind a small interface in \`apps/edge/src/platform/\`:
+
+| | Cloudflare | Google Cloud |
+| --- | --- | --- |
+| The app's tables (audit, image drafts, architecture, squad library) | D1 | Firestore |
+| Models (the default; the top bar can switch) | Workers AI through AI Gateway, or Vertex AI | Vertex AI: gpt-oss-120b as a managed model, Gemini images, Claude |
+| Sign-in | Cloudflare Access | Identity-Aware Proxy, plus a members list in Firestore |
+| Chats | A Durable Object per user | A Node agent host, each chat saved to Cloud Storage |
+
+The feature code asks \`dataPlatform(env)\` for repositories and \`modelPlatform(env, choice)\` for models. On Cloudflare the repositories are D1; the GCP host puts Firestore into the environment instead. The HTTP routes live in \`app.ts\`, and each host supplies only what it alone has: where chats run, how static files are served, and what readiness reports.
+
+**The AI platform is chosen apart from the host (ADR-021).** Workers AI and Vertex AI are both AI SDK providers in one provider registry, so the same code asks for \`workers-ai:@cf/openai/gpt-oss-120b\` or \`vertex:@cf/openai/gpt-oss-120b\` the same way. The **AI platform** menu in the top bar, beside Brand and Run as, lists what this server can reach and sends the choice with every chat message and workspace request. A Cloudflare deployment offers Workers AI and, once it holds Google credentials, Vertex AI too; Google Cloud offers Vertex AI. The Worker reaches Vertex without a Google key, through **Workload Identity Federation**: it signs its own short-lived token, and Google's Security Token Service exchanges it for an hour's access as a service account that may only call Vertex AI. The route map and the trace name the platform each turn actually ran on: a turn on Vertex has no AI Gateway hop, whichever host served it.
+
+**Chats without Durable Objects.** The orchestrator extends the Agents SDK's chat agent. On Google Cloud the server bundle swaps that one import for a Node implementation that speaks the same WebSocket protocol, so the browser's \`useAgentChat\` and the orchestrator itself are unchanged. A chat keeps all its storage (messages, state, turn history, Salesforce tokens) in one in-memory SQLite database, as a Durable Object does. After each change the host saves that database to Cloud Storage, and the save only succeeds if nobody else saved the chat since it was loaded. One Cloud Run instance with session affinity keeps each chat on a single writer.
+
+**Models.** Vertex AI serves gpt-oss-120b as a managed model, so the agents run the model family they were evaluated on. Vertex has no gpt-oss-20b, so the chat orchestrator, which runs 20b on Cloudflare, runs 120b here, as do the catalog's other Workers AI models; the trace names the model actually served. Campaign images come from Gemini's image model. The answer-quality judge, which uses Cloudflare's Clef model on Workers AI, is gpt-oss answering the same rubric. The squad's Anthropic provider reaches Claude on Vertex; its OpenAI provider stays off on Google Cloud until it is approved.
+
+**Sign-in.** IAP signs each request it lets through. The server checks that assertion itself, then looks the email up in Firestore's \`members\` collection for the role, because IAP carries no role. A request that reaches the service without IAP is refused.
+
+**Salesforce.** On Cloudflare, per-user Salesforce OAuth goes through an Access MCP portal. On Google Cloud the chat connects to Salesforce's hosted MCP server directly, with OAuth and PKCE, and stores the tokens encrypted in the chat's own storage. The Lightning surface needs an Access token, so it stays on Cloudflare.
+
+**The page names its host.** One table in \`packages/contracts/src/host.ts\` says what each host calls its sign-in, models, database, storage and scheduler. The Google Cloud server tags the page it serves with \`<meta name="northstar-host" content="google-cloud">\`; the Worker serves the page untouched. The browser reads the tag once, so the same build says *Identity-Aware Proxy*, *Vertex AI* and *Firestore* on Google Cloud and *Cloudflare Access*, *Workers AI* and *D1* on Cloudflare: the route map, the image workflow, the squad's providers, the identity chain, and this course, which is rewritten for Google Cloud lesson by lesson (\`apps/web/src/learn/host.ts\`; \`docs/learn-google-cloud.md\` is that edition).
+
+**Maintenance.** The hourly job (audit pruning, drift sweeps, memory expiry) runs from the Worker's cron on Cloudflare and from Cloud Scheduler on Google Cloud, which calls the service with a Google-signed token only its service account can get. Firestore's time-to-live policies delete expired rows as a backstop.`,
+        inDemo: [
+          "apps/edge/src/app.ts, apps/edge/src/platform/",
+          "apps/gcp/src/ (the Node host, Firestore, Vertex AI, Cloud Storage)",
+          "scripts/gcp/bootstrap.sh, scripts/gcp/deploy.sh, infra/gcp/README.md",
+          "docs/decisions/ADR-018-google-cloud-target.md",
+          "Top bar → AI platform; GET /api/ai-platforms; docs/decisions/ADR-021-ai-platform-apart-from-host.md",
+        ],
+        resources: [
+          R.cloudRun,
+          R.firestore,
+          R.vertexGptOss,
+          R.iapCloudRun,
+          R.cfChatAgents,
+          R.aiSdkRegistry,
+        ],
       },
       {
         id: "workspace",
@@ -489,6 +562,7 @@ The life-sciences systems add a card per answer, named for the system, so what c
         body: `The orchestrator runs **gpt-oss-20b**, OpenAI's open-weight reasoning model, on **Cloudflare Workers AI**, routed through **AI Gateway** for logging and cost visibility. The model ID is set in exactly one place: \`PROOF_DEFAULTS.orchestratorModel\`.
 
 - **Why 20b:** after the routing and reliability fixes, it matched or beat gpt-oss-120b through the pipeline at about 60% of the latency and lower cost (see *Evaluations*).
+- **Where it runs is a choice.** The top bar's **AI platform** menu can send a Cloudflare turn to **Vertex AI** instead (ADR-021). Vertex serves gpt-oss-120b, not 20b, so the turn runs on 120b there, and the trace says so.
 - **Its quirks** shaped several guards. It sometimes writes a tool call into its reasoning or answer text instead of calling the tool, and leaks its internal "harmony" channel markup into tool names.`,
         inDemo: [
           "packages/contracts/src/index.ts (PROOF_DEFAULTS)",
@@ -604,12 +678,14 @@ Its **Campaign Refinement** subagent runs **Refine Campaign Preview** to change 
       },
       {
         id: "routing",
-        title: "Routing: policy router, intent router, and tool plans",
+        title: "Routing: policy router, intent router, and scenario toolsets",
         summary: "Deterministic decisions before and around the model.",
         body: `Not every decision should be left to the model. Each turn passes through two deterministic routers:
 
 1. **Policy router.** "Remember this draft" is handled by the server, which stores the focus in long-term memory. A save or create request with a draft in the workspace prepares that write: the server plans it from the draft, Salesforce checks your permissions, and a confirmation card appears. Other save, create, or change requests get a fixed reply pointing to the confirmation flow. Publish, send, delete, and similar requests are refused. A question about what to send ("What can we send clients?") asks for guidance, not an action, and reaches the model; each sentence that names an action is judged on its own, so context before the question ("The Fed moved rates.") doesn't turn it into a request. None of these calls the model, so it can never claim a write happened.
-2. **Intent router.** Clear intents force a **tool plan**: an ordered list of tools, one forced per step.
+2. **Classifier and intent router.** The **request classifier** labels what the request is about (claims, a target list, Fed news, inventory, …, or *off topic*). Rules label the requests the scenarios name, instantly; a small model call, run while the tools connect, adds labels the rules missed, such as a paraphrased claims question, and never removes one. A clear intent also picks a **scenario**, whose tools are the turn's candidates, never the whole catalog; a request no rule recognises gets the brand's catalog. The **Cedar policies** then decide which candidates are on offer each step, from the labels and what has already run (see *The agentic gateway*), and the model chooses among them; nothing forces a call (ADR-019, ADR-020).
+   - **Claims first.** A request labelled *claims* is offered only the claims check until it has run, whatever else it asks; then the rest open up.
+   - **Off topic.** A request with nothing to do with the workbench (lottery numbers, sports scores) gets no tools; the model answers briefly in its own words and says what it can help with.
    - "Check readiness" → \`check_campaign_readiness\`
    - "Why is X in the buyer group?" → \`explain_buyer_group\`
    - "What did we decide about…?" or "last time…" → \`recall_decisions\`; "what have we worked on recently?" → \`recall_recent_work\`
@@ -624,9 +700,13 @@ Its **Campaign Refinement** subagent runs **Refine Campaign Preview** to change 
    - **Checks first, Marketing Cloud last.** Every new draft starts with its brand's claims checks and ends with Marketing Cloud's agents, whatever order the prompt implies: a Lumera campaign runs \`check_clinical_claims\` → \`aprimo_search_approved_assets\` → the brief, and a Harborstone one \`get_fed_announcements\` → \`match_news_to_approved_content\` → the brief. The model drafts from what the checks allow, lists what it ruled out and why, and only then asks Marketing Cloud for the brief. The header's brand decides the checks; with all brands, the brand the request names does. Coastline has no claims library in chat, so its campaigns start from the restaurant's context. A revision of a brief already in focus goes straight back to the agent
    - A change to a brief ("make it warmer") → back to the agent: a re-drafted brief before it's saved, or **Refine Campaign Preview** after
    - A change to other drafts → no tools; the model rewrites the draft, which is saved as the next version
-   - The rules need specific signals and **defer to the model** when unsure, because a wrongly forced tool can't be undone within the turn.
+   - The rules need specific signals and **defer to the model** when unsure, because a scenario that offers the wrong tools narrows what the model can do.
 
-If a planned tool fails, for example because it rejected an argument, the plan offers that same tool once more before moving on. A forced step also keeps the plan's earlier read-only tools callable, so a model taking a second look at the claims check gets an answer instead of failing the turn; the plan moves on only when the step's own tool runs, and Marketing Cloud's agents are never offered before their step. After a plan finishes, the model gets **no tools** and must write the answer.
+**Guardrails, not mandates.** Within a scenario:
+- **Look before you answer.** The first step must call one of the scenario's tools (any one), so an answer about Salesforce or the graph starts from evidence.
+- **Ground before you draft.** A Marketing Cloud agent, which drafts and creates in Salesforce, is offered only once every tool planned before it has worked (a Cedar policy); the brand's checks come first.
+- **Fix, don't fail.** A tool that failed, for example on a rejected argument, stays on offer so the model can correct it.
+- **Then write.** When every planned tool has worked, or on the last step, the model gets **no tools** and must write the answer. It may also answer sooner, once it has enough.
 
 **Life-sciences routes.** A request about a target list or prescriber groups goes to \`build_hcp_target_list\`; clinical claims, off-label use, a boxed warning or a Lumera drug beside \`claims\` go to \`check_clinical_claims\`; a named hospital with formulary, P&T, access or a plan goes to \`plan_hospital_engagement\`. The model is told that only supported, on-label, MLR-approved claims can be used and that groups are never people.
 
@@ -638,14 +718,15 @@ If a planned tool fails, for example because it rejected an argument, the plan o
         id: "reliability",
         title: "Reliability guards for tool calling",
         summary: "How the demo keeps a small model's tool calls on track.",
-        body: `Small reasoning models fail at tool calling in predictable ways. The forced-tool guard, a language-model middleware, handles each one:
+        body: `Small reasoning models fail at tool calling in predictable ways. The tool-call guard, a language-model middleware, handles each one without deciding which tool the model calls (ADR-019):
 
 - **A tool call written into reasoning or answer text.** The guard recovers the JSON arguments when they match the tool's schema, and hides leaked text from the user.
 - **Channel markup or a dropped prefix in tool names**, such as \`summarize_campaign<|channel|>analysis\`. The guard repairs the name when exactly one real tool matches.
 - **Arguments that aren't valid JSON.** The guard escapes raw newlines inside strings, drops anything the model appended after the object (a literal "\\n", channel markup), and reads \`<arg_key>\`/\`<arg_value>\` markup. Arguments cut off mid-call can't be repaired, so they count as no call.
-- **No usable call at all.** The step is retried once.
+- **A call written into reasoning when the tool wasn't named.** On a step that must call some tool, the guard works out which offered tool the arguments fit (only when exactly one does) and makes the call. On a free step it does so only when the step produced nothing else, so an answer is never turned into a call.
+- **No usable call at all** on a step that must call some tool. The step is retried once.
 - **A tool call in an answer step,** which offers no tools. The call is dropped; if it was all the step produced, the answer is retried once.
-- **Runaway reasoning.** Forced steps are capped at 2,048 tokens. Reasoning counts against the cap, and a detailed request to a Salesforce agent can take several hundred tokens on its own.
+- **Runaway reasoning.** Steps that must call a tool are capped at 2,048 tokens. Reasoning counts against the cap, and a detailed request to a Salesforce agent can take several hundred tokens on its own.
 
 At the turn level:
 - Structured timeouts cover the whole turn, gaps between chunks, and each tool call.
@@ -715,7 +796,7 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
 
 **Architecture workspaces.** The **Architecture** view is built differently from the chat: each tab is a *workspace manifest* (the roles, objects, tiles, agents and services it composes) drawn by one renderer, so a new workspace is data rather than a new screen. The same approval card also renders as an Adaptive Card, as data for a Lightning Web Component, and as an MCP Apps resource. See *Governed objects and workspaces*.
 
-**One scope in the header.** The **Brand** and **Run as** selectors apply everywhere: the chat (the message box suggests a prompt for the brand), the Graph (its brand filter), the use-case library, the Architecture workspaces and the turn history. The choice is remembered in the browser.`,
+**One scope in the header.** The **Brand** and **Run as** selectors apply everywhere: the chat (the message box suggests a prompt for the brand), the Graph (its brand filter), the use-case library, the Architecture workspaces and the turn history. Beside them, **AI platform** picks where the models run: Workers AI or Vertex AI. It lists only what this server can reach, says why an option isn't set up, and is greyed out when there is only one choice (ADR-021). Every choice is remembered in the browser.`,
         inDemo: [
           "Workspace panel (readiness card with native fallback)",
           "apps/web/src/Markdown.tsx, apps/web/src/GraphEvidence.tsx",
@@ -726,7 +807,7 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
         id: "observability",
         title: "Observability: route map, technical trace, turn history, and audit export",
         summary: "See exactly what happened in every turn.",
-        body: `- **Route map** above the message box, in the browser and in Lightning: the components a turn passes through, lit as it runs, with a pulse on whichever is working now. The path runs from the page through Cloudflare Access to the policy router, then AI Gateway and Workers AI, and out through the agentic gateway to each MCP server. A turn sent from Lightning also shows the Apex relay. It is read from the same trace as the view below, not from a script of what should happen, so a turn the policy router answers leaves the model dark, a tool the gateway denies marks the gateway and not the system behind it, and a failed tool marks that system. The first hops are implied, because a request can't reach the Worker without them; the router, model, and tools are recorded. The map keeps the finished route until the next message. It follows the query only: a confirmed write runs after the turn, and the write's own progress shows on its confirmation card. Lightning polls about once a second, so a hop shorter than that can appear already passed.
+        body: `- **Route map** above the message box, in the browser and in Lightning: the components a turn passes through, lit as it runs, with a pulse on whichever is working now. The path runs from the page through Cloudflare Access to the policy router, then AI Gateway and Workers AI, and out through the agentic gateway to each MCP server. A turn that ran on Google Cloud says so in its trace, and its map shows Identity-Aware Proxy in place of Access. The model hop is the AI platform the turn actually used: Workers AI behind AI Gateway, or Vertex AI called directly with no AI Gateway hop, whichever host served it. A turn sent from Lightning also shows the Apex relay. It is read from the same trace as the view below, not from a script of what should happen, so a turn the policy router answers leaves the model dark, a tool the gateway denies marks the gateway and not the system behind it, and a failed tool marks that system. The first hops are implied, because a request can't reach the Worker without them; the router, model, and tools are recorded. The map keeps the finished route until the next message. It follows the query only: a confirmed write runs after the turn, and the write's own progress shows on its confirmation card. Lightning polls about once a second, so a hop shorter than that can appear already passed.
 - **Live tool calls** under the trace while an answer streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
 - **Technical trace** at the top of each answer, so the answer streaming in below doesn't move it: every lifecycle event in order, with timing. It opens while the answer streams (or when something went wrong) and stays open after it finishes, until you close it.
   - turn start, step start and finish (finish reason, token counts)
@@ -789,7 +870,7 @@ A fourth Lumera scenario compares one drug's materials across Aprimo, the claims
         id: "images",
         title: "Campaign image workflow",
         summary: "Generate reviewable variants, then attach one to Salesforce after confirmation.",
-        body: `**FLUX.2 klein** on Workers AI generates a 1024×1024 draft from a bounded prompt, with PII and injection checks on the concept.
+        body: `**FLUX.2 klein** on Workers AI generates a 1024×1024 draft from a bounded prompt, with PII and injection checks on the concept. With **Vertex AI** chosen in the top bar, Gemini's image model draws it instead, and the draft records which model did.
 - Drafts are stored privately in **R2** for 7 days, with provenance (model, prompt version, content hash) in **D1**.
 - The variant gallery lets you select, reject, or revise.
 - **Attach to campaign** runs the confirmation flow. Apex checks the PNG's SHA-256 against the confirmed hash, creates one Salesforce file on the Campaign, and reads back its checksum and link.`,
@@ -917,7 +998,7 @@ The seed has three brands: Harborstone Wealth, Coastline Kitchen and Lumera Ther
 - **Agents can never hold a decision.** A forbid covers \`transition\`, \`supersede_claim\` and \`accept_optimization\`. An agent may propose; only a person decides.
 - **Brand scope.** A call on a brand outside the signed-in user's scope is denied.
 
-The **Agents → Policies** panel shows every policy as Cedar text. The evaluator is a typed equivalent of Cedar written for this demo; the policies are shaped so they can be loaded into a Cedar engine.
+**Real Cedar, one decision for offering and calling.** The policies are Cedar files (\`packages/architecture/policies/\`), checked against a schema in CI and evaluated by the Cedar engine itself (\`@cedar-policy/cedar-wasm\`) on both hosts (ADR-020). The same decision does two jobs: before a model step, each candidate tool is checked and only the permitted ones are **offered**; when the model calls one, the gateway checks it **again** in the same context, so a model can never be shown a tool it may not use, or use one it wasn't shown. The context carries the brand, the role, the surface, the chat's classifier labels and the tools that already ran, and in the pharma lifecycle the stage, so a policy can say "claims first", "ground before drafting", or "at the content stage the copy lead reads the claims library, approved assets and brand guidelines". The **Agents → Policies** panel shows the policy files themselves, and every decision is logged with the policy id that made it.
 
 **A model's calls get no shortcut.** When an agent runs on a model, the gateway checks the action the run centres on before the model is called, and then each tool the model calls, separately, as that agent. A model that tries a tool outside its grants is denied like any other caller, and the denial goes back to the model as the tool's result. The sample-flow orchestrator is held to the same gate: it is checked before a flow starts or resumes and on every step it takes, and its policy is withheld when an operator disables it or it is retired, so its kill switch stops a flow mid-way.
 
@@ -998,7 +1079,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **What a model may add.** The red-team agent can report a concern the probes missed, but that is advice shown to the reviewer; it blocks nothing, because only the deterministic probes can block approval. A model's say-so should never stop a person's decision, and should never be what lets one through.
 
-**The orchestrator.** A sample flow gives a goal to an orchestrator model, which has one tool, **next_step**: delegate a step to a subagent, ask a person, or finish. One tool forced on every step is what makes gpt-oss dependable here, because a call buried in its reasoning can still be recovered. Each delegation runs the subagent as above; what it creates comes back as a short handle (module-1) the orchestrator uses instead of copying a long urn. When a module is submitted for review the orchestrator asks the person and the flow stops, saved in D1; it resumes only once the module's state shows a decision. Platform agents, which Admin owns, act for whoever started the flow, so a flow never takes on Admin.
+**The orchestrator.** A sample flow gives a goal to an orchestrator model, which has one tool, **next_step**: delegate a step to a subagent, ask a person, or finish. That tool is offered, not forced: a step that ends in prose gets a reminder, and a call buried in the model's reasoning is still recovered by the tool-call guard. Each delegation runs the subagent as above; what it creates comes back as a short handle (module-1) the orchestrator uses instead of copying a long urn. When a module is submitted for review the orchestrator asks the person and the flow stops, saved in D1; it resumes only once the module's state shows a decision. Platform agents, which Admin owns, act for whoever started the flow, so a flow never takes on Admin.
 
 **Where the models run.** Deployed, on Workers AI through AI Gateway. Locally, \`pnpm dev:local\` uses local D1 and R2 with real Workers AI (a Worker name of its own keeps the remote-bindings proxy off the Access-protected domain). The hermetic worker tests select a scripted stand-in with \`AGENT_MODEL=scripted\`; it calls each agent's real tools, so the gateway, services and persistence are tested, and no deployed environment sets it. \`AGENT_CHAMPIONS\` can name another catalog model for a task class in one environment.
 
@@ -1032,7 +1113,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 - the **copy lead**: the line, the recurring themes and copy for each placement
 - the **channel planner**: the channels to buy, the spend and dates for each, and the results to expect
 
-**How the agents talk.** Assignments, hand-backs and send-backs travel between the lead and a spoke. When a piece builds on another spoke's saved work, the spoke first asks that spoke a question with \`ask_teammate\`, and the other spoke answers from its own saved work (\`answer_teammate\`). Every message is logged and drawn live on the map. The lead's loop has one forced tool, \`next_step\`, and the lead may hand out a piece only after the pieces it depends on are kept.
+**How the agents talk.** Assignments, hand-backs and send-backs travel between the lead and a spoke. When a piece builds on another spoke's saved work, the spoke first asks that spoke a question with \`ask_teammate\`, and the other spoke answers from its own saved work (\`answer_teammate\`). Every message is logged and drawn live on the map. The lead acts through one tool, \`next_step\`, offered rather than forced, and may hand out a piece only after the pieces it depends on are kept. Each spoke is offered only its own reads, \`ask_teammate\` and its save, and chooses how to use them; from its fifth step only the save is left.
 
 **Rules are code, not prompts.** Each spoke saves through one tool, and a service checks the work whatever the model wrote: findings must cite real data ids (cite or refuse); the palette must come from the brand book and no image may show what it forbids; copy must fit each placement's character limits, avoid banned phrases and carry any required disclosure; the channel plan must respect minimum spends, the budget and the brief's window. A refused save comes back with every problem, and the model has to fix them. When the pieces are in, reconciliation finds clashes (a channel bought with no copy, copy for a channel not bought, an audience the analyst didn't recommend) and the lead must resolve each one or send the piece back. The client gets a **proposal**; the client decides.
 
@@ -1044,11 +1125,11 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **The infrastructure under the agents.** One **Under the hood** panel holds each agent's grants and calls, the infrastructure, the semantic layer, the evals and the decisions people took, as tabs that change only when you pick one. It lights the layers each event passes: the event stream to the page; the lead's coordination loop; the models, each call metered; the agentic gateway, which checks every tool call as \`team:<tool>\` and mints a token for it; tools and the semantic layer; the rule services; the agent-to-agent bus; the run's state, saved to D1; and operations, where an operator disables or constrains an agent without a deploy.
 
-**Three model providers, one gateway.** A switch runs the same squad on **Cloudflare Workers AI**, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same. Every request goes through the Cloudflare AI Gateway. Anthropic and OpenAI requests go through the Worker's AI binding to the gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it, and Cloudflare-billed fallback is off. Claude Opus 5.5 does not accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message, and Claude's thinking blocks are replayed unchanged on the next turn.
+**Three model providers, one gateway.** A switch runs the same squad on **Cloudflare Workers AI**, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same. Every request goes through the Cloudflare AI Gateway. Anthropic and OpenAI requests go through the Worker's AI binding to the gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it, and Cloudflare-billed fallback is off. The open-model tier follows the top bar's **AI platform**: Workers AI, or gpt-oss on Vertex AI; the vendors keep the host's route. On Google Cloud the open-model tier runs gpt-oss on Vertex AI, Anthropic is Claude on Vertex (the same SDK, its requests rewritten for Vertex), and OpenAI is off until approved. Claude Opus 5.5 does not accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message, and Claude's thinking blocks are replayed unchanged on the next turn.
 
 **Opening an agent.** Click any agent on the team map (or press Enter on it) to open its details: its role, tier and model, with the provider, AI Gateway and effort; the exact system prompts it sent, one per distinct prompt, with the tools it was offered, the tool choice and its settings (each is recorded as a \`prompt\` event the first time the agent sends it, so a replay shows it too); its usage (model calls, input, cached and output tokens, model time, its share of the run and an estimated cost from the model's price); every message it sent and received, grouped by the party on the other end; and every tool call with the gateway's decision and its input, plus the work it saved.
 
-**Replaying a recent run.** Every run, on any brand, mode or provider, is kept in a shared run library in D1 (\`team_run_library\`): the last ten, newest first, readable by anyone who opens the page. Unlike the other transcripts, which expire after 24 hours, the ten are kept until newer runs replace them. Each row holds the run's event log and the time each event was sent. **Replay a recent run** loads one, and the page plays it back through the same reducer a live run uses, waiting the gap the run had between events (a person's wait or a slow model call is cut to a second and a half) at 1×, 2× or 5×, or all at once; it can be paused or skipped to the end. A replay calls no model and takes no decision.
+**Replaying a recent run.** Every run, on any brand, mode or provider, is kept in a shared run library in D1 (\`team_run_library\`; a Firestore collection of that name on Google Cloud): the last ten, newest first, readable by anyone who opens the page. Unlike the other transcripts, which expire after 24 hours, the ten are kept until newer runs replace them. Each row holds the run's event log and the time each event was sent. **Replay a recent run** loads one, and the page plays it back through the same reducer a live run uses, waiting the gap the run had between events (a person's wait or a slow model call is cut to a second and a half) at 1×, 2× or 5×, or all at once; it can be paused or skipped to the end. A replay calls no model and takes no decision.
 
 **What it does not do yet.** The sample market data stands in for real segmentation, competitive and benchmark systems. Runs differ, and a run takes a few minutes. The squad writes nothing to Salesforce. One person plays every role from the same browser, and the judge is generous until it is calibrated against people's scores.`,
         inDemo: [
@@ -1084,6 +1165,8 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 - **Analytics.** Thirty days in market are simulated from the brand's benchmarks and segment affinities and labelled so. Results carry the claim IDs and roll up by claim. The performance analyst reads them (\`get_campaign_results\`, \`get_past_results\`) and recommends continue, optimize or retire, citing result lines (\`report_performance\`). The brand lead decides, and the system lists where every claim is live with its expiry and re-review date; retiring turns that list into a withdrawal plan by ID.
 
 **How the lead moves.** The campaign lead has one tool, \`lifecycle_step\`: assign the next agent step, or ask the next person (\`request_decision\`). The server holds the lifecycle as data (\`PHARMA_PHASES\`) and a pure state machine, and refuses any step out of order. Every result tells the lead what comes next.
+
+**Different tools at each stage.** No agent sees the whole toolbox (ADR-019). At each stage a worker is offered that stage's reads, within its own grants, and that stage's save: the analyst gets segments, competitors, signals and past results to propose focus areas, then only the HCP universe to build the audience; the copy lead gets the claims library, approved assets and brand guidelines; the channel planner gets the approved job and channel benchmarks. Within that set the worker chooses what to read and when to save; its first step must use one of them, and from its fifth step only the save is left. The lead's \`lifecycle_step\` is offered, not forced. The state machine, the rule services and the people's decisions are the guardrails; the order of reads isn't.
 
 **People.** Each human step is a gateway action only its role may take: the brand lead (\`team:decide_focus\`, \`decide_concept\`, \`approve_go_live\`, \`decide_next_action\`), Medical (the reviewer persona, for the early concept review, \`team:review_concept\`, and the MLR review), Legal (senior), Regulatory (compliance) and marketing operations (marketer). Choice steps take one of the agents' options. A person who asks for changes sends the phase back to its first step, with their words, in a new round; a resubmitted MLR job gets a new job code.
 
@@ -1122,7 +1205,7 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 Every node carries its workspace and an expiry. The person who acted is stored only as a hash.
 
-**How it's recalled.** When you ask about earlier work ("what did we decide…", "last time…", "what have we worked on recently?"), the intent router forces a recall tool:
+**How it's recalled.** When you ask about earlier work ("what did we decide…", "last time…", "what have we worked on recently?"), the intent router offers the recall tools:
 - \`recall_decisions\`
 - \`recall_recent_work\`
 - \`explain_memory\`
@@ -1180,7 +1263,8 @@ export const GLOSSARY: Array<{ term: string; definition: string }> = [
   },
   {
     term: "Forced tool call",
-    definition: "A step where the host requires the model to call one specific tool.",
+    definition:
+      "A step where the host requires the model to call one specific tool. The demo doesn't use them (ADR-019): context scopes which tools are offered, and the model chooses.",
   },
   {
     term: "GraphRAG",
@@ -1234,6 +1318,6 @@ export const GLOSSARY: Array<{ term: string; definition: string }> = [
   {
     term: "Tool plan",
     definition:
-      "An ordered list of tools the intent router forces, one per step, before the model writes its answer.",
+      "The tools a recognised scenario offers, with a suggested order; the model chooses which to call and when it has enough.",
   },
 ];

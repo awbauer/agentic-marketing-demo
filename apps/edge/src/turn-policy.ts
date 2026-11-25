@@ -620,70 +620,70 @@ export function selectRequiredTool(prompt: string, availableNames: string[]) {
   return selectToolPlan(prompt, availableNames)?.[0];
 }
 
-export function requiredToolChoice(requiredTool: string | undefined, stepNumber: number) {
-  if (!requiredTool) return undefined;
-  return stepNumber === 0
-    ? { toolChoice: { type: "tool" as const, toolName: requiredTool } }
-    : { toolChoice: "none" as const };
-}
-
 /** A tool a finished step called, and whether it worked. */
 export type StepOutcome = { tool: string; ok: boolean };
 
-/**
- * Where a plan stands after these calls. A planned tool that failed, such as one given an argument
- * it rejected, is offered once more before the plan moves on, so the model's retry is the forced
- * call rather than a call to a tool the step doesn't offer, which would fail the whole turn.
- */
-export function planPosition(plan: readonly string[], outcomes: readonly StepOutcome[]) {
-  let position = 0;
-  let failures = 0;
-  for (const outcome of outcomes) {
-    if (position >= plan.length) break;
-    // Another look at a tool the plan already ran doesn't move the plan on.
-    if (outcome.tool !== plan[position]) continue;
-    if (!outcome.ok && failures === 0) {
-      failures = 1;
-      continue;
-    }
-    position += 1;
-    failures = 0;
-  }
-  return position;
+/** The planned tools that have run and worked, from the steps so far. */
+export function plannedToolsDone(
+  plan: readonly string[],
+  stepNumber: number,
+  outcomes?: readonly StepOutcome[],
+) {
+  // Without outcomes (the live evaluation's simple runner), assume one planned tool per step.
+  if (!outcomes) return new Set(plan.slice(0, stepNumber));
+  return new Set(outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.tool));
 }
 
 /**
- * Per-step tool settings. Step N of a plan forces its Nth tool; steps after the plan, and the last
- * allowed step, receive no tools at all: Workers AI does not enforce `toolChoice: "none"`, so
- * gpt-oss otherwise emits malformed tool calls instead of the answer. A forced step also keeps
- * the plan's earlier read-only tools callable: Workers AI doesn't enforce the forced choice either,
- * and a model taking a second look at the claims check would otherwise call a tool the step
- * doesn't offer, which fails the whole turn. Marketing Cloud's agents are never offered early.
+ * Per-step tool settings for a scenario the intent router recognised (ADR-019, ADR-020). The
+ * scenario picks the candidate tools, never the whole catalog; the Cedar policies then decide
+ * which candidates are on offer this step (claims first, ground before drafting, nothing when off
+ * topic). Nothing is forced:
+ *
+ * - **Look before you answer.** The first step must call one of the tools on offer, any one;
+ *   after that the model calls what it needs, in its order, and may answer when it has enough.
+ * - **Then write.** When every planned tool has run, or on the last allowed step, no tools are
+ *   offered: Workers AI does not enforce `toolChoice: "none"`, so gpt-oss would otherwise emit
+ *   malformed tool calls instead of the answer.
+ *
+ * A planned tool that failed stays a candidate, so the model can fix its arguments and retry.
  */
 export function stepToolChoice(
   plan: string | readonly string[] | undefined,
   stepNumber: number,
   maxSteps = MAX_TURN_STEPS,
-  /** What the steps so far called and whether each worked; without it, one tool per step. */
+  /** What the steps so far called and whether each worked. */
   outcomes?: readonly StepOutcome[],
 ) {
   const steps = plan === undefined ? [] : typeof plan === "string" ? [plan] : plan;
-  const position = outcomes ? planPosition(steps, outcomes) : stepNumber;
-  const forced = steps[position];
-  if (forced && stepNumber < maxSteps - 1) {
-    const earlier = outcomes
-      ? steps
-          .slice(0, position)
-          .filter((name) => name !== forced && !MARKETING_CLOUD_TOOLS.has(baseName(name)))
-      : [];
-    return {
-      toolChoice: { type: "tool" as const, toolName: forced },
-      activeTools: [forced, ...new Set(earlier)],
-    };
-  }
-  if (steps.length > 0 || stepNumber >= maxSteps - 1)
+  if (steps.length === 0)
+    return stepNumber >= maxSteps - 1
+      ? { toolChoice: "none" as const, activeTools: [] as string[] }
+      : undefined;
+  const done = plannedToolsDone(steps, stepNumber, outcomes);
+  if (stepNumber >= maxSteps - 1 || steps.every((name) => done.has(name)))
     return { toolChoice: "none" as const, activeTools: [] as string[] };
-  return undefined;
+  return {
+    toolChoice: stepNumber === 0 ? ("required" as const) : ("auto" as const),
+    activeTools: [...new Set(steps)],
+  };
+}
+
+/**
+ * A tool's name as the Cedar policies name it: without its server's prefix (graph_, context_,
+ * ext_, ls_), and a Salesforce tool by its governed name.
+ */
+export function policyToolName(name: string) {
+  const local = name.match(/^(?:graph|context|ext|ls)_(.+)$/);
+  if (local?.[1]) return local[1];
+  return name.startsWith("tool_") ? baseName(name).replace(/^tool_[a-z0-9]+_/, "") : name;
+}
+
+/** The planned tools that run before the plan's first Marketing Cloud agent, by policy name. */
+export function draftingPrerequisites(plan: readonly string[] | undefined) {
+  if (!plan) return undefined;
+  const first = plan.findIndex((name) => MARKETING_CLOUD_TOOLS.has(baseName(name)));
+  return first > 0 ? plan.slice(0, first).map(policyToolName) : undefined;
 }
 
 /** A tool's name without its server's prefix ("tool_salesforce_…_draft_campaign_brief"). */

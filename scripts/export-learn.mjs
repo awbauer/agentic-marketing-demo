@@ -3,12 +3,19 @@
 // Usage: pnpm learn:export          (rewrite docs/learn.md)
 //        pnpm learn:export --check  (fail when docs/learn.md is out of date; part of learn:check)
 import { readFileSync, writeFileSync } from "node:fs";
-import { GLOSSARY, LEARN_LEDE, LEARN_PARTS, LEARN_TITLE } from "../apps/web/src/learn/content.ts";
+import { forGoogleCloud, learnFor } from "../apps/web/src/learn/host.ts";
 import { DIAGRAM_SPECS } from "../apps/web/src/learn/diagram-specs.ts";
 import { PART_LESSONS, SECTION_LESSONS } from "../apps/web/src/learn/lessons.ts";
 import { LEARN_REFERENCE, REFERENCE_KINDS } from "../apps/web/src/learn/reference.ts";
 
 export const LEARN_MARKDOWN = "docs/learn.md";
+/** The same course as a reader on the Google Cloud deployment sees it (ADR-018). */
+export const LEARN_MARKDOWN_GOOGLE_CLOUD = "docs/learn-google-cloud.md";
+let LEARN_TITLE;
+let LEARN_LEDE;
+let LEARN_PARTS;
+let GLOSSARY;
+let SPECS = DIAGRAM_SPECS;
 
 /** GitHub's heading anchors: lowercase, punctuation dropped, spaces to hyphens. */
 function anchors() {
@@ -138,7 +145,7 @@ function mermaid(block, id) {
 }
 
 function diagram(diagramId) {
-  const spec = DIAGRAM_SPECS[diagramId];
+  const spec = SPECS[diagramId];
   if (!spec) throw new Error(`No diagram spec for ${diagramId}.`);
   const id = diagramId.replaceAll("-", "_");
   return [
@@ -148,7 +155,14 @@ function diagram(diagramId) {
   ].join("\n\n");
 }
 
-export function renderLearnMarkdown() {
+export function renderLearnMarkdown(host = "cloudflare") {
+  ({
+    title: LEARN_TITLE,
+    lede: LEARN_LEDE,
+    parts: LEARN_PARTS,
+    glossary: GLOSSARY,
+  } = learnFor(host));
+  SPECS = host === "google-cloud" ? forGoogleCloud(DIAGRAM_SPECS) : DIAGRAM_SPECS;
   const anchor = anchors();
   const out = [];
   const push = (...blocks) => out.push(...blocks.filter((block) => block !== null));
@@ -255,21 +269,28 @@ export function renderLearnMarkdown() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const markdown = renderLearnMarkdown();
+  const editions = [
+    [LEARN_MARKDOWN, renderLearnMarkdown("cloudflare")],
+    [LEARN_MARKDOWN_GOOGLE_CLOUD, renderLearnMarkdown("google-cloud")],
+  ];
   if (process.argv.includes("--check")) {
-    let current = "";
-    try {
-      current = readFileSync(LEARN_MARKDOWN, "utf8");
-    } catch {}
-    if (current !== markdown) {
-      console.error(
-        `${LEARN_MARKDOWN} is out of date with the Learn page. Run \`pnpm learn:export\` and commit it.`,
-      );
-      process.exit(1);
+    for (const [path, markdown] of editions) {
+      let current = "";
+      try {
+        current = readFileSync(path, "utf8");
+      } catch {}
+      if (current !== markdown) {
+        console.error(
+          `${path} is out of date with the Learn page. Run \`pnpm learn:export\` and commit it.`,
+        );
+        process.exit(1);
+      }
+      console.log(`${path} matches the Learn page.`);
     }
-    console.log(`${LEARN_MARKDOWN} matches the Learn page.`);
   } else {
-    writeFileSync(LEARN_MARKDOWN, markdown);
-    console.log(`Wrote ${LEARN_MARKDOWN} (${markdown.split("\n").length} lines).`);
+    for (const [path, markdown] of editions) {
+      writeFileSync(path, markdown);
+      console.log(`Wrote ${path} (${markdown.split("\n").length} lines).`);
+    }
   }
 }

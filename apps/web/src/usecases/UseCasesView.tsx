@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useScope } from "../scope";
 import {
   type Industry,
   type SystemKind,
@@ -8,7 +9,6 @@ import {
   type UseCase,
   useCaseBrand,
 } from "./catalog";
-import { useScope } from "../scope";
 import "./usecases.css";
 
 const KIND_GLYPHS: Record<SystemKind, string> = {
@@ -17,7 +17,7 @@ const KIND_GLYPHS: Record<SystemKind, string> = {
   "Knowledge graph": "⋈",
   "MCP server": "◇",
   "External API": "↗",
-  "Workers AI": "✦",
+  Models: "✦",
   Workbench: "▣",
 };
 

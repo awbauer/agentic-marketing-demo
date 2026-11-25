@@ -6,6 +6,8 @@
 // refused with the reason, and the agent has to fix it.
 import {
   type ApprovedJob,
+  buildTeamPolicies,
+  type GatewayContext,
   type AudienceLine,
   assetChoices,
   buildAudience,
@@ -51,6 +53,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { AGENT_GENERATION } from "../architecture/agent-runtime";
+import { offerTools } from "../architecture/context";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import { emitArtifact, lifecycleFile, lifecycleWorld } from "./lifecycle";
 import {
@@ -64,6 +67,7 @@ import {
   type TeamRun,
   teamModel,
 } from "./run";
+import { serverHost } from "../platform/models";
 
 type AgentStep = Extract<PhaseStep, { kind: "agent" }>;
 
@@ -95,22 +99,14 @@ function fieldText(item: Record<string, unknown>, key: RegExp): string {
     : "";
 }
 
-/** The read tools each step gets, by name; the gateway still checks every call. */
-const STEP_READS: Record<string, readonly string[]> = {
-  propose_focus_areas: [
-    "get_audience_segments",
-    "get_competitors",
-    "get_market_signals",
-    "get_past_results",
-  ],
-  propose_concepts: ["get_claims_library", "find_approved_assets", "get_brand_guidelines"],
-  draft_modules: ["get_claims_library", "find_approved_assets", "get_brand_guidelines"],
-  submit_mlr_job: ["get_claims_library"],
-  build_audience: ["get_hcp_universe"],
-  schedule_deployment: ["get_approved_job", "get_channel_benchmarks"],
-  prepare_form_2253: ["get_approved_job"],
-  report_performance: ["get_campaign_results", "get_past_results"],
-};
+/**
+ * Where a step's calls are made: the gateway offers and allows a lifecycle step only that step's
+ * reads and its save tool (lifecycle.cedar), within the worker's grants (team.cedar).
+ */
+const stepContext = (step: AgentStep): GatewayContext => ({
+  surface: "lifecycle",
+  stage: step.tool,
+});
 
 const state = (run: TeamRun) => run.lifecycle as NonNullable<TeamRun["lifecycle"]>;
 const artifact = <T>(run: TeamRun, name: keyof NonNullable<TeamRun["lifecycle"]>["artifacts"]) =>
@@ -123,7 +119,7 @@ function readTools(run: TeamRun, agent: LifecycleWorker, step: AgentStep): ToolS
     tool({
       description,
       inputSchema: z.object({}),
-      execute: async (input) => gated(run, agent, name, input, value),
+      execute: async (input) => gated(run, agent, name, input, value, stepContext(step)),
     });
   const semantic = (name: string, entity: "segment" | "competitor" | "signal") => {
     const result = semanticQuery(brand, { entity });
@@ -259,13 +255,7 @@ function readTools(run: TeamRun, agent: LifecycleWorker, step: AgentStep): ToolS
       () => artifact(run, "campaign_results"),
     ),
   };
-  const granted = teamAgentById(agent)?.tools ?? [];
-  const wanted = STEP_READS[step.tool] ?? [];
-  return Object.fromEntries(
-    Object.entries(all).filter(
-      ([name]) => wanted.includes(name) && granted.includes(name as never),
-    ),
-  );
+  return all;
 }
 
 /** The step's save tool. Saving runs the service; a refusal tells the agent every problem. */
@@ -586,7 +576,14 @@ function saveTool(
       description: definition.description,
       inputSchema: definition.schema as z.ZodType<Record<string, unknown>>,
       execute: async (input) =>
-        gated(run, agent, step.tool, input, () => definition.run(input as never)),
+        gated(
+          run,
+          agent,
+          step.tool,
+          input,
+          () => definition.run(input as never),
+          stepContext(step),
+        ),
     }),
   };
 }
@@ -626,7 +623,22 @@ export async function runLifecycleWorker(
     notes ? "revising" : "working",
     notes ? "Revising for a person" : "Starting",
   );
-  const tools: ToolSet = { ...readTools(run, agent, step), ...saveTool(run, agent, step, saved) };
+  // Every read the lifecycle has, and the step's save: the gateway decides which this step offers,
+  // and that same decision allows each call (lifecycle.cedar).
+  const candidates: ToolSet = {
+    ...readTools(run, agent, step),
+    ...saveTool(run, agent, step, saved),
+  };
+  const { allowed } = await offerTools(run.ctx, {
+    principal: { type: "agent", id: agent },
+    candidates: Object.keys(candidates).map((name) => `team:${name}`),
+    context: stepContext(step),
+    resource: { brand: run.brief.brand },
+    extraPolicies: buildTeamPolicies,
+  });
+  const tools: ToolSet = Object.fromEntries(
+    Object.entries(candidates).filter(([name]) => allowed.includes(`team:${name}`)),
+  );
   const file = lifecycleFile(lifecycle);
   const prompt = [
     `Your task from the campaign lead: ${task}`,
@@ -660,12 +672,17 @@ export async function runLifecycleWorker(
       messages,
       tools,
       stopWhen: [stepCountIs(10), () => saved.done],
+      // This stage's tools only (its reads and its save, within the agent's grants), in the
+      // worker's chosen order: the first step must use one, and from the fifth step (or on a
+      // nudge) only saving is on offer (ADR-019).
       prepareStep: ({ stepNumber }) =>
         saved.done
           ? {}
           : attempt > 0 || stepNumber >= 4
-            ? { toolChoice: { type: "tool" as const, toolName: step.tool } }
-            : { toolChoice: "required" as const },
+            ? { activeTools: [step.tool] }
+            : stepNumber === 0
+              ? { toolChoice: "required" as const }
+              : {},
       ...AGENT_GENERATION,
     });
     try {
@@ -696,7 +713,8 @@ export async function runLifecycleWorker(
             });
     } catch (error) {
       const cause = streamError ?? error;
-      if (!isToolChoiceViolation(cause)) throw explainModelError(cause, run.provider);
+      if (!isToolChoiceViolation(cause))
+        throw explainModelError(cause, run.provider, serverHost(run.ctx.env));
       run.emit({
         type: "tool",
         agent,

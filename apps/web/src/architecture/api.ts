@@ -1,5 +1,6 @@
 import type { Brand, Persona } from "@northstar/architecture";
 import { useCallback, useEffect, useState } from "react";
+import { aiPlatformHeaders } from "../ai-platform";
 
 export type Scope = { persona: Persona; brand: Brand | "all" };
 
@@ -23,6 +24,7 @@ export async function archFetch<T>(
     method: init.method ?? (init.body === undefined ? "GET" : "POST"),
     headers: {
       "x-persona": scope.persona,
+      ...aiPlatformHeaders(),
       ...(scope.brand === "all" ? {} : { "x-brand": scope.brand }),
       ...(init.body === undefined ? {} : { "content-type": "application/json" }),
     },
@@ -110,6 +112,7 @@ export async function archStream<E>(
     method: "POST",
     headers: {
       "x-persona": scope.persona,
+      ...aiPlatformHeaders(),
       ...(scope.brand === "all" ? {} : { "x-brand": scope.brand }),
       "content-type": "application/json",
     },
