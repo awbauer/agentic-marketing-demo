@@ -4,5 +4,11 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "imports": {
+    "#cedar-runtime": {
+      "workerd": "./src/cedar/load-workerd.ts",
+      "default": "./src/cedar/load-node.ts"
+    }
   }
 }

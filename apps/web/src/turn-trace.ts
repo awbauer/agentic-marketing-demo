@@ -251,6 +251,9 @@ function rowsFromTrace(message: UIMessage, trace: TurnTrace): TraceRow[] {
                 ? ROUTE_DETAIL[event.route]
                 : `Model ${event.model}`,
               `${plural(event.toolCount, "governed tool")} available`,
+              event.intents?.length
+                ? `classified as ${event.intents.join(", ")}${event.classifiedBy && event.classifiedBy !== "none" ? ` (${event.classifiedBy})` : ""}`
+                : null,
               event.requiredTool
                 ? `routed to ${event.requiredTool.split(" → ").map(readableToolName).join(" → ")}`
                 : null,

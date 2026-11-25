@@ -262,3 +262,14 @@ describe("a turn on Google Cloud", () => {
     expect(node(map, "model").label).toBe("Workers AI");
   });
 });
+
+describe("a classified turn", () => {
+  it("shows the classifier's labels as a hop after the policy router", () => {
+    const map = live(
+      assistant([{ ...modelStart, intents: ["claims"], classifiedBy: "rules" }, stepStart]),
+    );
+    const ids = map.lanes.flatMap((lane) => lane.nodes).map((item) => item.id);
+    expect(ids.indexOf("classifier")).toBe(ids.indexOf("router") + 1);
+    expect(node(map, "classifier").detail).toBe("claims");
+  });
+});

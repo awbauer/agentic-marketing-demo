@@ -4,7 +4,14 @@
 // to the lead and can also put a question straight to another spoke. Each message is logged, and
 // each tool call is checked by the agentic gateway under the policies below.
 
-import type { Policy } from "./gateway.ts";
+import {
+  type AgentFacts,
+  filePolicies,
+  linkPolicy,
+  type Policy,
+  type PolicySet,
+  policySet,
+} from "./gateway.ts";
 import type { AgentOverrides } from "./registry.ts";
 import type { Persona } from "./state-machine.ts";
 import { MEDIA_CHANNELS, type MediaChannel, teamMarket } from "./team-data.ts";
@@ -338,31 +345,55 @@ export const TEAM_PARTY_LABELS: Record<TeamParty, string> = {
 };
 
 /**
- * The team's policies, compiled from its roster. Each agent may call only its own tools; an
- * operator's kill switch or a retired lifecycle withholds all of them, and constrain keeps reads.
+ * The team's policies: the people's decisions (team.cedar), one link of the team-grants template
+ * per agent with tools, and the squad and lifecycle rules (squad.cedar, lifecycle.cedar). Each
+ * agent may call only its own tools; an operator's kill switch or a retired lifecycle withholds
+ * all of them, and constrain keeps reads.
  */
-export function buildTeamPolicies(overrides: AgentOverrides = {}): Policy[] {
-  return [
-    ...teamGatePolicies(),
-    ...TEAM_AGENTS.flatMap((agent) => {
-      const lifecycle = overrides.lifecycle?.[agent.id];
-      if (overrides.disabled?.includes(agent.id) || lifecycle === "retire") return [];
-      const tools =
-        lifecycle === "constrain"
+export function buildTeamPolicies(overrides: AgentOverrides = {}): PolicySet {
+  const agents: Record<string, AgentFacts> = {};
+  const links: Policy[] = [];
+  for (const agent of TEAM_AGENTS) {
+    const lifecycle = overrides.lifecycle?.[agent.id] ?? "monitor";
+    const disabled = overrides.disabled?.includes(agent.id) ?? false;
+    const tools =
+      disabled || lifecycle === "retire"
+        ? []
+        : lifecycle === "constrain"
           ? agent.tools.filter((tool) => TEAM_READ_TOOLS.includes(tool))
           : agent.tools;
-      if (tools.length === 0) return [];
-      return [
-        {
-          id: `team-${agent.id}`,
-          effect: "permit" as const,
-          principal: { type: "agent" as const, ids: [agent.id] },
-          actions: tools.map((tool) => `team:${tool}`),
-          note: `${agent.name} may call its own tools: ${tools.join(", ")}.`,
-        },
-      ];
-    }),
-  ];
+    agents[agent.id] = {
+      name: agent.name,
+      grants: tools,
+      scope: "any",
+      lifecycle,
+      disabled,
+      role: agent.role,
+      ...(agent.deliverable ? { deliverable: agent.deliverable } : {}),
+    };
+    if (tools.length)
+      links.push(
+        linkPolicy(
+          "team-grants",
+          `team-${agent.id}`,
+          agent.id,
+          tools.map((tool) => `team:${tool}`),
+          `${agent.name} may call its own tools: ${tools.join(", ")}.`,
+        ),
+      );
+  }
+  const risks: Record<string, string> = Object.fromEntries([
+    ...TEAM_TOOL_NAMES.map((tool) => [
+      `team:${tool}`,
+      TEAM_READ_TOOLS.includes(tool) ? "read" : "draft",
+    ]),
+    ...Object.values(TEAM_GATES).map((gate) => [gate.action, "decide"]),
+  ]);
+  return policySet(
+    [...teamGatePolicies(), ...links, ...filePolicies("squad.cedar", "lifecycle.cedar")],
+    agents,
+    risks,
+  );
 }
 
 // People in the loop ---------------------------------------------------------------------------
@@ -460,16 +491,11 @@ export const CLIENT_ROUNDS = 2;
 export const needsComplianceReview = (brand: Brand) =>
   teamMarket(brand).guidelines.requiredDisclosure !== null;
 
-/** Only these personas may take each decision. Agents are never among them. */
-export function teamGatePolicies(): Policy[] {
-  return Object.entries(TEAM_GATES).map(([gate, spec]) => ({
-    id: `team-person-${gate}`,
-    effect: "permit" as const,
-    principal: { type: "persona" as const, ids: [...spec.personas] },
-    actions: [spec.action],
-    note: `Only a ${spec.decider.toLowerCase()} takes the ${spec.label.toLowerCase()} decision.`,
-  }));
-}
+/**
+ * Only these personas may take each decision, as team.cedar writes it (team-person-<gate>);
+ * agents are never among them. A test holds the file to TEAM_GATES.
+ */
+export const teamGatePolicies = (): Policy[] => filePolicies("team.cedar");
 
 // Briefs --------------------------------------------------------------------------------------
 

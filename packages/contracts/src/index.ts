@@ -973,6 +973,9 @@ export const TurnTraceEventSchema = z.discriminatedUnion("kind", [
       .optional(),
     /** Where the turn ran; absent means Cloudflare (ADR-018). The route map names hops by it. */
     host: z.enum(["cloudflare", "google-cloud"]).optional(),
+    /** What the classifier labelled the request, and which stage did (ADR-020). */
+    intents: z.array(z.string()).optional(),
+    classifiedBy: z.enum(["rules", "model", "rules+model", "none"]).optional(),
   }),
   z.object({ kind: z.literal("step-start"), at: z.number(), step: z.number().int() }),
   z.object({

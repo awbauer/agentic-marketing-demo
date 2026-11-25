@@ -1,7 +1,9 @@
 // Runs an architecture agent on a real model. The agent gets its catalog prompt (with its hard
-// rules), the model the router binds to its task class, and only the tools its registry grants
-// name. Every tool call passes the gateway; the services behind the tools enforce the rules.
+// rules), the model the router binds to its task class, and only the tools the gateway would
+// allow it (its registry grants, less what an operator withheld). Every tool call passes the
+// gateway; the services behind the tools enforce the rules.
 import {
+  ACTION_RISK,
   type AgentManifest,
   type Brand,
   claimPacket,
@@ -25,7 +27,7 @@ import { generateText, type LanguageModel, stepCountIs, streamText, wrapLanguage
 import { modelPlatform } from "../platform/models";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import { objectView, type RunState, type ToolStep, toolsFor } from "./agent-tools";
-import { type ArchEnv, ArchError, type Ctx } from "./context";
+import { type ArchEnv, ArchError, type Ctx, offerTools } from "./context";
 import { scriptedModel } from "./scripted-model";
 
 export type ModelFactory = (modelId: string) => Exclude<LanguageModel, string>;
@@ -270,9 +272,17 @@ export async function runModelAgent(
   const route = modelFor(agent, ctx.env);
   const model = modelFactory(ctx.env)(route.model);
   const started = Date.now();
+  // Offered exactly the capabilities the gateway allows this agent on its kind of object and this
+  // brand (agents.cedar); each call is then checked the same way.
+  const kind = agent.scope === "any" ? undefined : agent.scope;
+  const { allowed } = await offerTools(ctx, {
+    principal: { type: "agent", id: agent.id },
+    candidates: Object.keys(ACTION_RISK),
+    resource: { ...(kind ? { kind } : {}), brand: options.brand },
+  });
   const tools = toolsFor({
     ctx,
-    agent,
+    agent: { ...agent, grants: allowed as AgentManifest["grants"] },
     brand: options.brand,
     run: options.run,
     ...(options.runTag ? { runTag: options.runTag } : {}),

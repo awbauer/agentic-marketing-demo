@@ -361,8 +361,10 @@ describe("campaign squad", () => {
     const refused = stream.find(
       (event) => event.type === "tool" && event.step.tool === "plan_media",
     );
+    // Constrained to reads, the spoke is not offered its save: the call is refused before it runs,
+    // as the gateway would refuse it.
     expect(refused.step.ok).toBe(false);
-    expect(refused.step.decision.decision).toBe("deny");
+    expect(refused.step.decision?.decision).not.toBe("allow");
     expect(stream.some((event) => event.type === "delivered")).toBe(false);
     expect(stream.some((event) => event.type === "done")).toBe(true);
     // A run that stopped is still scored, and the scorecard says it reached no outcome.

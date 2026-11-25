@@ -913,7 +913,9 @@ flowchart TB
 Not every decision should be left to the model. Each turn passes through two deterministic routers:
 
 1. **Policy router.** "Remember this draft" is handled by the server, which stores the focus in long-term memory. A save or create request with a draft in the workspace prepares that write: the server plans it from the draft, Salesforce checks your permissions, and a confirmation card appears. Other save, create, or change requests get a fixed reply pointing to the confirmation flow. Publish, send, delete, and similar requests are refused. A question about what to send ("What can we send clients?") asks for guidance, not an action, and reaches the model; each sentence that names an action is judged on its own, so context before the question ("The Fed moved rates.") doesn't turn it into a request. None of these calls the model, so it can never claim a write happened.
-2. **Intent router.** A clear intent picks a **scenario**, which decides the tools on offer: only that scenario's, never the whole catalog. The model then chooses which to call and in what order; its prompt suggests an order, and nothing forces one (ADR-019). A request no rule recognises gets the brand's whole catalog.
+2. **Classifier and intent router.** The **request classifier** labels what the request is about (claims, a target list, Fed news, inventory, …, or *off topic*). Rules label the requests the scenarios name, instantly; a small model call, run while the tools connect, adds labels the rules missed, such as a paraphrased claims question, and never removes one. A clear intent also picks a **scenario**, whose tools are the turn's candidates, never the whole catalog; a request no rule recognises gets the brand's catalog. The **Cedar policies** then decide which candidates are on offer each step, from the labels and what has already run (see *The agentic gateway*), and the model chooses among them; nothing forces a call (ADR-019, ADR-020).
+   - **Claims first.** A request labelled *claims* is offered only the claims check until it has run, whatever else it asks; then the rest open up.
+   - **Off topic.** A request with nothing to do with the workbench (lottery numbers, sports scores) gets no tools; the model answers briefly in its own words and says what it can help with.
    - "Check readiness" → `check_campaign_readiness`
    - "Why is X in the buyer group?" → `explain_buyer_group`
    - "What did we decide about…?" or "last time…" → `recall_decisions`; "what have we worked on recently?" → `recall_recent_work`
@@ -932,7 +934,7 @@ Not every decision should be left to the model. Each turn passes through two det
 
 **Guardrails, not mandates.** Within a scenario:
 - **Look before you answer.** The first step must call one of the scenario's tools (any one), so an answer about Salesforce or the graph starts from evidence.
-- **Ground before you draft.** A Marketing Cloud agent, which drafts and creates in Salesforce, is offered only once every tool planned before it has worked; the brand's checks come first.
+- **Ground before you draft.** A Marketing Cloud agent, which drafts and creates in Salesforce, is offered only once every tool planned before it has worked (a Cedar policy); the brand's checks come first.
 - **Fix, don't fail.** A tool that failed, for example on a rejected argument, stays on offer so the model can correct it.
 - **Then write.** When every planned tool has worked, or on the last step, the model gets **no tools** and must write the answer. It may also answer sooner, once it has enough.
 
@@ -1573,7 +1575,7 @@ A governed system can't have side doors. In this demo **every architecture capab
 - **Agents can never hold a decision.** A forbid covers `transition`, `supersede_claim` and `accept_optimization`. An agent may propose; only a person decides.
 - **Brand scope.** A call on a brand outside the signed-in user's scope is denied.
 
-The **Agents → Policies** panel shows every policy as Cedar text. The evaluator is a typed equivalent of Cedar written for this demo; the policies are shaped so they can be loaded into a Cedar engine.
+**Real Cedar, one decision for offering and calling.** The policies are Cedar files (`packages/architecture/policies/`), checked against a schema in CI and evaluated by the Cedar engine itself (`@cedar-policy/cedar-wasm`) on both hosts (ADR-020). The same decision does two jobs: before a model step, each candidate tool is checked and only the permitted ones are **offered**; when the model calls one, the gateway checks it **again** in the same context, so a model can never be shown a tool it may not use, or use one it wasn't shown. The context carries the brand, the role, the surface, the chat's classifier labels and the tools that already ran, and in the pharma lifecycle the stage, so a policy can say "claims first", "ground before drafting", or "at the content stage the copy lead reads the claims library, approved assets and brand guidelines". The **Agents → Policies** panel shows the policy files themselves, and every decision is logged with the policy id that made it.
 
 **A model's calls get no shortcut.** When an agent runs on a model, the gateway checks the action the run centres on before the model is called, and then each tool the model calls, separately, as that agent. A model that tries a tool outside its grants is denied like any other caller, and the denial goes back to the model as the tool's result. The sample-flow orchestrator is held to the same gate: it is checked before a flow starts or resumes and on every step it takes, and its policy is withheld when an operator disables it or it is retired, so its kill switch stops a flow mid-way.
 

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@cedar-policy/cedar-wasm": "4.15.0",
     "@google-cloud/firestore": "9.4.1",
     "@google-cloud/storage": "9.0.0",
     "@northstar/architecture": "workspace:*",

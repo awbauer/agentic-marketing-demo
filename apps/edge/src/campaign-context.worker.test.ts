@@ -130,38 +130,23 @@ describe("campaign-context MCP", () => {
     ];
     const plan = selectToolPlan(PUSH_PROMPT, names);
     expect(plan).toEqual(names);
-    // The scenario's read tools are all on offer from the start, never forced: the first step must
-    // call one of them, then the model chooses. The Marketing Cloud agent, which drafts in
-    // Salesforce, is offered only once every tool planned before it has worked.
+    // The scenario's tools are the candidates from the start, never forced: the first step must
+    // call one of those on offer, then the model chooses. Which candidates are on offer is the
+    // Cedar policies' call (orchestrator.cedar), tested in chat-policies.worker.test.ts.
     const [first, second, third, brief] = names as [string, string, string, string];
-    expect(stepToolChoice(plan, 0)).toEqual({
-      toolChoice: "required",
-      activeTools: [first, second, third],
-    });
+    expect(stepToolChoice(plan, 0)).toEqual({ toolChoice: "required", activeTools: names });
     const at = (outcomes: Array<{ tool: string; ok: boolean }>) =>
       stepToolChoice(plan, outcomes.length, 6, outcomes);
-    expect(at([{ tool: second, ok: true }])).toEqual({
-      toolChoice: "auto",
-      activeTools: [first, second, third],
-    });
-    // A tool that failed stays on offer, so the model can fix its arguments.
-    expect(
-      at([
-        { tool: first, ok: true },
-        { tool: second, ok: false },
-      ])?.activeTools,
-    ).toContain(second);
+    expect(at([{ tool: second, ok: true }])).toEqual({ toolChoice: "auto", activeTools: names });
     const ready = [
       { tool: third, ok: true },
       { tool: first, ok: true },
       { tool: second, ok: true },
     ];
-    expect(at(ready)?.activeTools).toEqual(names);
     expect(at([...ready, { tool: brief, ok: true }])).toEqual({
       toolChoice: "none",
       activeTools: [],
     });
-    expect(at([{ tool: first, ok: true }])?.activeTools.includes(brief)).toBe(false);
     // The last allowed step writes the answer.
     expect(stepToolChoice(plan, 5)).toEqual({ toolChoice: "none", activeTools: [] });
     expect(

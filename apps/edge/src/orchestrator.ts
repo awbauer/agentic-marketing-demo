@@ -59,7 +59,8 @@ import {
   scopeAllowsTool,
   type WorkbenchScope,
 } from "@northstar/architecture";
-import { authorizeTool } from "./architecture/context";
+import type { GatewayContext } from "@northstar/architecture";
+import { authorizeTool, chatToolsAllowed } from "./architecture/context";
 import { LOCATIONS } from "./campaign-context/open-meteo";
 import {
   CAMPAIGN_CONTEXT_TOOL_PREFIX,
@@ -114,6 +115,7 @@ import {
 } from "./memory";
 import { auditCutoff, type DataBindings, dataPlatform } from "./platform/data";
 import { type ModelBindings, modelPlatform, serverHost } from "./platform/models";
+import { classifyRequest, isOffTopic } from "./classifier";
 import { buildTurnRecord } from "./turn-history";
 import {
   type DraftIntent,
@@ -128,6 +130,8 @@ import {
   orchestratorSystemPrompt,
   pinCampaignChannel,
   requestedChannel,
+  draftingPrerequisites,
+  policyToolName,
   selectToolPlan,
   stepToolChoice,
   TURN_TIMEOUT,
@@ -340,6 +344,14 @@ const LOCAL_FIXTURE_RESULTS: Array<[string, unknown]> = [
 export async function pruneConfirmationAudit(env: DataBindings) {
   await dataPlatform(env).audit.prune(auditCutoff());
 }
+
+/** How the model answers a request the classifier found has nothing to do with the workbench. */
+const OFF_TOPIC_INSTRUCTION = [
+  "This request is outside what this workbench is for, and no tools are available for it.",
+  "Reply in two or three friendly sentences, in your own words, and don't refuse curtly:",
+  "say plainly that it isn't something you can help with here (and, for anything that asks for a prediction or a guess, such as lottery numbers, that you won't invent one); then say what you can do instead: campaign summaries and readiness checks, campaign briefs and content, approved content and clinical claims checks, audiences, account plans and outreach for the demo brands (Coastline Kitchen, Harborstone Wealth, Lumera Therapeutics).",
+  "Don't make up facts, numbers or data.",
+].join(" ");
 
 /** What the local Campaign Creation agent stand-in replies when it drafts the fixture brief. */
 function localAgentBrief(keyMessage: string) {
@@ -770,6 +782,55 @@ export class MarketingOrchestrator extends AIChatAgent<
   private scope: WorkbenchScope = DEFAULT_SCOPE;
 
   /** Every model-called tool passes the agentic gateway as `tool:<name>`; a gateway fault fails closed. */
+  /**
+   * The tools on offer for one step (ADR-020): the step's candidates (the scenario's toolset, or
+   * the whole catalog) as far as the Cedar policies allow them in this turn's context. Records the
+   * context so the gateway checks each call against the same one. Nothing on offer means the model
+   * writes the answer.
+   */
+  private async policyChoice(
+    planned: ReturnType<typeof stepToolChoice>,
+    stepNumber: number,
+    catalog: string[],
+    outcomes: ReturnType<typeof stepOutcomes>,
+    turn: { intents: string[]; prerequisites?: string[] | undefined },
+  ) {
+    if (planned?.toolChoice === "none") return planned;
+    const candidates = new Set(planned?.activeTools ?? catalog);
+    // A request the classifier labels claims needs the claims check, whatever its scenario.
+    if (turn.intents.includes("claims"))
+      for (const name of catalog) if (name.endsWith("check_clinical_claims")) candidates.add(name);
+    this.policyContext = {
+      intents: turn.intents,
+      done: [
+        ...new Set(outcomes.filter((item) => item.ok).map((item) => policyToolName(item.tool))),
+      ],
+      ...(turn.prerequisites ? { prerequisites: turn.prerequisites } : {}),
+    };
+    const { allowed } = await chatToolsAllowed(
+      this.env,
+      this.principalSubject,
+      [...candidates],
+      this.scope,
+      this.policyContext,
+    ).catch((error: unknown) => {
+      // The policy engine failing closes the step: no tools, so the model answers what it can.
+      console.error(
+        "[gateway] tool offering failed",
+        error instanceof Error ? error.message : error,
+      );
+      return { allowed: [] as string[] };
+    });
+    if (allowed.length === 0) return { toolChoice: "none" as const, activeTools: [] as string[] };
+    return {
+      toolChoice: stepNumber === 0 ? ("required" as const) : ("auto" as const),
+      activeTools: allowed,
+    };
+  }
+
+  /** The context the latest step's tools were offered in; each call is checked against it. */
+  private policyContext: GatewayContext = {};
+
   private async authorizeTool(toolName: string) {
     try {
       return await authorizeTool(
@@ -778,6 +839,7 @@ export class MarketingOrchestrator extends AIChatAgent<
         toolName,
         crypto.randomUUID(),
         this.scope,
+        this.policyContext,
       );
     } catch (error) {
       console.error(
@@ -814,6 +876,12 @@ export class MarketingOrchestrator extends AIChatAgent<
     abortSignal?: AbortSignal,
   ): Promise<Response> {
     const turnMessages = conversationWindow(messages);
+    // The classifier labels the request while the tools connect; its labels decide, through the
+    // Cedar policies, which tools this turn is offered (ADR-020).
+    const models = modelPlatform(this.env);
+    const classifying = classifyRequest(latestUserText(turnMessages), {
+      model: models ? models.chat(PROOF_DEFAULTS.orchestratorModel) : null,
+    });
     await this.mcp.waitForConnections({ timeout: 10_000 });
     const discoveredTools = this.mcp.getAITools();
     const controls = parseOperationControls(this.env);
@@ -892,8 +960,9 @@ export class MarketingOrchestrator extends AIChatAgent<
       briefSaved: this.state.workingSet.focus?.saved?.objectType === "Brief",
     };
     this.agentBriefThisTurn = false;
-    const models = modelPlatform(this.env);
     if (!models) throw new Error("No model platform is bound, so the orchestrator cannot run.");
+    const classification = await classifying;
+    const offTopic = isOffTopic(classification);
     const workspace = workingSetPrompt(this.state.workingSet);
     const prompt = latestUserText(turnMessages);
     const focus = this.state.workingSet.focus;
@@ -963,6 +1032,7 @@ export class MarketingOrchestrator extends AIChatAgent<
           requiredTool,
           route: "model",
           ...this.traceHost(),
+          classification,
           timeoutSeconds: TURN_TIMEOUT.totalMs / 1000,
           userAbortSignal: abortSignal,
           composeEmptyAnswer: () =>
@@ -974,25 +1044,36 @@ export class MarketingOrchestrator extends AIChatAgent<
               model: models.chat(PROOF_DEFAULTS.orchestratorModel),
               middleware: forcedToolCallMiddleware,
             }),
-            system: orchestratorSystemPrompt(workspace, toolPlan, this.scope),
+            system: offTopic
+              ? `${orchestratorSystemPrompt(workspace, undefined, this.scope)}\n\n${OFF_TOPIC_INSTRUCTION}`
+              : orchestratorSystemPrompt(workspace, toolPlan, this.scope),
             messages: await convertToModelMessages(turnMessages),
             tools: pinnedTools,
             // A revision with no agent to ask rewrites the draft in focus without tools; a brief's
             // revision goes back to the Marketing Cloud agent through its plan.
-            prepareStep: ({
+            prepareStep: async ({
               stepNumber,
               steps,
             }: {
               stepNumber: number;
               steps: ReadonlyArray<{ content: ReadonlyArray<unknown> }>;
             }) => {
-              if (drafting?.mode === "revise" && !toolPlan)
+              // Off topic: no tools at all; the model answers in its own words (ADR-020).
+              if (offTopic || (drafting?.mode === "revise" && !toolPlan))
                 return { toolChoice: "none" as const, activeTools: [] as string[] };
-              const choice = stepToolChoice(
-                toolPlan,
+              const outcomes = stepOutcomes(steps);
+              const planned = stepToolChoice(toolPlan, stepNumber, MAX_TURN_STEPS, outcomes);
+              // The scenario picks the candidates; the Cedar policies decide which are on offer
+              // now, and the gateway checks each call against the same context (ADR-020).
+              const choice = await this.policyChoice(
+                planned,
                 stepNumber,
-                MAX_TURN_STEPS,
-                stepOutcomes(steps),
+                Object.keys(pinnedTools),
+                outcomes,
+                {
+                  intents: classification.intents,
+                  ...(toolPlan ? { prerequisites: draftingPrerequisites(toolPlan) } : {}),
+                },
               );
               // The inventory check is computed by code after the plan's tools run, so the answer
               // step sees the workspace as it is now, including exactly which items are low.

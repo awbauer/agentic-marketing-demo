@@ -26,6 +26,7 @@ import {
   type TeamSpecialist,
   type TeamToolStep,
   teamProviderLabel,
+  type GatewayContext,
 } from "@northstar/architecture";
 import type { HostId } from "@northstar/contracts";
 import { type LanguageModel, type LanguageModelMiddleware, wrapLanguageModel } from "ai";
@@ -381,14 +382,24 @@ export function teamModel(
       });
 }
 
-/** The gateway check for one team tool call, as `team:<tool>`, on the brief's brand. */
-export async function authorizeTeam(ctx: Ctx, agent: TeamAgentId, tool: string, brand = "") {
+/**
+ * The gateway check for one team tool call, as `team:<tool>`, on the brief's brand, in the
+ * context the tool was offered in (a squad spoke's work, or a lifecycle step).
+ */
+export async function authorizeTeam(
+  ctx: Ctx,
+  agent: TeamAgentId,
+  tool: string,
+  brand = "",
+  context: GatewayContext = {},
+) {
   const { decision } = await invoke(
     ctx,
     {
       principal: { type: "agent", id: agent },
       action: `team:${tool}`,
       ...(brand ? { resource: { brand: brand as never } } : {}),
+      context: { surface: "team", ...context },
     },
     () => null,
     { extraPolicies: buildTeamPolicies },
@@ -406,10 +417,11 @@ export async function gated(
   tool: string,
   input: unknown,
   body: () => Promise<unknown> | unknown,
+  context: GatewayContext = {},
 ): Promise<unknown> {
   let decision: TeamToolStep["decision"];
   try {
-    decision = await authorizeTeam(run.ctx, agent, tool, run.brief.brand);
+    decision = await authorizeTeam(run.ctx, agent, tool, run.brief.brand, context);
   } catch (failure) {
     const reason = failure instanceof Error ? failure.message : String(failure);
     const extra = failure instanceof ArchError ? failure.extra.decision : undefined;

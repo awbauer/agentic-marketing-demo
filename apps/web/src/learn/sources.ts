@@ -67,6 +67,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   ],
   routing: [
     "apps/edge/src/turn-policy.ts",
+    "apps/edge/src/classifier.ts",
     "docs/decisions/ADR-019-scoped-tools-not-forced-calls.md",
   ],
   reliability: ["apps/edge/src/forced-tool-middleware.ts", "apps/edge/src/turn-trace.ts"],
@@ -164,6 +165,9 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "apps/edge/src/architecture/api.ts",
     "apps/edge/src/architecture/mcp.ts",
     "apps/edge/src/architecture/store.ts",
+    "packages/architecture/src/cedar/",
+    "packages/architecture/policies/",
+    "scripts/generate-policies.mjs",
     "migrations/0006_architecture_roadmap.sql",
   ],
   lifecycle: [

@@ -4,8 +4,15 @@ import { defineConfig } from "vite";
 
 // The Google Cloud server bundle (ADR-018): the shared Worker code and the Node host in one file,
 // with the Agents SDK's chat agent swapped for the Node implementation. Google's client libraries
-// load files at runtime, so they stay external and are installed beside the bundle.
-const external = ["@google-cloud/firestore", "@google-cloud/storage", "google-auth-library", "ws"];
+// load files at runtime, so they stay external and are installed beside the bundle. So does the
+// Cedar engine: its nodejs build reads its .wasm beside it, and the gateway requires it lazily.
+const external = [
+  "@cedar-policy/cedar-wasm",
+  "@google-cloud/firestore",
+  "@google-cloud/storage",
+  "google-auth-library",
+  "ws",
+];
 const local = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 export default defineConfig({

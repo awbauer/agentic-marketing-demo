@@ -70,6 +70,7 @@ export async function handleTeam(
       providers: providerStatus(ctx),
       briefs: TEAM_BRIEFS,
       lifecycle: { phases: PHARMA_PHASES, gates: TEAM_GATES },
+      // The team's Cedar policies in force, as their files have them (file and @id on each).
       policies: buildTeamPolicies(await overridesFor(ctx)).map((policy) => ({
         ...policy,
         cedar: toCedar(policy),

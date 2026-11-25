@@ -270,6 +270,10 @@ export function routeMap(
             started ? "done" : working ? "active" : "idle",
             started && !viaModel ? "Answered here" : "",
           ),
+          // The classifier's labels decide, through policy, which tools the model is offered.
+          ...(seen?.start?.intents?.length
+            ? [node("classifier", "Classifier", "done", seen.start.intents.join(", "))]
+            : []),
           // On Google Cloud models are called directly on Vertex AI; there is no AI Gateway hop.
           ...(google ? [] : [node("ai-gateway", "AI Gateway", modelState)]),
           node(

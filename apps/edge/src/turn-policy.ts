@@ -635,20 +635,18 @@ export function plannedToolsDone(
 }
 
 /**
- * Per-step tool settings for a scenario the intent router recognised (ADR-019). The scenario
- * decides which tools are offered, not which one is called:
+ * Per-step tool settings for a scenario the intent router recognised (ADR-019, ADR-020). The
+ * scenario picks the candidate tools, never the whole catalog; the Cedar policies then decide
+ * which candidates are on offer this step (claims first, ground before drafting, nothing when off
+ * topic). Nothing is forced:
  *
- * - **The right tools for the job.** Only the scenario's tools are offered, never the whole
- *   catalog; a request it doesn't recognise gets the brand's full catalog instead.
- * - **Look before you answer.** The first step must call one of them, any one; after that the
- *   model calls what it needs, in the order it chooses, and may answer when it has enough.
- * - **Ground before you draft.** A Marketing Cloud agent, which drafts and creates in
- *   Salesforce, is offered only once every tool planned before it has run.
+ * - **Look before you answer.** The first step must call one of the tools on offer, any one;
+ *   after that the model calls what it needs, in its order, and may answer when it has enough.
  * - **Then write.** When every planned tool has run, or on the last allowed step, no tools are
  *   offered: Workers AI does not enforce `toolChoice: "none"`, so gpt-oss would otherwise emit
  *   malformed tool calls instead of the answer.
  *
- * A planned tool that failed stays on offer, so the model can fix its arguments and retry.
+ * A planned tool that failed stays a candidate, so the model can fix its arguments and retry.
  */
 export function stepToolChoice(
   plan: string | readonly string[] | undefined,
@@ -665,15 +663,27 @@ export function stepToolChoice(
   const done = plannedToolsDone(steps, stepNumber, outcomes);
   if (stepNumber >= maxSteps - 1 || steps.every((name) => done.has(name)))
     return { toolChoice: "none" as const, activeTools: [] as string[] };
-  const offered = steps.filter(
-    (name, index) =>
-      !MARKETING_CLOUD_TOOLS.has(baseName(name)) ||
-      steps.slice(0, index).every((earlier) => done.has(earlier)),
-  );
   return {
     toolChoice: stepNumber === 0 ? ("required" as const) : ("auto" as const),
-    activeTools: [...new Set(offered)],
+    activeTools: [...new Set(steps)],
   };
+}
+
+/**
+ * A tool's name as the Cedar policies name it: without its server's prefix (graph_, context_,
+ * ext_, ls_), and a Salesforce tool by its governed name.
+ */
+export function policyToolName(name: string) {
+  const local = name.match(/^(?:graph|context|ext|ls)_(.+)$/);
+  if (local?.[1]) return local[1];
+  return name.startsWith("tool_") ? baseName(name).replace(/^tool_[a-z0-9]+_/, "") : name;
+}
+
+/** The planned tools that run before the plan's first Marketing Cloud agent, by policy name. */
+export function draftingPrerequisites(plan: readonly string[] | undefined) {
+  if (!plan) return undefined;
+  const first = plan.findIndex((name) => MARKETING_CLOUD_TOOLS.has(baseName(name)));
+  return first > 0 ? plan.slice(0, first).map(policyToolName) : undefined;
 }
 
 /** A tool's name without its server's prefix ("tool_salesforce_…_draft_campaign_brief"). */

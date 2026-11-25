@@ -30,7 +30,7 @@ What is missing is the *shape*: objects with lifelong identity and governance at
 | AgentCore Registry | Agent registry: source-controlled manifest, seeded into D1, served by the Worker |
 | AgentCore Identity workload tokens | Per-invocation agent tokens minted by the gateway with `jose` (RFC 8693-style `act` claim for the user) |
 | Agentic Gateway | A single `gateway.invoke()` choke point in the Worker in front of every tool, MCP, A2A and service call; Cloudflare MCP server portal and AI Gateway stay behind it |
-| Cedar policy | Cedar, evaluated in the Worker with `@cedar-policy/cedar-wasm` (spike first; fall back to a typed default-deny evaluator) |
+| Cedar policy | Cedar, evaluated with `@cedar-policy/cedar-wasm` on both hosts (done, ADR-020): one set of policy files decides which tools are offered and whether each call is allowed |
 | Bedrock / SageMaker model catalog | Workers AI models through AI Gateway (dynamic routes for routing and champion/challenger) |
 | AgentCore Evaluations, MLflow | The existing evals package and report, extended to named evaluators, per-agent baselines and drift |
 | Prompt Catalog, prompt caching | Versioned prompt catalog in source, published to KV; AI Gateway caching |
@@ -75,7 +75,7 @@ The workbench is built on Cloudflare, but each layer keeps a provider-neutral co
 | Caches | Durable Object state, KV | ElastiCache or DynamoDB with TTL (session, global, semantic) | Cache interface |
 | Vector and semantic search | Vectorize (embedder interface, hashing fallback) | OpenSearch Serverless or Aurora pgvector, Bedrock Titan embeddings | Implement the embedder and index interface |
 | Agentic Gateway | `gateway.invoke()` in the Worker, MCP server portal and AI Gateway behind it | AgentCore Gateway (MCP tool invocation, A2A) fronted by API Gateway | Gateway adapter; policies move to AgentCore Policy, which is Cedar |
-| Policy | Cedar-shaped policies, default-deny evaluator | Cedar in AgentCore Policy or Amazon Verified Permissions | Policies are already Cedar-shaped; load them into the service |
+| Policy | Cedar policy files evaluated by the Cedar engine (ADR-020) | Cedar in AgentCore Policy or Amazon Verified Permissions | The policies are already Cedar; load them into the service |
 | Workload identity | Per-invocation tokens minted with `jose` | AgentCore Identity workload tokens, STS and token exchange | Replace mint and verify; the `act` claim carries over |
 | Agent registry | Source manifest seeded into D1 | AgentCore Registry | Sync the manifest into the registry on deploy |
 | Agent runtime | Worker functions and the Agents SDK | AgentCore Runtime or Lambda | Agents are pure functions over the world; wrap them |

@@ -9,6 +9,7 @@ import {
   CHALLENGERS,
   CHAMPIONS,
   canPromote,
+  CEDAR_SCHEMA,
   detectDrift,
   EVALUATORS,
   effectiveAgent,
@@ -56,7 +57,9 @@ export async function registryView(ctx: Ctx) {
       owner: STAGE_OWNERS[stage],
     })),
     agents,
+    // The Cedar policies in force, as their files have them (file and @id on each).
     policies: buildPolicies(overrides).map((policy) => ({ ...policy, cedar: toCedar(policy) })),
+    schema: CEDAR_SCHEMA,
     lifecycle: ["introduce", "test", "monitor", "constrain", "retire"],
   };
 }

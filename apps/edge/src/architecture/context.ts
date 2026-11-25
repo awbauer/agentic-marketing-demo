@@ -6,12 +6,17 @@ import {
   DEFAULT_SCOPE,
   type Decision,
   evaluate,
+  type GatewayContext,
   type GatewayRequest,
   identityChain,
+  mergePolicies,
   mintAgentToken,
   type Persona,
   type Policy,
+  type PolicySet,
+  type Principal,
   toolBrand,
+  toolsAllowed,
   verifyAgentToken,
   type WorkbenchScope,
 } from "@northstar/architecture";
@@ -106,6 +111,35 @@ export async function overridesFor(ctx: Ctx): Promise<AgentOverrides> {
 
 export type Invoked<T> = { value: T; decision: Decision; chain: ChainHop[] };
 
+/** Policies a system outside the registry adds, such as the campaign team's. */
+export type ExtraPolicies = (overrides: AgentOverrides) => readonly Policy[];
+
+const BASE = "registry";
+const builtSets = new Map<string, PolicySet>();
+const extraIds = new WeakMap<ExtraPolicies, string>();
+let extraCount = 0;
+
+/**
+ * The policies in force for this user's request: the registry's, with the operator's overrides,
+ * plus any a caller adds. Built once per process for each set of overrides, so the gateway also
+ * parses each into Cedar once.
+ */
+export async function policiesFor(ctx: Ctx, extraPolicies?: ExtraPolicies): Promise<PolicySet> {
+  const overrides = await overridesFor(ctx);
+  if (extraPolicies && !extraIds.has(extraPolicies)) {
+    extraCount += 1;
+    extraIds.set(extraPolicies, `extra-${extraCount}`);
+  }
+  const key = `${extraPolicies ? extraIds.get(extraPolicies) : BASE}:${JSON.stringify(overrides)}`;
+  let set = builtSets.get(key);
+  if (!set) {
+    if (builtSets.size >= 64) builtSets.clear();
+    set = mergePolicies(buildPolicies(overrides), extraPolicies?.(overrides) ?? []);
+    builtSets.set(key, set);
+  }
+  return set;
+}
+
 /**
  * The only path to an architecture capability. It evaluates the policies (default-deny), logs the
  * decision, mints and verifies a per-invocation token, and only then runs the capability.
@@ -114,16 +148,11 @@ export async function invoke<T>(
   ctx: Ctx,
   request: Omit<GatewayRequest, "user">,
   run: () => Promise<T> | T,
-  options: {
-    /** Policies a system outside the registry adds, such as the campaign team's. */
-    extraPolicies?: (overrides: AgentOverrides) => Policy[];
-  } = {},
+  options: { extraPolicies?: ExtraPolicies } = {},
 ): Promise<Invoked<T>> {
   const started = Date.now();
   const full: GatewayRequest = { ...request, user: ctx.user };
-  const overrides = await overridesFor(ctx);
-  const policies = [...buildPolicies(overrides), ...(options.extraPolicies?.(overrides) ?? [])];
-  const decision = evaluate(policies, full);
+  const decision = evaluate(await policiesFor(ctx, options.extraPolicies), full);
   // A failed audit write is reported, never allowed to take the call down with it.
   const log = (latencyMs: number) =>
     ctx.store
@@ -165,19 +194,26 @@ export async function invoke<T>(
   };
 }
 
-/** Authorizes a model-called orchestrator tool as `tool:<name>`, and logs the decision. */
+const scopeUser = (subject: string, scope: WorkbenchScope): Ctx["user"] => ({
+  subject,
+  persona: scope.persona,
+  brands: scope.brand === "all" ? "all" : [scope.brand],
+});
+
+/**
+ * Authorizes a model-called orchestrator tool as `tool:<name>`, and logs the decision. `context`
+ * is the turn's (scenario, intents, done): pass the same one given to chatToolsAllowed, so the
+ * call is decided exactly as the offer was.
+ */
 export async function authorizeTool(
   env: ArchEnv,
   subject: string,
   toolName: string,
   correlationId: string,
   scope: WorkbenchScope = DEFAULT_SCOPE,
+  context: GatewayContext = {},
 ): Promise<Decision> {
-  const ctx = makeCtx(
-    env,
-    { subject, persona: scope.persona, brands: scope.brand === "all" ? "all" : [scope.brand] },
-    correlationId,
-  );
+  const ctx = makeCtx(env, scopeUser(subject, scope), correlationId);
   const brand = toolBrand(toolName);
   try {
     const { decision } = await invoke(
@@ -186,6 +222,7 @@ export async function authorizeTool(
         principal: { type: "agent", id: "orchestrator" },
         action: `tool:${toolName}`,
         ...(brand ? { resource: { brand } } : {}),
+        context: { surface: "chat", brand: scope.brand, ...context },
       },
       () => null,
     );
@@ -194,4 +231,53 @@ export async function authorizeTool(
     if (error instanceof ArchError && error.extra.decision) return error.extra.decision as Decision;
     throw error;
   }
+}
+
+/**
+ * Which of the orchestrator's tools to offer the model this turn: exactly those authorizeTool
+ * would allow with the same scope and context. Not logged; nothing was called.
+ */
+export async function chatToolsAllowed(
+  env: ArchEnv,
+  subject: string,
+  toolNames: readonly string[],
+  scope: WorkbenchScope = DEFAULT_SCOPE,
+  context: GatewayContext = {},
+): Promise<{ allowed: string[]; decisions: Record<string, Decision> }> {
+  const ctx = makeCtx(env, scopeUser(subject, scope), "offer");
+  const offer = await offerTools(ctx, {
+    principal: { type: "agent", id: "orchestrator" },
+    candidates: toolNames.map((name) => `tool:${name}`),
+    context: { surface: "chat", brand: scope.brand, ...context },
+  });
+  return {
+    allowed: offer.allowed.map((action) => action.slice("tool:".length)),
+    decisions: Object.fromEntries(
+      Object.entries(offer.decisions).map(([action, decision]) => [
+        action.slice("tool:".length),
+        decision,
+      ]),
+    ),
+  };
+}
+
+/** What a principal may be offered among some gateway actions, decided as invoke decides calls. */
+export async function offerTools(
+  ctx: Ctx,
+  input: {
+    principal: Principal;
+    candidates: readonly string[];
+    context?: GatewayContext;
+    resource?: GatewayRequest["resource"];
+    extraPolicies?: ExtraPolicies;
+  },
+) {
+  return toolsAllowed({
+    policies: await policiesFor(ctx, input.extraPolicies),
+    principal: input.principal,
+    user: ctx.user,
+    candidates: input.candidates,
+    ...(input.context ? { context: input.context } : {}),
+    ...(input.resource ? { resource: input.resource } : {}),
+  });
 }
