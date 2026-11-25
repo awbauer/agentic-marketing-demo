@@ -1,7 +1,7 @@
 // The squad as a live hub-and-spoke map: the campaign lead sits in the middle, the four spokes sit
 // around it, the brief arrives from the left and the proposal leaves on the right. Spokes that talk
 // to each other get a curve between them. Each node shows its agent's state, and the line a
-// message is travelling along right now is lit.
+// message is travelling along right now is lit. Every agent node opens that agent's details.
 import {
   isLifecycleWorker,
   type LifecycleWorker,
@@ -11,6 +11,7 @@ import {
   type TeamAgentId,
   type TeamMode,
 } from "@northstar/architecture";
+import type { KeyboardEvent } from "react";
 import type { TeamMessage, TeamState } from "./team-state";
 
 type Point = { x: number; y: number };
@@ -84,7 +85,33 @@ function toward(from: Point, to: Point, distance: number): Point {
   return { x: from.x + (dx / length) * distance, y: from.y + (dy / length) * distance };
 }
 
-export function TeamHierarchy({ state, mode = "squad" }: { state: TeamState; mode?: TeamMode }) {
+/** Props that make an SVG node act as a button: click, Enter or Space opens the agent. */
+function opens(id: TeamAgentId, label: string, onSelect?: (id: TeamAgentId) => void) {
+  if (!onSelect) return {};
+  return {
+    role: "button",
+    tabIndex: 0,
+    "aria-label": `${label}: open agent details`,
+    onClick: () => onSelect(id),
+    onKeyDown: (event: KeyboardEvent) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onSelect(id);
+      }
+    },
+  } as const;
+}
+
+export function TeamHierarchy({
+  state,
+  mode = "squad",
+  onSelect,
+}: {
+  state: TeamState;
+  mode?: TeamMode;
+  /** Opens an agent's details; the nodes are buttons when it is given. */
+  onSelect?: (id: TeamAgentId) => void;
+}) {
   const SPOKE = (mode === "lifecycle" ? LIFECYCLE_SPOKES : SQUAD_SPOKES) as Record<
     LifecycleWorker,
     Point
@@ -239,7 +266,11 @@ export function TeamHierarchy({ state, mode = "squad" }: { state: TeamState; mod
         </text>
       </g>
 
-      <g className={`team-node team-node-director is-${lead.state}`}>
+      <g
+        className={`team-node team-node-director is-${lead.state}${onSelect ? " team-node-clickable" : ""}`}
+        {...opens(TEAM_DIRECTOR, `Campaign lead, ${lead.state}`, onSelect)}
+      >
+        <title>Campaign lead: click for details</title>
         <circle cx={HUB.x} cy={HUB.y} r={HUB_R} />
         <text x={HUB.x} y={HUB.y - 4} textAnchor="middle" className="team-node-title">
           Campaign lead
@@ -256,7 +287,12 @@ export function TeamHierarchy({ state, mode = "squad" }: { state: TeamState; mod
         const at = SPOKE[id];
         const view = state.agents[id];
         return (
-          <g key={id} className={`team-node team-node-specialist is-${view.state}`}>
+          <g
+            key={id}
+            className={`team-node team-node-specialist is-${view.state}${onSelect ? " team-node-clickable" : ""}`}
+            {...opens(id, `${TEAM_PARTY_LABELS[id]}, ${view.state}`, onSelect)}
+          >
+            <title>{`${TEAM_PARTY_LABELS[id]}: click for details`}</title>
             <rect
               x={at.x - SPOKE_W / 2}
               y={at.y - SPOKE_H / 2}

@@ -8,8 +8,14 @@ import {
   claimsLibrary,
   conceptProblems,
   currentStep,
+  CURRENT_LABEL,
   deploymentProblems,
   draftModule,
+  finalFormCheck,
+  placementsFor,
+  prepareForm2253,
+  reviewTier,
+  traceClaims,
   focusProblems,
   type MlrJob,
   newLifecycle,
@@ -114,7 +120,7 @@ describe("pharma lifecycle rules", () => {
     }
   });
 
-  it("issues an approval that expires at twelve months or the first reference expiry", () => {
+  it("issues an approval that expires at twelve months or the first reference or claim expiry", () => {
     const drafted = draftModule(world, brief, "EM1", module);
     if (!drafted.ok) throw new Error("draft failed");
     const job: MlrJob = {
@@ -124,11 +130,75 @@ describe("pharma lifecycle rules", () => {
       checks: [],
       coordinatorNotes: [],
     };
+    // Twelve months out would be 2027-11-20; the mortality claim's own approval ends 2027-11-14.
     expect(approveJob(job, "2026-11-20")).toMatchObject({
       documentNumber: "J-A",
-      expiresOn: "2027-11-20",
+      expiresOn: "2027-11-14",
+      labelVersion: CURRENT_LABEL.id,
+      materials: [
+        { moduleId: "EM1", materialId: "J-A-EM1", claimIds: ["CLM-CRD-0042", "CLM-CRD-0043"] },
+      ],
     });
-    expect(approveJob(job, "2027-06-01").expiresOn).toBe("2028-03-01");
+    expect(approveJob(job, "2026-01-10").expiresOn).toBe("2027-01-10");
+  });
+
+  it("keeps a claim's record: ID, anchors, context, scope, label and expiry", () => {
+    const library = claimsLibrary(world, "Lumera Therapeutics", brief.end);
+    const mortality = library.find((claim) => claim.topic === "cardivance-mortality");
+    expect(mortality).toMatchObject({
+      claimId: "CLM-CRD-0042",
+      labelVersion: CURRENT_LABEL.id,
+      mustNotAppearWith: ["cardivance-superior"],
+      references: [{ source: "CARDIO-HF clinical study report", anchor: "p. 7, table 2" }],
+    });
+    expect(mortality?.context).toMatch(/Absolute rates/);
+    // Every usable claim carries its passage anchor, keyed to its governed evidence source.
+    for (const claim of library.filter((item) => item.usable))
+      expect(
+        claim.references.every((reference) => reference.anchor),
+        claim.topic,
+      ).toBe(true);
+    expect(
+      library.find((claim) => claim.topic === "cardivance-safety")?.references[0]?.anchor,
+    ).toMatch(/section 6\.1/);
+  });
+
+  it("refuses the near twins a search returns beside the right claim", () => {
+    const library = new Map(
+      claimsLibrary(world, "Lumera Therapeutics", brief.end).map((claim) => [claim.topic, claim]),
+    );
+    expect(library.get("cardivance-mortality-consumer")?.issues.join(" ")).toMatch(/not HCPs/);
+    expect(library.get("cardivance-mortality-detail-aid")?.issues.join(" ")).toMatch(
+      /detail-aid only/,
+    );
+    expect(library.get("cardivance-mortality-v3")?.issues.join(" ")).toMatch(/old label/);
+    const result = draftModule(world, brief, "EM1", {
+      ...module,
+      claimTopics: ["cardivance-mortality-v3"],
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("inserts each claim by ID with its context, and judges the module as a whole", () => {
+    const result = draftModule(world, brief, "EM1", module);
+    if (!result.ok) throw new Error("draft failed");
+    expect(result.module.claims.map((claim) => claim.claimId)).toEqual([
+      "CLM-CRD-0042",
+      "CLM-CRD-0043",
+    ]);
+    expect(result.module.claims[0]?.context).toMatch(/21.0% with Cardivance/);
+    const checks = preReviewChecks(brief, [result.module]);
+    expect(checks.map((check) => check.check)).toEqual(
+      expect.arrayContaining(["Net impression", "Fair balance", "Required context for claim 1"]),
+    );
+    expect(reviewTier([result.module]).tier).toBe("C");
+    const approved = approveJob(
+      { jobCode: "J", round: 1, modules: [result.module], checks, coordinatorNotes: [] },
+      "2026-11-20",
+    );
+    const built = finalFormCheck(approved);
+    expect(built.variants).toHaveLength(4);
+    expect(built.allMatch).toBe(true);
   });
 
   it("applies consent and the do-not-contact list to the HCP list", () => {
@@ -192,8 +262,24 @@ describe("pharma lifecycle rules", () => {
       },
     ];
     expect(deploymentProblems(brief, approved, audience, lines)).toEqual([]);
-    const results = simulateResults(brief, audience, lines);
+    // Claim IDs travel into the channel with the placement, and come back with the results.
+    const placements = placementsFor(approved, lines);
+    expect(placements[0]).toMatchObject({
+      placementId: "PL-001",
+      materialId: "J-A-EM1",
+      claimIds: ["CLM-CRD-0042", "CLM-CRD-0043"],
+    });
+    expect(prepareForm2253(brief, approved, lines)).toMatchObject({
+      currentPi: CURRENT_LABEL.id,
+      materials: [{ materialId: "J-A-EM1", firstUse: brief.start }],
+    });
+    const results = simulateResults(brief, audience, lines, placements);
     expect(results.lines).toHaveLength(1);
+    expect(results.byClaim.map((usage) => usage.claimId)).toEqual(["CLM-CRD-0042", "CLM-CRD-0043"]);
+    const kept = traceClaims("optimize", approved, placements);
+    expect(kept.withdrawal).toBeNull();
+    expect(kept.claims[0]).toMatchObject({ claimId: "CLM-CRD-0042", reReviewBy: "2027-09-14" });
+    expect(traceClaims("retire", approved, placements).withdrawal).toHaveLength(1);
     expect(
       performanceProblems(
         {
@@ -225,6 +311,11 @@ describe("pharma lifecycle rules", () => {
       nextPhase: "ideation",
     });
     expect(state.choices.focus).toBe("1");
+    // Ideation: the brand lead chooses, then Medical looks at the concept before anything is built.
+    recordArtifact(state, "propose_concepts", "art-director", { concepts: [{ name: "X" }] });
+    applyDecision(state, "concept", "approve", { choice: "1" });
+    expect(currentStep(state)).toMatchObject({ gate: "concept-review" });
+    expect(applyDecision(state, "concept-review", "approve").nextPhase).toBe("content");
     // The MLR phase waits on Medical, then Legal, then Regulatory.
     state.phase = "content";
     recordArtifact(state, "draft_modules", "copy-lead", {});

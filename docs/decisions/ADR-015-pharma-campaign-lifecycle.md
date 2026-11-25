@@ -1,6 +1,6 @@
 # ADR-015: A pharma campaign lifecycle, with MLR, run by the agent team
 
-Status: accepted
+Status: accepted (extended by ADR-017)
 
 Date: 2026-11-20
 

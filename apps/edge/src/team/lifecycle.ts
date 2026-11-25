@@ -24,7 +24,11 @@ import {
   type PhaseStep,
   pharmaPhase,
   recordArtifact,
+  finalFormCheck,
+  type NextAction,
+  type Placement,
   simulateResults,
+  traceClaims,
   TEAM_DIRECTOR,
   TEAM_GATES,
   TEAM_PARTY_LABELS,
@@ -69,6 +73,7 @@ export const GATE_PARTY: Record<TeamGate, TeamParty> = {
   client: "client",
   focus: "brand-lead",
   concept: "brand-lead",
+  "concept-review": "medical",
   medical: "medical",
   legal: "legal",
   regulatory: "regulatory",
@@ -83,6 +88,7 @@ const GATE_TITLES: Record<TeamGate, (brief: CampaignBrief) => string> = {
   client: (brief) => `Approve the proposal for ${brief.title}`,
   focus: () => "Choose the business focus for the campaign",
   concept: () => "Choose the campaign concept",
+  "concept-review": () => "Early concept review, before anything is built",
   medical: () => "Medical review of the MLR job",
   legal: () => "Legal review of the MLR job",
   regulatory: () => "Regulatory review: approve the job for distribution",
@@ -530,23 +536,58 @@ async function afterDecision(run: TeamRun, gate: TeamGate, decision: "approve" |
       "regulatory",
       "team",
       "decision",
-      `Job ${approved.jobCode} approved for distribution as ${approved.documentNumber}, expiring ${approved.expiresOn}. Only this version may be used.`,
+      `Job ${approved.jobCode} approved for distribution as ${approved.documentNumber} (${approved.materials.map((item) => item.materialId).join(", ")}), against ${approved.labelVersion}, expiring ${approved.expiresOn}. Only this version may be used.`,
+    );
+    const built = finalFormCheck(approved);
+    emitArtifact(run, "final_form_check", "system", built);
+    say(
+      run,
+      "mlr-coordinator",
+      "team",
+      "report",
+      `Final form: ${built.variants.length} built variants checked against ${approved.documentNumber}; ${built.allMatch ? "every one matches the approved version" : "a variant differs, so publishing is blocked"}.`,
     );
   }
   if (gate === "fda-2253") {
     const audience =
       (state.artifacts.build_audience?.data as { lines?: AudienceLine[] })?.lines ?? [];
-    const lines =
-      (state.artifacts.schedule_deployment?.data as { lines?: DeploymentLine[] })?.lines ?? [];
-    const results = simulateResults(run.brief, audience, lines);
+    const schedule = state.artifacts.schedule_deployment?.data as
+      | { lines?: DeploymentLine[]; placements?: Placement[] }
+      | undefined;
+    const results = simulateResults(
+      run.brief,
+      audience,
+      schedule?.lines ?? [],
+      schedule?.placements ?? [],
+    );
     emitArtifact(run, "campaign_results", "system", results);
     say(
       run,
       "market",
       "team",
       "report",
-      `Live. Thirty days in market (simulated): ${results.lines.length} result lines across ${new Set(results.lines.map((line) => line.segmentId)).size} segments.`,
+      `Filed, then live. Thirty days in market (simulated): ${results.lines.length} result lines across ${new Set(results.lines.map((line) => line.segmentId)).size} segments, rolled up for ${results.byClaim.length} claim IDs.`,
     );
+  }
+  if (gate === "next-action") {
+    const approved = state.artifacts.mlr_approval?.data as ApprovedJob | undefined;
+    const placements =
+      (state.artifacts.schedule_deployment?.data as { placements?: Placement[] } | undefined)
+        ?.placements ?? [];
+    const decision = (state.choices["next-action"] ?? "continue") as NextAction;
+    if (approved) {
+      const trace = traceClaims(decision, approved, placements);
+      emitArtifact(run, "claim_trace", "system", trace);
+      say(
+        run,
+        "mlr-coordinator",
+        "team",
+        "report",
+        trace.withdrawal
+          ? `Retire: ${trace.withdrawal.length} placements to pull, found by claim ID. Channel owners confirm each pull.`
+          : `Where used: ${trace.claims.map((claim) => `${claim.claimId} in ${claim.placements.length} placements, re-review by ${claim.reReviewBy}`).join("; ")}.`,
+      );
+    }
   }
 }
 

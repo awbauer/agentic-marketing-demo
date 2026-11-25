@@ -6,10 +6,13 @@ import {
   type ApprovedJob,
   type AudienceLine,
   type CampaignBrief,
+  type ClaimTrace,
+  type ClaimUsage,
   type Concept,
   currentStep,
   DECILE_LABELS,
   type DeploymentLine,
+  type FinalFormCheck,
   type FocusArea,
   type Form2253,
   isChoiceGate,
@@ -22,6 +25,7 @@ import {
   type PharmaModule,
   type PhaseStep,
   phaseOfGate,
+  type Placement,
   type ResultLine,
   stepDone,
   TEAM_GATES,
@@ -117,6 +121,15 @@ function ModuleView({ module }: { module: PharmaModule }) {
           <li key={claim.topic}>
             {claim.text}
             <sup>{claim.marker}</sup>
+            {claim.context && <small className="team-module-context">{claim.context}</small>}
+            {claim.claimId && (
+              <code
+                className="team-claim-id"
+                title={`Entered by ID from the claims library, ${claim.labelVersion ?? ""}`}
+              >
+                {claim.claimId}
+              </code>
+            )}
           </li>
         ))}
       </ul>
@@ -129,7 +142,9 @@ function ModuleView({ module }: { module: PharmaModule }) {
           {module.claims.flatMap((claim) =>
             claim.references.map((reference) => (
               <li key={`${claim.marker}-${reference.source}`} value={claim.marker}>
-                {reference.source} ({reference.asOf}; valid to {reference.expiresOn})
+                {reference.source}
+                {reference.anchor ? `, ${reference.anchor}` : ""} ({reference.asOf}; valid to{" "}
+                {reference.expiresOn})
               </li>
             )),
           )}
@@ -150,6 +165,12 @@ function MlrJobView({ job }: { job: MlrJob }) {
       <p>
         <strong>Job {job.jobCode}</strong> · round {job.round} · {job.modules.length} modules
       </p>
+      {job.tier && (
+        <p className="team-tier">
+          Review tier <strong>{job.tier.tier}</strong> · {job.tier.path}.{" "}
+          <span className="arch-note">{job.tier.reason}</span>
+        </p>
+      )}
       <ul>
         {job.coordinatorNotes.map((note) => (
           <li key={note}>
@@ -162,7 +183,7 @@ function MlrJobView({ job }: { job: MlrJob }) {
           <thead>
             <tr>
               <th scope="col">Module</th>
-              <th scope="col">Pre-review check</th>
+              <th scope="col">Quality check</th>
               <th scope="col">Result</th>
             </tr>
           </thead>
@@ -237,12 +258,21 @@ function AudienceView({
   );
 }
 
-function DeploymentView({ data }: { data: { lines: DeploymentLine[]; totalUsd: number } }) {
+function DeploymentView({
+  data,
+}: {
+  data: { lines: DeploymentLine[]; placements?: Placement[]; totalUsd: number };
+}) {
+  const placementOf = (line: DeploymentLine) =>
+    data.placements?.find(
+      (item) => item.moduleId === line.moduleId && item.channel === line.channel,
+    );
   return (
     <div className="team-table-wrap">
       <table className="team-table">
         <thead>
           <tr>
+            <th scope="col">Placement</th>
             <th scope="col">Module</th>
             <th scope="col">Channel</th>
             <th scope="col">Segments</th>
@@ -254,7 +284,19 @@ function DeploymentView({ data }: { data: { lines: DeploymentLine[]; totalUsd: n
           {data.lines.map((line) => (
             <tr key={`${line.moduleId}-${line.channel}`}>
               <td>
-                <code>{line.moduleId}</code>
+                {placementOf(line) ? (
+                  <>
+                    <code>{placementOf(line)?.placementId}</code>
+                    <small className="team-claim-ids">
+                      {placementOf(line)?.claimIds.join(" · ")}
+                    </small>
+                  </>
+                ) : (
+                  "—"
+                )}
+              </td>
+              <td>
+                <code>{placementOf(line)?.materialId ?? line.moduleId}</code>
               </td>
               <td>{PHARMA_CHANNELS[line.channel]?.label ?? line.channel}</td>
               <td>{line.segmentIds.map((id) => id.replace("lt-seg-", "")).join(", ")}</td>
@@ -265,13 +307,120 @@ function DeploymentView({ data }: { data: { lines: DeploymentLine[]; totalUsd: n
             </tr>
           ))}
           <tr className="team-total">
-            <th scope="row" colSpan={4}>
+            <th scope="row" colSpan={5}>
               Total
             </th>
             <td>{usd(data.totalUsd)}</td>
           </tr>
         </tbody>
       </table>
+      {data.placements && (
+        <p className="arch-note">
+          Each placement carries its material ID and claim IDs into the channel, so a label change
+          or an expired claim can be traced to every live placement.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function FinalFormView({ check }: { check: FinalFormCheck }) {
+  return (
+    <div className="team-work">
+      <p>
+        {check.variants.length} built variants checked against <code>{check.documentNumber}</code>:{" "}
+        <strong>
+          {check.allMatch
+            ? "every one matches the approved version"
+            : "a variant differs; publishing is blocked"}
+        </strong>
+        .
+      </p>
+      <div className="team-table-wrap">
+        <table className="team-table">
+          <thead>
+            <tr>
+              <th scope="col">Material</th>
+              <th scope="col">Variant</th>
+              <th scope="col">Checks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {check.variants.map((variant) => (
+              <tr key={`${variant.materialId}-${variant.variant}`}>
+                <td>
+                  <code>{variant.materialId}</code>
+                </td>
+                <td>{variant.variant}</td>
+                <td className={variant.ok ? "ok" : "failed"}>
+                  {variant.checks.map((item) => (
+                    <span key={item.check} className="team-check-line">
+                      {item.ok ? "✓" : "✗"} {item.check}: {item.detail}
+                    </span>
+                  ))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ClaimTraceView({ trace }: { trace: ClaimTrace }) {
+  return (
+    <div className="team-work">
+      <div className="team-table-wrap">
+        <table className="team-table">
+          <thead>
+            <tr>
+              <th scope="col">Claim</th>
+              <th scope="col">Live in</th>
+              <th scope="col">Label</th>
+              <th scope="col">Expires</th>
+              <th scope="col">Re-review by</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trace.claims.map((claim) => (
+              <tr key={claim.claimId}>
+                <th scope="row">
+                  <code>{claim.claimId}</code> <small>{claim.topic}</small>
+                </th>
+                <td>
+                  {claim.placements.length
+                    ? claim.placements
+                        .map(
+                          (item) =>
+                            `${item.placementId} (${PHARMA_CHANNELS[item.channel]?.label ?? item.channel})`,
+                        )
+                        .join(", ")
+                    : "Nowhere"}
+                </td>
+                <td>{claim.labelVersion}</td>
+                <td>{claim.expiresOn}</td>
+                <td>{claim.reReviewBy}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {trace.withdrawal && (
+        <>
+          <h6>Withdrawal plan</h6>
+          <ul>
+            {trace.withdrawal.map((item) => (
+              <li key={item.placementId}>
+                <code>{item.placementId}</code> <code>{item.materialId}</code>{" "}
+                {PHARMA_CHANNELS[item.channel]?.label ?? item.channel} · {item.claimIds.join(", ")}{" "}
+                · {item.status}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <p className="arch-note">{trace.coverage}</p>
     </div>
   );
 }
@@ -282,14 +431,17 @@ function FormView({ form }: { form: Form2253 & { coverNote?: string } }) {
       <p>
         <strong>{form.form}</strong> · {form.applicant} · {form.product} · submit at first use,{" "}
         {form.submitAtFirstUse}
+        {form.currentPi ? ` · current PI ${form.currentPi}` : ""}
       </p>
       <ul>
         {form.materials.map((item) => (
           <li key={item.moduleId}>
-            <code>{item.documentNumber}</code> {item.description} · first use {item.firstUse}
+            <code>{item.materialId ?? item.documentNumber}</code> {item.description} · first use{" "}
+            {item.firstUse}
           </li>
         ))}
       </ul>
+      {form.timing && <p className="arch-note">{form.timing}</p>}
       <p className="arch-note">
         {form.note}
         {form.coverNote ? ` Cover note: ${form.coverNote}` : ""}
@@ -298,7 +450,11 @@ function FormView({ form }: { form: Form2253 & { coverNote?: string } }) {
   );
 }
 
-function ResultsView({ data }: { data: { lines: ResultLine[]; days: number } }) {
+function ResultsView({
+  data,
+}: {
+  data: { lines: ResultLine[]; days: number; byClaim?: ClaimUsage[] };
+}) {
   return (
     <div className="team-work">
       <p className="arch-note">
@@ -331,6 +487,19 @@ function ResultsView({ data }: { data: { lines: ResultLine[]; days: number } }) 
           </tbody>
         </table>
       </div>
+      {data.byClaim && data.byClaim.length > 0 && (
+        <>
+          <h6>By claim</h6>
+          <ul className="team-claim-usage">
+            {data.byClaim.map((usage) => (
+              <li key={usage.claimId}>
+                <code>{usage.claimId}</code> · {num(usage.delivered)} reached (email deliveries and
+                display impressions) · {num(usage.clicks)} clicks · {usage.lines} result lines
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
@@ -367,6 +536,8 @@ const ARTIFACT_TITLES: Record<string, string> = {
   draft_modules: "Content modules",
   submit_mlr_job: "MLR job",
   mlr_approval: "MLR approval",
+  final_form_check: "Final form check",
+  claim_trace: "Where every claim is live",
   build_audience: "HCP list",
   schedule_deployment: "Deployment schedule",
   prepare_form_2253: "Form FDA 2253",
@@ -404,11 +575,30 @@ export function ArtifactView({
       return (
         <p className="team-approval">
           Approved for distribution as <code>{approved.documentNumber}</code> on{" "}
-          {approved.approvedOn}, expiring <strong>{approved.expiresOn}</strong>. Only this version
-          of {approved.modules.map((module) => module.id).join(" and ")} may be used.
+          {approved.approvedOn}
+          {approved.labelVersion ? ` against ${approved.labelVersion}` : ""}, expiring{" "}
+          <strong>{approved.expiresOn}</strong>. Only this version may be used:{" "}
+          {(
+            approved.materials ??
+            approved.modules.map((module) => ({
+              materialId: module.id,
+              moduleId: module.id,
+              claimIds: [] as string[],
+            }))
+          )
+            .map(
+              (item) =>
+                `${item.materialId}${item.claimIds.length ? ` (${item.claimIds.join(", ")})` : ""}`,
+            )
+            .join("; ")}
+          .
         </p>
       );
     }
+    case "final_form_check":
+      return <FinalFormView check={data} />;
+    case "claim_trace":
+      return <ClaimTraceView trace={data} />;
     case "build_audience":
       return <AudienceView data={data} />;
     case "schedule_deployment":
@@ -438,6 +628,21 @@ function Evidence({ waiting, lifecycle }: { waiting: Waiting; lifecycle: Lifecyc
   switch (waiting.gate) {
     case "concept":
       return latest("propose_concepts");
+    case "concept-review": {
+      const concepts = (lifecycle.artifacts.propose_concepts?.data as { concepts?: Concept[] })
+        ?.concepts;
+      const picked = concepts?.[Number(lifecycle.choices.concept ?? 0) - 1];
+      return picked ? (
+        <div className="team-work">
+          <p>
+            <strong>{picked.name}</strong>, chosen by the brand lead. Nothing has been built yet.
+          </p>
+          <ConceptBody concept={picked} />
+        </div>
+      ) : (
+        latest("propose_concepts")
+      );
+    }
     case "medical":
     case "legal":
     case "regulatory":
@@ -448,6 +653,7 @@ function Evidence({ waiting, lifecycle }: { waiting: Waiting; lifecycle: Lifecyc
       return (
         <>
           {latest("mlr_approval")}
+          {latest("final_form_check")}
           {latest("schedule_deployment")}
         </>
       );
@@ -468,6 +674,8 @@ function Evidence({ waiting, lifecycle }: { waiting: Waiting; lifecycle: Lifecyc
 const PLACEHOLDERS: Partial<Record<string, string>> = {
   focus: "For example: the brand plan puts nurse practitioners first this year.",
   concept: "For example: keep the congress framing, but lead with the safety profile.",
+  "concept-review":
+    "For example: the patient image implies an activity benefit the trial didn't measure.",
   medical: "For example: the safety claim needs equal prominence with the efficacy claim.",
   legal: "For example: “versus enalapril” is a comparison; confirm it matches the label.",
   regulatory: "For example: the display banner needs the PI link above the fold.",
@@ -734,22 +942,32 @@ function gist(artifact: Artifact): string {
     }
     case "submit_mlr_job": {
       const job = data as unknown as MlrJob;
-      return `Job ${job.jobCode}, round ${job.round}: ${job.checks.filter((check) => check.ok).length} of ${job.checks.length} pre-review checks passed`;
+      return `Job ${job.jobCode}, round ${job.round}${job.tier ? `, tier ${job.tier.tier}` : ""}: ${job.checks.filter((check) => check.ok).length} of ${job.checks.length} quality checks passed`;
     }
     case "mlr_approval": {
       const approved = data as unknown as ApprovedJob;
-      return `${approved.documentNumber}, expires ${approved.expiresOn}`;
+      return `${approved.documentNumber}${approved.labelVersion ? ` on ${approved.labelVersion}` : ""}, ${approved.materials?.length ?? approved.modules.length} material IDs, expires ${approved.expiresOn}`;
+    }
+    case "final_form_check": {
+      const check = data as unknown as FinalFormCheck;
+      return `${check.variants.length} built variants ${check.allMatch ? "match the approved version" : "checked; one differs"}`;
+    }
+    case "claim_trace": {
+      const trace = data as unknown as ClaimTrace;
+      return trace.withdrawal
+        ? `Withdrawal plan: ${trace.withdrawal.length} placements to pull by ID`
+        : `${trace.claims.length} claims traced to their placements, with re-review dates`;
     }
     case "build_audience": {
       const totals = data.totals as Record<string, number>;
       return `${num(totals.prescribers ?? 0)} prescribers, ${num(totals.emailReachable ?? 0)} email-consented, ${num(totals.doNotContact ?? 0)} do-not-contact removed`;
     }
     case "schedule_deployment":
-      return `${(data.lines as unknown[]).length} placements, ${usd(Number(data.totalUsd ?? 0))}`;
+      return `${(data.lines as unknown[]).length} placements${data.placements ? " carrying claim IDs" : ""}, ${usd(Number(data.totalUsd ?? 0))}`;
     case "prepare_form_2253":
       return `Submit at first use, ${String(data.submitAtFirstUse)}`;
     case "campaign_results":
-      return `${(data.lines as unknown[]).length} result lines over ${String(data.days)} days (simulated)`;
+      return `${(data.lines as unknown[]).length} result lines over ${String(data.days)} days (simulated)${Array.isArray(data.byClaim) && data.byClaim.length ? `, by ${data.byClaim.length} claim IDs` : ""}`;
     case "report_performance":
       return `Recommends ${String(data.recommendation)}`;
     default:

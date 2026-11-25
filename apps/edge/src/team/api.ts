@@ -21,11 +21,13 @@ import {
 import { ArchError, type Ctx, overridesFor } from "../architecture/context";
 import { streamFlow } from "../architecture/orchestration";
 import { continueTeamRun, startTeamRun } from "./director";
+import { listRuns, runFromLibrary } from "./library";
 import { startLifecycleRun } from "./lifecycle";
 import { providerStatus, teamModels } from "./run";
 
 const RUN = /^\/api\/arch\/team\/runs\/([^/]+)$/;
 const DECIDE = /^\/api\/arch\/team\/runs\/([^/]+)\/decide$/;
+const LIBRARY_RUN = /^\/api\/arch\/team\/library\/([^/]+)$/;
 
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), {
@@ -140,6 +142,15 @@ export async function handleTeam(
         ];
       }),
     });
+  }
+  // The shared library of recent runs: anyone may list and replay them.
+  if (path === "/api/arch/team/library" && request.method === "GET")
+    return json({ runs: await listRuns(ctx.env.APP_DB) });
+  const libraryRun = LIBRARY_RUN.exec(path);
+  if (libraryRun?.[1] && request.method === "GET") {
+    const found = await runFromLibrary(ctx.env.APP_DB, decodeURIComponent(libraryRun[1]));
+    if (!found) throw new ArchError(404, "NOT_FOUND", `No run ${libraryRun[1]} in the library.`);
+    return json(found);
   }
   const saved = RUN.exec(path);
   if (saved?.[1] && request.method === "GET") {

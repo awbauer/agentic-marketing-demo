@@ -380,5 +380,7 @@ export async function pruneArchitecture(db: D1Database, olderThan: Date) {
     db.prepare("DELETE FROM arch_state WHERE updated_at < ?").bind(cutoff),
     db.prepare("DELETE FROM arch_agent_state WHERE at < ?").bind(cutoff),
     db.prepare("DELETE FROM arch_orchestrations WHERE updated_at < ?").bind(cutoff),
+    // team_run_library is not pruned here: it keeps the last ten runs until newer runs replace
+    // them, an exception to the 24-hour transcript retention approved by Andrew (ADR-016).
   ]);
 }

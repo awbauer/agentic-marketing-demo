@@ -22,19 +22,21 @@ import {
   type TeamAgentId,
   type TeamProvider,
   type TeamEvent,
-  type TeamMessageKind,
 } from "@northstar/architecture";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArchApiError, archFetch, archStream, useArch } from "../architecture/api";
 import { ErrorNote } from "../architecture/Shared";
 import { useScope } from "../scope";
 import { RichText } from "./RichText";
+import { type LibraryRun, RunLibrary } from "./RunLibrary";
 import { TeamHierarchy } from "./TeamHierarchy";
 import { DecisionCard, DecisionLog } from "./TeamPeople";
 import { ArtifactView, LifecycleDecisionCard, PhaseStepper, PhaseWorkspace } from "./TeamLifecycle";
 import { EvalsPanel, InfrastructurePanel, SemanticLayerPanel } from "./TeamPlatform";
 import { StrategyView, TeamWorkView } from "./TeamWork";
-import { foldTeam, isPeerMessage, TEAM_PHASES, type TeamMessage } from "./team-state";
+import { REPLAY_SPEEDS, type ReplaySpeed, replayDelays } from "./replay";
+import { AgentModal } from "./AgentModal";
+import { foldTeam, isPeerMessage, KIND_LABELS, TEAM_PHASES, type TeamMessage } from "./team-state";
 import "../architecture/architecture.css";
 import "./team.css";
 
@@ -124,22 +126,6 @@ const remember = (id: string | null) => {
   } catch {
     // Storage may be unavailable; the run still shows until the page reloads.
   }
-};
-
-const KIND_LABELS: Record<TeamMessageKind, string> = {
-  brief: "Brief",
-  plan: "Work plan",
-  directive: "Assignment",
-  report: "Hand-back",
-  question: "Side question",
-  answer: "Reply",
-  review: "Kept",
-  revision: "Sent back",
-  proposal: "Reconciled",
-  delivery: "Proposal",
-  "approval-request": "Review request",
-  decision: "Decision",
-  handoff: "Routed",
 };
 
 type Status = "idle" | "running" | "replaying" | "done";
@@ -366,12 +352,14 @@ function AgentInspector({
   follow,
   onFollow,
   onSelect,
+  onOpen,
 }: {
   state: ReturnType<typeof foldTeam>;
   selected: TeamAgentId;
   follow: boolean;
   onFollow: (follow: boolean) => void;
   onSelect: (id: TeamAgentId) => void;
+  onOpen: (id: TeamAgentId) => void;
 }) {
   const manifest = TEAM_AGENTS.find((agent) => agent.id === selected);
   const view = state.agents[selected];
@@ -408,7 +396,12 @@ function AgentInspector({
       </div>
       <div className="team-inspector-body" role="tabpanel">
         <header>
-          <h4>{manifest?.name}</h4>
+          <h4>
+            {manifest?.name}{" "}
+            <button type="button" className="text-button" onClick={() => onOpen(selected)}>
+              Full details: prompt, usage, calls
+            </button>
+          </h4>
           <p>{manifest?.summary}</p>
           <p className="arch-note">
             {manifest?.role === "hub" ? "Hub" : "Spoke"} ·{" "}
@@ -534,7 +527,10 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     }
     // A run of the other mode no longer answers what the page shows; start clean.
     if (state.id && state.mode !== next) {
+      stopPlayback();
       setEvents([]);
+      setFromLibrary(false);
+      stamps.current = null;
       setShown(null);
       setStatus("idle");
       remember(null);
@@ -543,10 +539,18 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     if (next === "lifecycle" && !runsPharmaLifecycle(brief.brand) && pharma) setBrief(pharma);
   };
   const [events, setEvents] = useState<TeamEvent[]>([]);
+  /**
+   * Whether the page shows a run loaded from the shared library. Such a run is a recording: it
+   * stays read-only after playback ends, since it may be another person's, and taking its
+   * decision would resume it and call models from what is presented as a replay.
+   */
+  const [fromLibrary, setFromLibrary] = useState(false);
   const [shown, setShown] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<ArchApiError | null>(null);
   const [selected, setSelected] = useState<TeamAgentId>(TEAM_DIRECTOR);
+  /** The agent whose details are open in the modal, if any. */
+  const [detail, setDetail] = useState<TeamAgentId | null>(null);
   // Off unless the reader asks: tabs never switch under them.
   const [follow, setFollow] = useState(false);
   // The phase the reader picked in the stepper; null follows the run's active phase.
@@ -576,7 +580,15 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     }
   };
   const chosen = roster.data?.providers.find((item) => item.id === provider);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** When each event on the page arrived (epoch ms), so a replay keeps the run's pacing. */
+  const stamps = useRef<number[] | null>(null);
+  /** The run a replay is playing, fixed when it starts. */
+  const playback = useRef<{ events: TeamEvent[]; stamps: number[] | null } | null>(null);
+  const [speed, setSpeed] = useState<ReplaySpeed>("2x");
+  const speedNow = useRef<ReplaySpeed>(speed);
+  speedNow.current = speed;
+  const [paused, setPaused] = useState(false);
   // A clock while the squad works, so a long model call reads as work, not a hang.
   const [now, setNow] = useState(() => Date.now());
   const startedAt = useRef<number | null>(null);
@@ -602,6 +614,8 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     })
       .then((saved) => {
         setEvents(saved.events);
+        setFromLibrary(false);
+        stamps.current = null;
         const start = saved.events.find((event) => event.type === "start");
         if (start?.type === "start" && start.mode) setModeState(start.mode);
         setStatus("done");
@@ -611,7 +625,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
 
   useEffect(
     () => () => {
-      if (timer.current) clearInterval(timer.current);
+      if (timer.current) clearTimeout(timer.current);
     },
     [],
   );
@@ -632,7 +646,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   /** A person's decision on the waiting run; the squad's next steps stream onto the same page. */
   async function decide(decision: "approve" | "changes", note: string, choice?: string) {
     const waiting = state.waiting;
-    if (!waiting || !state.id) return;
+    if (!waiting || !state.id || fromLibrary) return;
     setError(null);
     setStatus("running");
     startedAt.current = Date.now();
@@ -644,6 +658,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
         { gate: waiting.gate, decision, note, ...(choice ? { choice } : {}) },
         (event) => {
           lastEventAt.current = Date.now();
+          stamps.current?.push(Date.now());
           setEvents((current) => [...current, event]);
         },
       );
@@ -654,9 +669,11 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   }
 
   async function run() {
-    if (timer.current) clearInterval(timer.current);
+    stopPlayback();
     setShown(null);
     setEvents([]);
+    setFromLibrary(false);
+    stamps.current = [];
     setError(null);
     setStatus("running");
     remember(null);
@@ -678,6 +695,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
         (event) => {
           if (event.type === "start") remember(event.id);
           lastEventAt.current = Date.now();
+          stamps.current?.push(Date.now());
           setEvents((current) => [...current, event]);
         },
       );
@@ -687,30 +705,82 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     setStatus("done");
   }
 
-  function replay() {
-    if (timer.current) clearInterval(timer.current);
+  function stopPlayback() {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }
+
+  /** Shows event `index` after the gap the run had before it, then schedules the next one. */
+  function playFrom(index: number) {
+    stopPlayback();
+    const source = playback.current;
+    if (!source || index >= source.events.length || speedNow.current === "instant") {
+      skip();
+      return;
+    }
+    const delay = replayDelays(source.events.length, source.stamps, speedNow.current)[index] ?? 0;
+    timer.current = setTimeout(() => {
+      setShown(index + 1);
+      playFrom(index + 1);
+    }, delay);
+  }
+
+  /** Plays a run back event by event, at the pace it ran (long waits shortened). */
+  function replay(source = { events, stamps: stamps.current }) {
+    stopPlayback();
+    if (source.events.length === 0) return;
+    playback.current = {
+      events: source.events,
+      stamps: source.stamps && source.stamps.length === source.events.length ? source.stamps : null,
+    };
+    setPaused(false);
     setStatus("replaying");
     setShown(1);
-    timer.current = setInterval(() => {
-      setShown((current) => {
-        const next = (current ?? 0) + 1;
-        if (next >= events.length) {
-          if (timer.current) clearInterval(timer.current);
-          setStatus("done");
-          return null;
-        }
-        return next;
-      });
-    }, 220);
+    playFrom(1);
+  }
+
+  /** A run from the shared library: loaded onto the page and replayed. */
+  function replayFromLibrary(saved: LibraryRun) {
+    stopPlayback();
+    setError(null);
+    setPhasePick(null);
+    // A library run may be someone else's; a reload should not try to reopen it as this person's.
+    remember(null);
+    const start = saved.events.find((event) => event.type === "start");
+    if (start?.type === "start") setModeState(start.mode ?? "squad");
+    setEvents(saved.events);
+    setFromLibrary(true);
+    stamps.current = saved.stamps;
+    replay({ events: saved.events, stamps: saved.stamps });
+  }
+
+  function pause() {
+    stopPlayback();
+    setPaused(true);
+  }
+
+  function resume() {
+    setPaused(false);
+    playFrom(shown ?? 0);
+  }
+
+  function changeSpeed(next: ReplaySpeed) {
+    setSpeed(next);
+    speedNow.current = next;
+    if (status === "replaying" && !paused) playFrom(shown ?? 0);
   }
 
   function skip() {
-    if (timer.current) clearInterval(timer.current);
+    stopPlayback();
+    playback.current = null;
+    setPaused(false);
     setShown(null);
     setStatus("done");
   }
 
   const busy = status === "running" || status === "replaying";
+  /** Decisions can be taken only on a live run, never during a replay or on a library run. */
+  const live = shown === null && !fromLibrary;
   const active = teamAgentsFor(state.mode)
     .map((agent) => agent.id)
     .reverse()
@@ -735,7 +805,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     );
   };
   const lifecycleDecision =
-    state.waiting && state.brief && shown === null && state.lifecycle ? (
+    state.waiting && state.brief && live && state.lifecycle ? (
       <div ref={decisionSlot} className="team-decision-slot">
         <LifecycleDecisionCard
           key={`${state.waiting.gate}-${state.decisions.length}`}
@@ -792,7 +862,10 @@ export function TeamView({ onClose }: { onClose: () => void }) {
       : "Hand the squad a brief and watch it work. The campaign lead in the middle never writes a word of the campaign: it splits the brief into pieces, gives each to the spoke that owns it, decides whether to keep what comes back, and fits the pieces together. Spokes can also message one another directly when one piece depends on another. Each agent is a real model limited to its own tools, the agentic gateway checks every call, and code — not the model — enforces the brand’s rules on every piece.";
   const diagram = (
     <div className="team-diagram">
-      <TeamHierarchy state={state} mode={view} />
+      <TeamHierarchy state={state} mode={view} onSelect={setDetail} />
+      <p className="team-diagram-hint arch-note">
+        Click an agent for its prompt, model, usage and calls.
+      </p>
       <dl className="team-stats compact" aria-live="polite">
         <div>
           <dt>Messages</dt>
@@ -922,14 +995,54 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                       ? "Start the campaign lifecycle"
                       : "Hand the brief to the squad"}
               </button>
-              {events.length > 0 && status !== "running" && (
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={status === "replaying" ? skip : replay}
-                >
-                  {status === "replaying" ? "Skip to the end" : "Replay agent by agent"}
-                </button>
+              {status === "replaying" ? (
+                <div className="team-replay-controls">
+                  <button type="button" className="text-button" onClick={paused ? resume : pause}>
+                    {paused ? "Resume" : "Pause"}
+                  </button>
+                  <label>
+                    Speed{" "}
+                    <select
+                      value={speed}
+                      onChange={(event) => changeSpeed(event.target.value as ReplaySpeed)}
+                    >
+                      {REPLAY_SPEEDS.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" className="text-button" onClick={skip}>
+                    Skip to the end
+                  </button>
+                  <small role="status">
+                    Replaying · event {shown ?? events.length} of {events.length}
+                    {paused ? " · paused" : ""}
+                  </small>
+                </div>
+              ) : (
+                events.length > 0 &&
+                status !== "running" && (
+                  <button type="button" className="text-button" onClick={() => replay()}>
+                    Replay agent by agent
+                  </button>
+                )
+              )}
+              <RunLibrary
+                scope={scope}
+                disabled={status === "running"}
+                currentId={state.id}
+                onPick={replayFromLibrary}
+              />
+              {fromLibrary && status === "done" && (
+                <small className="arch-note" role="status">
+                  A recorded run from the library: read-only
+                  {state.waiting
+                    ? `, stopped where it waited for the ${TEAM_GATES[state.waiting.gate].decider.toLowerCase()}`
+                    : ""}
+                  . Start a new run to take decisions.
+                </small>
               )}
               {status === "running" && startedAt.current ? (
                 <small className="team-clock" role="status">
@@ -964,7 +1077,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
               <PhaseStepper
                 lifecycle={state.lifecycle}
                 selected={phase}
-                waiting={shown === null ? state.waiting : null}
+                waiting={live ? state.waiting : null}
                 following={phase === activePhase}
                 onSelect={(id) => setPhasePick(id)}
               />
@@ -973,7 +1086,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                   phase={phase}
                   lifecycle={state.lifecycle}
                   artifacts={state.artifacts}
-                  waiting={shown === null ? state.waiting : null}
+                  waiting={live ? state.waiting : null}
                   decision={lifecycleDecision}
                   onOpenTurn={(id) => setPhasePick(id)}
                 />
@@ -1020,13 +1133,14 @@ export function TeamView({ onClose }: { onClose: () => void }) {
               setFollow(false);
               setSelected(id);
             }}
+            onOpen={setDetail}
           />
 
           {/* The squad's decision is added below what's above, so nothing the reader is looking
               at moves; the lifecycle's sits in its phase's workspace. */}
           {view !== "lifecycle" && (
             <div ref={decisionSlot}>
-              {state.waiting && state.brief && shown === null && !state.lifecycle && (
+              {state.waiting && state.brief && live && !state.lifecycle && (
                 <DecisionCard
                   waiting={state.waiting}
                   strategy={state.strategy}
@@ -1039,7 +1153,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {state.waiting && shown === null && !busy && (
+          {state.waiting && live && !busy && (
             <button
               type="button"
               className="team-turn-pill"
@@ -1053,6 +1167,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
           )}
         </div>
       </div>
+      {detail && <AgentModal state={state} agent={detail} onClose={() => setDetail(null)} />}
     </section>
   );
 }
@@ -1070,12 +1185,14 @@ function UnderTheHood({
   follow,
   onFollow,
   onSelect,
+  onOpen,
 }: {
   state: ReturnType<typeof foldTeam>;
   selected: TeamAgentId;
   follow: boolean;
   onFollow: (follow: boolean) => void;
   onSelect: (id: TeamAgentId) => void;
+  onOpen: (id: TeamAgentId) => void;
 }) {
   const [tab, setTab] = useState<HoodTab>("agents");
   const tabs: Array<[HoodTab, string]> = [
@@ -1114,6 +1231,7 @@ function UnderTheHood({
             follow={follow}
             onFollow={onFollow}
             onSelect={onSelect}
+            onOpen={onOpen}
           />
         ) : tab === "infra" ? (
           <InfrastructurePanel state={state} />

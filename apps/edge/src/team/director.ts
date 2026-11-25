@@ -49,6 +49,7 @@ import {
   teamModels,
 } from "./run";
 import { evaluateRun } from "./evals";
+import { recordRun } from "./library";
 import { continueLifecycleRun } from "./lifecycle";
 import { runSpecialist } from "./specialists";
 
@@ -468,6 +469,18 @@ export async function settle(run: TeamRun, messages: ModelMessage[], emit: Emit)
     });
   // Sent after the save, so the page knows whether a reload will find this run.
   emit({ type: "saved", ok: saved, store: "D1" });
+  // The shared library of recent runs, for anyone to replay. Its own failure never fails the run.
+  await recordRun(
+    ctx.env.APP_DB,
+    {
+      ...run,
+      status: run.waiting ? "waiting" : run.finished ? "done" : "stopped",
+      scripted: ctx.env.AGENT_MODEL === "scripted",
+    },
+    ISO(ctx),
+  ).catch((error: unknown) =>
+    console.error("[team] run library save failed", error instanceof Error ? error.message : error),
+  );
 }
 
 /**
