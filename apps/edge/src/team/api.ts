@@ -21,7 +21,7 @@ import {
 import { ArchError, type Ctx, overridesFor } from "../architecture/context";
 import { streamFlow } from "../architecture/orchestration";
 import { continueTeamRun, startTeamRun } from "./director";
-import { listRuns, runFromLibrary } from "./library";
+import { dataPlatform } from "../platform/data";
 import { startLifecycleRun } from "./lifecycle";
 import { providerStatus, teamModels } from "./run";
 
@@ -145,10 +145,10 @@ export async function handleTeam(
   }
   // The shared library of recent runs: anyone may list and replay them.
   if (path === "/api/arch/team/library" && request.method === "GET")
-    return json({ runs: await listRuns(ctx.env.APP_DB) });
+    return json({ runs: await dataPlatform(ctx.env).teamLibrary.list() });
   const libraryRun = LIBRARY_RUN.exec(path);
   if (libraryRun?.[1] && request.method === "GET") {
-    const found = await runFromLibrary(ctx.env.APP_DB, decodeURIComponent(libraryRun[1]));
+    const found = await dataPlatform(ctx.env).teamLibrary.get(decodeURIComponent(libraryRun[1]));
     if (!found) throw new ArchError(404, "NOT_FOUND", `No run ${libraryRun[1]} in the library.`);
     return json(found);
   }

@@ -1,0 +1,10 @@
+# Builds the Google Cloud image (ADR-018) as the dedicated build service account, logging to
+# Cloud Logging only. scripts/gcp/deploy.sh passes the image name and the account.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "--tag", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+timeout: 1800s

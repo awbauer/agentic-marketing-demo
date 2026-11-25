@@ -4,7 +4,7 @@
 
 **An AI marketing teammate that does the legwork and asks you before it writes anything back.**
 
-Built on Salesforce and Cloudflare. All companies and data in it are made up.
+Built on Salesforce and Cloudflare, and runs on Google Cloud from the same code. All companies and data in it are made up.
 
 ![Salesforce](https://img.shields.io/badge/Salesforce-Agentforce%20%C2%B7%20MC%20Next%20%C2%B7%20Data%20360-00A1E0?logo=salesforce&logoColor=white)
 ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers%20%C2%B7%20D1%20%C2%B7%20R2%20%C2%B7%20Workers%20AI-F38020?logo=cloudflare&logoColor=white)
@@ -34,7 +34,7 @@ A marketer asks a question in plain language. The orchestrator agent reads campa
 - 🧭 **Watch an asset get made.** Journeys run real agents from goal to approved asset, pausing only where a person must decide.
 - 🏛️ **An architecture you can click through.** Governed objects, one gateway for every call, agent and prompt catalogs, and a plan-to-learn content lifecycle.
 - 📊 **Scored, not assumed.** An evaluation suite compares models on quality, routing, cost and speed, so the production model is chosen on evidence.
-- 🎓 **A built-in course.** 28 short lessons explain context, RAG and GraphRAG, and every moving part of the demo. A CI check keeps them in step with the code.
+- 🎓 **A built-in course.** 29 short lessons explain context, RAG and GraphRAG, and every moving part of the demo. A CI check keeps them in step with the code.
 - 🔐 **Secure by default.** Cloudflare Access sign-in, per-user Salesforce OAuth, allow-listed tools, and kill switches for writes, tools and memory.
 
 ## 📸 A quick tour
@@ -150,12 +150,25 @@ Pushes to `main` deploy through Workers Builds, and each pull request gets a pre
 
 </details>
 
+### On Google Cloud
+
+The same code also runs as one Node server on Cloud Run, with Firestore, Cloud Storage, Vertex AI and Identity-Aware Proxy in place of D1, R2, Workers AI and Access ([ADR-018](docs/decisions/ADR-018-google-cloud-target.md)). After `gcloud auth login`:
+
+```sh
+GCP_PROJECT=<project> scripts/gcp/bootstrap.sh                 # once: APIs, Firestore, bucket, accounts, secrets
+GCP_PROJECT=<project> IAP_MEMBERS=<you@example.com> pnpm deploy:gcp
+pnpm test:gcp                                                   # adapters and the Node chat host (starts the Firestore emulator)
+```
+
+[infra/gcp/README.md](infra/gcp/README.md) lists what maps to what and the steps that need a person.
+
 ## 🗺️ Repository map
 
 ```text
 apps/
   web/              React front end: chat, every view, the Learn course
   edge/             Cloudflare Worker: orchestrator, gateway, MCP servers, APIs
+  gcp/              Google Cloud host: Node server, chat host, Firestore, Vertex AI, Cloud Storage
 packages/
   contracts/        shared Zod schemas and the allow-listed tool catalog
   architecture/     agents, prompts, models, workspaces, squad data, asset library

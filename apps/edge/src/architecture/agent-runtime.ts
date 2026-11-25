@@ -22,7 +22,7 @@ import {
   type World,
 } from "@northstar/architecture";
 import { generateText, type LanguageModel, stepCountIs, streamText, wrapLanguageModel } from "ai";
-import { createWorkersAI } from "workers-ai-provider";
+import { modelPlatform } from "../platform/models";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import { objectView, type RunState, type ToolStep, toolsFor } from "./agent-tools";
 import { type ArchEnv, ArchError, type Ctx } from "./context";
@@ -46,18 +46,14 @@ export const AGENT_GENERATION = {
  */
 export function modelFactory(env: ArchEnv): ModelFactory {
   if (env.AGENT_MODEL === "scripted") return () => scriptedModel();
-  const ai = env.AI;
-  if (!ai)
+  const models = modelPlatform(env);
+  if (!models)
     throw new ArchError(
       503,
       "NO_MODEL",
-      "Workers AI is not bound here, so the agents cannot run. Run `pnpm dev:local` for local development with real models.",
+      "No model is bound here, so the agents cannot run. Run `pnpm dev:local` for local development with real models.",
     );
-  const workersAI = createWorkersAI({
-    binding: ai,
-    ...(env.AI_GATEWAY_ID ? { gateway: { id: env.AI_GATEWAY_ID } } : {}),
-  });
-  return (modelId) => workersAI(modelId as Parameters<typeof workersAI>[0]);
+  return (modelId) => models.chat(modelId);
 }
 
 /** Champion overrides from AGENT_CHAMPIONS, limited to catalog models that can call tools. */

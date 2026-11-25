@@ -174,6 +174,11 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
     keyIdea:
       "One stateful agent per user runs each turn as a short tool loop and records every event.",
   },
+  "two-hosts": {
+    diagram: "architecture",
+    keyIdea:
+      "Only storage, models, sign-in and where chats live differ between hosts; everything else is the same code.",
+  },
   workspace: {
     diagram: "workspace",
     keyIdea:

@@ -15,10 +15,16 @@ import {
   verifyAgentToken,
   type WorkbenchScope,
 } from "@northstar/architecture";
-import { ArchitectureStore } from "./store";
+import { type ArchitectureRepository, type DataPlatform, dataPlatform } from "../platform/data";
+import type { ModelPlatform } from "../platform/models";
 
 export type ArchEnv = {
-  APP_DB: D1Database;
+  /** D1 on Cloudflare; absent on Google Cloud, which sets DATA instead (ADR-018). */
+  APP_DB?: D1Database;
+  DATA?: DataPlatform;
+  ENVIRONMENT?: string;
+  /** The Vertex AI models on Google Cloud; Cloudflare uses AI below. */
+  MODELS?: ModelPlatform;
   ASSETS?: Fetcher;
   DISABLED_AGENTS?: string;
   ARCH_TOKEN_SECRET?: string;
@@ -47,7 +53,7 @@ export class ArchError extends Error {
 
 export type Ctx = {
   env: ArchEnv;
-  store: ArchitectureStore;
+  store: ArchitectureRepository;
   user: { subject: string; persona: Persona; brands: readonly Brand[] | "all" };
   correlationId: string;
   now: () => Date;
@@ -59,7 +65,7 @@ export function makeCtx(
   correlationId: string,
   now: () => Date = () => new Date(),
 ): Ctx {
-  return { env, store: new ArchitectureStore(env.APP_DB, user.subject), user, correlationId, now };
+  return { env, store: dataPlatform(env).architecture(user.subject), user, correlationId, now };
 }
 
 export const disabledAgents = (env: ArchEnv) =>

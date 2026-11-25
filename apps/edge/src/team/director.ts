@@ -49,7 +49,7 @@ import {
   teamModels,
 } from "./run";
 import { evaluateRun } from "./evals";
-import { recordRun } from "./library";
+import { dataPlatform, storeLabel } from "../platform/data";
 import { continueLifecycleRun } from "./lifecycle";
 import { runSpecialist } from "./specialists";
 
@@ -468,19 +468,23 @@ export async function settle(run: TeamRun, messages: ModelMessage[], emit: Emit)
       return false;
     });
   // Sent after the save, so the page knows whether a reload will find this run.
-  emit({ type: "saved", ok: saved, store: "D1" });
+  emit({ type: "saved", ok: saved, store: storeLabel(ctx.env) });
   // The shared library of recent runs, for anyone to replay. Its own failure never fails the run.
-  await recordRun(
-    ctx.env.APP_DB,
-    {
-      ...run,
-      status: run.waiting ? "waiting" : run.finished ? "done" : "stopped",
-      scripted: ctx.env.AGENT_MODEL === "scripted",
-    },
-    ISO(ctx),
-  ).catch((error: unknown) =>
-    console.error("[team] run library save failed", error instanceof Error ? error.message : error),
-  );
+  await dataPlatform(ctx.env)
+    .teamLibrary.record(
+      {
+        ...run,
+        status: run.waiting ? "waiting" : run.finished ? "done" : "stopped",
+        scripted: ctx.env.AGENT_MODEL === "scripted",
+      },
+      ISO(ctx),
+    )
+    .catch((error: unknown) =>
+      console.error(
+        "[team] run library save failed",
+        error instanceof Error ? error.message : error,
+      ),
+    );
 }
 
 /**
@@ -516,7 +520,7 @@ export async function startTeamRun(
               (agent) => policy.principal.ids !== "*" && policy.principal.ids.includes(agent.id),
             ),
         ).length,
-        store: "D1",
+        store: storeLabel(ctx.env),
         scripted: ctx.env.AGENT_MODEL === "scripted",
       },
     });

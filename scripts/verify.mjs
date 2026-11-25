@@ -8,6 +8,7 @@ const commands =
         ["pnpm", "lint"],
         ["pnpm", "typecheck"],
         ["pnpm", "test:unit"],
+        ["pnpm", "test:gcp"],
         ["pnpm", "sf:metadata:check"],
         ["pnpm", "hxl:check"],
         ["pnpm", "contracts:check"],
@@ -22,6 +23,7 @@ const commands =
         ["pnpm", "typecheck"],
         ["pnpm", "test:unit"],
         ["pnpm", "test:worker"],
+        ["pnpm", "test:gcp"],
         ["pnpm", "sf:metadata:check"],
         ["pnpm", "hxl:check"],
         ["pnpm", "eval"],
@@ -30,6 +32,7 @@ const commands =
         ["pnpm", "prompts:check"],
         ["pnpm", "learn:check"],
         ["pnpm", "build"],
+        ["pnpm", "build:gcp"],
       ];
 const results = [];
 for (const [command, ...args] of commands) {

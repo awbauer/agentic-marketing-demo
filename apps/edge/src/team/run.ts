@@ -26,6 +26,7 @@ import {
 } from "@northstar/architecture";
 import { type LanguageModel, type LanguageModelMiddleware, wrapLanguageModel } from "ai";
 import { modelFactory } from "../architecture/agent-runtime";
+import { modelPlatform } from "../platform/models";
 import { ArchError, type Ctx, invoke } from "../architecture/context";
 import { createOpenAI } from "@ai-sdk/openai";
 import { anthropicModel, DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
@@ -245,10 +246,13 @@ export function teamModels(
       worker: env.OPENAI_WORKER_MODEL ?? MODEL_TIERS.openai.worker,
     },
   }[provider];
+  // On Vertex the open-model tier is served by the models Vertex hosts; show those (ADR-018).
+  const models = provider === "cloudflare" ? modelPlatform(ctx.env) : null;
+  const served = (id: string) => (models ? models.served(id) : id);
   return Object.fromEntries(
     TEAM_AGENTS.map((agent) => [
       agent.id,
-      agent.tier === "coordinator" ? tiers.coordinator : tiers.worker,
+      served(agent.tier === "coordinator" ? tiers.coordinator : tiers.worker),
     ]),
   ) as Record<TeamAgentId, string>;
 }
@@ -257,8 +261,13 @@ export function teamModels(
 export function providerStatus(ctx: Ctx) {
   const env = providerEnv(ctx);
   const scripted = ctx.env.AGENT_MODEL === "scripted";
-  const vendor = (): { available: boolean; reason?: string } => {
+  const platform = modelPlatform(ctx.env);
+  const vendor = (id: "anthropic" | "openai"): { available: boolean; reason?: string } => {
     if (scripted) return { available: true };
+    if (platform?.vendor) {
+      const route = platform.vendor(id, {});
+      return "reason" in route ? { available: false, reason: route.reason } : { available: true };
+    }
     if (!ctx.env.AI)
       return { available: false, reason: "The AI binding is not set here. Run pnpm dev:local." };
     if (!ctx.env.AI_GATEWAY_ID)
@@ -276,20 +285,25 @@ export function providerStatus(ctx: Ctx) {
   };
   const status: Record<TeamProvider, { available: boolean; reason?: string }> = {
     cloudflare:
-      scripted || ctx.env.AI
+      scripted || platform
         ? { available: true }
         : { available: false, reason: "Workers AI is not bound here. Run pnpm dev:local." },
-    anthropic: vendor(),
-    openai: vendor(),
+    anthropic: vendor("anthropic"),
+    openai: vendor("openai"),
   };
+  const vertex = platform?.kind === "vertex";
   return TEAM_PROVIDERS.map((id) => ({
     id,
-    label: TEAM_PROVIDER_LABELS[id],
+    label: vertex && id === "cloudflare" ? "Vertex AI (open models)" : TEAM_PROVIDER_LABELS[id],
     ...status[id],
     models: teamModels(ctx, id),
-    gateway: ctx.env.AI_GATEWAY_ID ?? null,
-    /** Vendor keys are the ones stored on the gateway; Workers AI needs none. */
-    keys: id === "cloudflare" ? "none needed" : "stored on the AI Gateway",
+    gateway: vertex ? null : (ctx.env.AI_GATEWAY_ID ?? null),
+    /** Vendor keys are the ones stored on the gateway; Workers AI needs none. Vertex uses IAM. */
+    keys: vertex
+      ? "none needed (Google Cloud IAM)"
+      : id === "cloudflare"
+        ? "none needed"
+        : "stored on the AI Gateway",
   }));
 }
 
@@ -317,6 +331,25 @@ export function teamModel(
   if (ctx.env.AGENT_MODEL === "scripted") return teamScriptedModel();
   const modelId = teamModels(ctx, provider)[agent];
   if (provider === "cloudflare") return modelFactory(ctx.env)(modelId);
+  const platform = modelPlatform(ctx.env);
+  if (platform?.vendor) {
+    const route = platform.vendor(provider, { run: run.id, agent });
+    if ("reason" in route) throw new ArchError(503, "PROVIDER_UNAVAILABLE", route.reason);
+    return provider === "anthropic"
+      ? anthropicModel({
+          apiKey: GATEWAY_HELD_KEY,
+          model: modelId,
+          effort: effortFor(agent),
+          fetch: route.fetch,
+        })
+      : openaiModel({
+          apiKey: GATEWAY_HELD_KEY,
+          model: modelId,
+          effort: effortFor(agent),
+          fetch: route.fetch,
+          promptCacheKey: `${run.id}:${agent}`,
+        });
+  }
   const env = providerEnv(ctx);
   if (!ctx.env.AI || !ctx.env.AI_GATEWAY_ID)
     throw new ArchError(503, "NO_GATEWAY", "Vendor models run only through the AI Gateway.");

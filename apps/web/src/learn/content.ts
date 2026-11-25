@@ -133,6 +133,26 @@ const R = {
     url: "https://modelcontextprotocol.io/specification/2025-06-18",
     kind: "Spec",
   },
+  cloudRun: {
+    label: "Cloud Run documentation",
+    url: "https://cloud.google.com/run/docs",
+    kind: "Docs",
+  },
+  firestore: {
+    label: "Firestore documentation",
+    url: "https://cloud.google.com/firestore/docs",
+    kind: "Docs",
+  },
+  vertexGptOss: {
+    label: "gpt-oss-120b on Vertex AI (managed API)",
+    url: "https://cloud.google.com/vertex-ai/generative-ai/docs/maas/openai/gpt-oss-120b",
+    kind: "Docs",
+  },
+  iapCloudRun: {
+    label: "Identity-Aware Proxy for Cloud Run",
+    url: "https://cloud.google.com/iap/docs/enabling-cloud-run",
+    kind: "Docs",
+  },
   cfAgents: {
     label: "Cloudflare Agents SDK",
     url: "https://developers.cloudflare.com/agents/",
@@ -432,6 +452,7 @@ Every evidence path an answer used is shown twice: in words under the answer, an
         body: `The **orchestrator** is a Cloudflare **Agents SDK** chat agent running in a **Durable Object**: a single-threaded, stateful instance with its own SQLite storage.
 - Each user gets their own instance, keyed by a hash of their Access identity and the workspace, so conversations and history are isolated by construction.
 - Each turn streams to the browser over a WebSocket, and the stream is **resumable** if the tab reconnects.
+- On Google Cloud the same class runs in a Node agent host that speaks the same protocol, with each chat's storage saved to Cloud Storage (see *Two hosts*).
 
 A turn runs a **tool loop** of up to 6 steps. On each step the model either calls a tool or writes the answer. Its tools come from four MCP servers, connected per turn: Salesforce, campaign context, the knowledge graph, and external services (public holidays and weather alerts). The orchestrator decides which tools are available on each step (see *Routing*) and records a **turn trace** of every event.
 
@@ -451,6 +472,41 @@ Around the loop, the orchestrator also handles the events the model must not: it
           "“Behind the scenes · technical trace” at the top of each answer",
         ],
         resources: [R.cfAgents, R.cfChatAgents, R.durableObjects, R.aiSdk, R.react],
+      },
+      {
+        id: "two-hosts",
+        title: "Two hosts: Cloudflare and Google Cloud",
+        summary:
+          "The same code runs as a Cloudflare Worker or as a Node server on Cloud Run, behind a thin platform seam.",
+        body: `The workbench can run on either of two hosts from the same commit. On **Cloudflare** it is one Worker; on **Google Cloud** it is one Node server on **Cloud Run**. Nothing in the routes, the orchestrator, the gateway, or the agents knows which host it is on (ADR-018).
+
+**The seam.** Only four things differ between hosts, and each sits behind a small interface in \`apps/edge/src/platform/\`:
+
+| | Cloudflare | Google Cloud |
+| --- | --- | --- |
+| The app's tables (audit, image drafts, architecture, squad library) | D1 | Firestore |
+| Models | Workers AI through AI Gateway | Vertex AI: gpt-oss-120b as a managed model, Gemini images, Claude |
+| Sign-in | Cloudflare Access | Identity-Aware Proxy, plus a members list in Firestore |
+| Chats | A Durable Object per user | A Node agent host, each chat saved to Cloud Storage |
+
+The feature code asks \`dataPlatform(env)\` for repositories and \`modelPlatform(env)\` for models. On Cloudflare those return the D1 repositories and Workers AI; the GCP host puts Firestore and Vertex into the environment instead. The HTTP routes live in \`app.ts\`, and each host supplies only what it alone has: where chats run, how static files are served, and what readiness reports.
+
+**Chats without Durable Objects.** The orchestrator extends the Agents SDK's chat agent. On Google Cloud the server bundle swaps that one import for a Node implementation that speaks the same WebSocket protocol, so the browser's \`useAgentChat\` and the orchestrator itself are unchanged. A chat keeps all its storage (messages, state, turn history, Salesforce tokens) in one in-memory SQLite database, as a Durable Object does. After each change the host saves that database to Cloud Storage, and the save only succeeds if nobody else saved the chat since it was loaded. One Cloud Run instance with session affinity keeps each chat on a single writer.
+
+**Models.** Vertex AI serves gpt-oss-120b as a managed model, so the agents run the model family they were evaluated on. Vertex has no gpt-oss-20b, so the chat orchestrator, which runs 20b on Cloudflare, runs 120b here, as do the catalog's other Workers AI models; the trace names the model actually served. Campaign images come from Gemini's image model. The answer-quality judge, which uses Cloudflare's Clef model on Workers AI, is gpt-oss answering the same rubric. The squad's Anthropic provider reaches Claude on Vertex; its OpenAI provider stays off on Google Cloud until it is approved.
+
+**Sign-in.** IAP signs each request it lets through. The server checks that assertion itself, then looks the email up in Firestore's \`members\` collection for the role, because IAP carries no role. A request that reaches the service without IAP is refused.
+
+**Salesforce.** On Cloudflare, per-user Salesforce OAuth goes through an Access MCP portal. On Google Cloud the chat connects to Salesforce's hosted MCP server directly, with OAuth and PKCE, and stores the tokens encrypted in the chat's own storage. The Lightning surface needs an Access token, so it stays on Cloudflare.
+
+**Maintenance.** The hourly job (audit pruning, drift sweeps, memory expiry) runs from the Worker's cron on Cloudflare and from Cloud Scheduler on Google Cloud, which calls the service with a Google-signed token only its service account can get. Firestore's time-to-live policies delete expired rows as a backstop.`,
+        inDemo: [
+          "apps/edge/src/app.ts, apps/edge/src/platform/",
+          "apps/gcp/src/ (the Node host, Firestore, Vertex AI, Cloud Storage)",
+          "scripts/gcp/bootstrap.sh, scripts/gcp/deploy.sh, infra/gcp/README.md",
+          "docs/decisions/ADR-018-google-cloud-target.md",
+        ],
+        resources: [R.cloudRun, R.firestore, R.vertexGptOss, R.iapCloudRun, R.cfChatAgents],
       },
       {
         id: "workspace",
@@ -726,7 +782,7 @@ You watch both halves step by step. While a confirmation is prepared, the steps 
         id: "observability",
         title: "Observability: route map, technical trace, turn history, and audit export",
         summary: "See exactly what happened in every turn.",
-        body: `- **Route map** above the message box, in the browser and in Lightning: the components a turn passes through, lit as it runs, with a pulse on whichever is working now. The path runs from the page through Cloudflare Access to the policy router, then AI Gateway and Workers AI, and out through the agentic gateway to each MCP server. A turn sent from Lightning also shows the Apex relay. It is read from the same trace as the view below, not from a script of what should happen, so a turn the policy router answers leaves the model dark, a tool the gateway denies marks the gateway and not the system behind it, and a failed tool marks that system. The first hops are implied, because a request can't reach the Worker without them; the router, model, and tools are recorded. The map keeps the finished route until the next message. It follows the query only: a confirmed write runs after the turn, and the write's own progress shows on its confirmation card. Lightning polls about once a second, so a hop shorter than that can appear already passed.
+        body: `- **Route map** above the message box, in the browser and in Lightning: the components a turn passes through, lit as it runs, with a pulse on whichever is working now. The path runs from the page through Cloudflare Access to the policy router, then AI Gateway and Workers AI, and out through the agentic gateway to each MCP server. A turn that ran on Google Cloud says so in its trace, and its map shows Identity-Aware Proxy and Vertex AI, with no AI Gateway hop. A turn sent from Lightning also shows the Apex relay. It is read from the same trace as the view below, not from a script of what should happen, so a turn the policy router answers leaves the model dark, a tool the gateway denies marks the gateway and not the system behind it, and a failed tool marks that system. The first hops are implied, because a request can't reach the Worker without them; the router, model, and tools are recorded. The map keeps the finished route until the next message. It follows the query only: a confirmed write runs after the turn, and the write's own progress shows on its confirmation card. Lightning polls about once a second, so a hop shorter than that can appear already passed.
 - **Live tool calls** under the trace while an answer streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
 - **Technical trace** at the top of each answer, so the answer streaming in below doesn't move it: every lifecycle event in order, with timing. It opens while the answer streams (or when something went wrong) and stays open after it finishes, until you close it.
   - turn start, step start and finish (finish reason, token counts)
@@ -1044,11 +1100,11 @@ The **Agents → Policies** panel shows every policy as Cedar text. The evaluato
 
 **The infrastructure under the agents.** One **Under the hood** panel holds each agent's grants and calls, the infrastructure, the semantic layer, the evals and the decisions people took, as tabs that change only when you pick one. It lights the layers each event passes: the event stream to the page; the lead's coordination loop; the models, each call metered; the agentic gateway, which checks every tool call as \`team:<tool>\` and mints a token for it; tools and the semantic layer; the rule services; the agent-to-agent bus; the run's state, saved to D1; and operations, where an operator disables or constrains an agent without a deploy.
 
-**Three model providers, one gateway.** A switch runs the same squad on **Cloudflare Workers AI**, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same. Every request goes through the Cloudflare AI Gateway. Anthropic and OpenAI requests go through the Worker's AI binding to the gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it, and Cloudflare-billed fallback is off. Claude Opus 5.5 does not accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message, and Claude's thinking blocks are replayed unchanged on the next turn.
+**Three model providers, one gateway.** A switch runs the same squad on **Cloudflare Workers AI**, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same. Every request goes through the Cloudflare AI Gateway. Anthropic and OpenAI requests go through the Worker's AI binding to the gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it, and Cloudflare-billed fallback is off. On Google Cloud the open-model tier runs gpt-oss on Vertex AI, Anthropic is Claude on Vertex (the same SDK, its requests rewritten for Vertex), and OpenAI is off until approved. Claude Opus 5.5 does not accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message, and Claude's thinking blocks are replayed unchanged on the next turn.
 
 **Opening an agent.** Click any agent on the team map (or press Enter on it) to open its details: its role, tier and model, with the provider, AI Gateway and effort; the exact system prompts it sent, one per distinct prompt, with the tools it was offered, the tool choice and its settings (each is recorded as a \`prompt\` event the first time the agent sends it, so a replay shows it too); its usage (model calls, input, cached and output tokens, model time, its share of the run and an estimated cost from the model's price); every message it sent and received, grouped by the party on the other end; and every tool call with the gateway's decision and its input, plus the work it saved.
 
-**Replaying a recent run.** Every run, on any brand, mode or provider, is kept in a shared run library in D1 (\`team_run_library\`): the last ten, newest first, readable by anyone who opens the page. Unlike the other transcripts, which expire after 24 hours, the ten are kept until newer runs replace them. Each row holds the run's event log and the time each event was sent. **Replay a recent run** loads one, and the page plays it back through the same reducer a live run uses, waiting the gap the run had between events (a person's wait or a slow model call is cut to a second and a half) at 1×, 2× or 5×, or all at once; it can be paused or skipped to the end. A replay calls no model and takes no decision.
+**Replaying a recent run.** Every run, on any brand, mode or provider, is kept in a shared run library in D1 (\`team_run_library\`; a Firestore collection of that name on Google Cloud): the last ten, newest first, readable by anyone who opens the page. Unlike the other transcripts, which expire after 24 hours, the ten are kept until newer runs replace them. Each row holds the run's event log and the time each event was sent. **Replay a recent run** loads one, and the page plays it back through the same reducer a live run uses, waiting the gap the run had between events (a person's wait or a slow model call is cut to a second and a half) at 1×, 2× or 5×, or all at once; it can be paused or skipped to the end. A replay calls no model and takes no decision.
 
 **What it does not do yet.** The sample market data stands in for real segmentation, competitive and benchmark systems. Runs differ, and a run takes a few minutes. The squad writes nothing to Salesforce. One person plays every role from the same browser, and the judge is generous until it is calibrated against people's scores.`,
         inDemo: [

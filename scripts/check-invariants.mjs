@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { PROOF_DEFAULTS } from "../packages/contracts/src/index.ts";
 import { report } from "./lib/report.mjs";
 
@@ -29,8 +30,36 @@ const failures = required
   .map((value) => `Missing config invariant: ${value}`);
 if (/ORCHESTRATOR_MODEL/.test(wrangler))
   failures.push("Orchestrator model must be set only in PROOF_DEFAULTS, not wrangler.jsonc");
-if (!orchestratorSource.includes("workersAI(PROOF_DEFAULTS.orchestratorModel)"))
+if (!orchestratorSource.includes("models.chat(PROOF_DEFAULTS.orchestratorModel)"))
   failures.push("Orchestrator must read its model from PROOF_DEFAULTS.orchestratorModel");
+// ADR-018: feature code reaches D1 and Workers AI only through the platform seam, so the same
+// code runs on Google Cloud. Only the seam's Cloudflare adapters and the Worker entry touch them.
+const SEAM_ALLOWED = new Set([
+  "apps/edge/src/index.ts",
+  "apps/edge/src/platform/data.ts",
+  "apps/edge/src/platform/models.ts",
+  "apps/edge/src/architecture/store.ts",
+  "apps/edge/src/team/library.ts",
+  "apps/edge/src/team/gateway.ts",
+  "apps/edge/src/team/run.ts",
+  "apps/edge/src/worker-configuration.d.ts",
+]);
+async function sourceFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(
+    entries.map((entry) => {
+      const path = join(directory, entry.name);
+      return entry.isDirectory() ? sourceFiles(path) : [path];
+    }),
+  );
+  return nested.flat().filter((path) => /\.ts$/.test(path) && !/\.test(-helpers)?\.ts$/.test(path));
+}
+for (const path of await sourceFiles("apps/edge/src")) {
+  if (SEAM_ALLOWED.has(path)) continue;
+  const source = await readFile(path, "utf8");
+  if (/\bAPP_DB\s*[.)]|env\.AI\.run\b|createWorkersAI\(/.test(source))
+    failures.push(`${path} uses D1 or Workers AI directly; go through apps/edge/src/platform/.`);
+}
 for (const value of forbidden)
   if (PROOF_DEFAULTS.allowedWrites.some((item) => item.includes(value)))
     failures.push(`Forbidden write exposed: ${value}`);

@@ -45,6 +45,7 @@ import { type ModelMessage, stepCountIs, streamText, tool, wrapLanguageModel } f
 import { z } from "zod";
 import { AGENT_GENERATION } from "../architecture/agent-runtime";
 import { ArchError, type Ctx, invoke, overridesFor } from "../architecture/context";
+import { storeLabel } from "../platform/data";
 import { ISO } from "../architecture/objects";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import { settle } from "./director";
@@ -383,7 +384,7 @@ export async function startLifecycleRun(
               (agent) => policy.principal.ids !== "*" && policy.principal.ids.includes(agent.id),
             ),
         ).length,
-        store: "D1",
+        store: storeLabel(ctx.env),
         scripted: ctx.env.AGENT_MODEL === "scripted",
       },
     });

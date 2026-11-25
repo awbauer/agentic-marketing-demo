@@ -33,6 +33,14 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "apps/edge/src/surface.ts",
     "salesforce/workbench-surface/",
   ],
+  "two-hosts": [
+    "apps/edge/src/app.ts",
+    "apps/edge/src/platform/",
+    "apps/gcp/",
+    "scripts/gcp/",
+    "infra/gcp/",
+    "docs/decisions/ADR-018-google-cloud-target.md",
+  ],
   workspace: [
     "apps/edge/src/working-set.ts",
     "apps/edge/src/focus.ts",
@@ -214,6 +222,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
 /** Roots whose code files (.ts, .tsx, .mjs, .cls) must each be mapped above or listed as untaught. */
 export const TAUGHT_ROOTS = [
   "apps/edge/src/",
+  "apps/gcp/",
   "apps/web/src/",
   "packages/",
   "salesforce/force-app/",

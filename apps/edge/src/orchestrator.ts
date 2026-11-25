@@ -43,7 +43,6 @@ import {
   type UIMessageChunk,
   wrapLanguageModel,
 } from "ai";
-import { createWorkersAI } from "workers-ai-provider";
 import {
   forgetMemory,
   type GraphBackend,
@@ -113,6 +112,8 @@ import {
   memoryStamp,
   memorySubjects,
 } from "./memory";
+import { auditCutoff, type DataBindings, dataPlatform } from "./platform/data";
+import { type ModelBindings, modelPlatform } from "./platform/models";
 import { buildTurnRecord } from "./turn-history";
 import {
   type DraftIntent,
@@ -161,18 +162,20 @@ export {
 } from "./turn-policy";
 
 export type AgentProps = { principalSubject: string; workspaceId: string };
-type OrchestratorBindings = CloudflareBindings & {
-  SALESFORCE_MCP_URL?: string;
-  CONFIRMATION_SIGNING_KEY?: string;
-  // Operator kill switches, set as Worker secrets so deploys do not reset them.
-  WRITES_ENABLED?: string;
-  DISABLED_TOOLS?: string;
-  MEMORY_ENABLED?: string;
-  // Neo4j Aura Query API credentials (Worker secrets); without them the fixture graph is used.
-  NEO4J_QUERY_URL?: string;
-  NEO4J_USERNAME?: string;
-  NEO4J_PASSWORD?: string;
-};
+type OrchestratorBindings = CloudflareBindings &
+  DataBindings &
+  ModelBindings & {
+    SALESFORCE_MCP_URL?: string;
+    CONFIRMATION_SIGNING_KEY?: string;
+    // Operator kill switches, set as Worker secrets so deploys do not reset them.
+    WRITES_ENABLED?: string;
+    DISABLED_TOOLS?: string;
+    MEMORY_ENABLED?: string;
+    // Neo4j Aura Query API credentials (Worker secrets); without them the fixture graph is used.
+    NEO4J_QUERY_URL?: string;
+    NEO4J_USERNAME?: string;
+    NEO4J_PASSWORD?: string;
+  };
 
 /** The store inventory mock's count date in local development. */
 const LOCAL_FIXTURE_COUNT_DATE = "2026-09-27";
@@ -336,13 +339,8 @@ const LOCAL_FIXTURE_RESULTS: Array<[string, unknown]> = [
 ];
 
 /** Deletes confirmation audit rows older than the 24-hour retention window. */
-export async function pruneConfirmationAudit(db: D1Database) {
-  const cutoff = new Date(Date.now() - AUDIT_RETENTION_MS).toISOString();
-  try {
-    await db.prepare("DELETE FROM confirmation_audit WHERE created_at < ?").bind(cutoff).run();
-  } catch {
-    // The table is created on the first confirmation; nothing to prune before that.
-  }
+export async function pruneConfirmationAudit(env: DataBindings) {
+  await dataPlatform(env).audit.prune(auditCutoff());
 }
 
 /** What the local Campaign Creation agent stand-in replies when it drafts the fixture brief. */
@@ -468,13 +466,6 @@ function pngDimensions(bytes: Uint8Array) {
   if (bytes.length < 24 || signature.some((byte, index) => bytes[index] !== byte)) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   return { width: view.getUint32(16), height: view.getUint32(20) };
-}
-
-function decodeBase64(value: string) {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
 }
 
 function encodeBase64(bytes: Uint8Array) {
@@ -727,6 +718,7 @@ function scriptedResponse(
     reasoning?: string;
     abortSignal?: AbortSignal;
     onComplete?: (result: TurnPipeResult) => Promise<void>;
+    host?: "google-cloud";
   },
 ) {
   const stream = createUIMessageStream({
@@ -737,6 +729,7 @@ function scriptedResponse(
         timeoutSeconds: TURN_TIMEOUT.totalMs / 1000,
         userAbortSignal: options.abortSignal,
         ...(options.route ? { route: options.route } : {}),
+        ...(options.host ? { host: options.host } : {}),
       });
       const result = await tracer.pipe(
         scriptedTurnStream(texts, {
@@ -797,6 +790,14 @@ export class MarketingOrchestrator extends AIChatAgent<
     }
   }
   private imageGenerationInFlight = false;
+  /** A scripted answer, marked with this host like a model turn. */
+  private scripted(texts: string[], options: Parameters<typeof scriptedResponse>[1]) {
+    return scriptedResponse(texts, { ...options, ...this.traceHost() });
+  }
+  /** Marks turns that ran on Google Cloud, for the route map's labels. */
+  private traceHost(): { host?: "google-cloud" } {
+    return modelPlatform(this.env)?.kind === "vertex" ? { host: "google-cloud" } : {};
+  }
   /** Cancels the turn another surface started over HTTP; null when none is running. */
   private surfaceAbort: AbortController | null = null;
   /** Set when the Campaign Creation agent drafted the brief in focus during this turn. */
@@ -893,10 +894,8 @@ export class MarketingOrchestrator extends AIChatAgent<
       briefSaved: this.state.workingSet.focus?.saved?.objectType === "Brief",
     };
     this.agentBriefThisTurn = false;
-    const workersAI = createWorkersAI({
-      binding: this.env.AI,
-      gateway: { id: this.env.AI_GATEWAY_ID },
-    });
+    const models = modelPlatform(this.env);
+    if (!models) throw new Error("No model platform is bound, so the orchestrator cannot run.");
     const workspace = workingSetPrompt(this.state.workingSet);
     const prompt = latestUserText(turnMessages);
     const focus = this.state.workingSet.focus;
@@ -924,7 +923,7 @@ export class MarketingOrchestrator extends AIChatAgent<
       await external.close();
       await lifeSciences.close();
       await graph.close();
-      return scriptedResponse(
+      return this.scripted(
         [
           `That request is about a different brand than the one selected (${this.scope.brand}). Switch the brand in the header to continue; I did not call any tools or answer it from memory.`,
         ],
@@ -943,7 +942,7 @@ export class MarketingOrchestrator extends AIChatAgent<
       await external.close();
       await lifeSciences.close();
       await graph.close();
-      return scriptedResponse(
+      return this.scripted(
         [
           (disabledTools as readonly string[]).includes(missingTool)
             ? `The ${missingTool.replaceAll("_", " ")} tool is turned off by an operator right now, so I did not call it or substitute demo data.`
@@ -965,6 +964,7 @@ export class MarketingOrchestrator extends AIChatAgent<
           toolCount: Object.keys(tools).length,
           requiredTool,
           route: "model",
+          ...this.traceHost(),
           timeoutSeconds: TURN_TIMEOUT.totalMs / 1000,
           userAbortSignal: abortSignal,
           composeEmptyAnswer: () =>
@@ -973,7 +973,7 @@ export class MarketingOrchestrator extends AIChatAgent<
         try {
           const result = streamText({
             model: wrapLanguageModel({
-              model: workersAI(PROOF_DEFAULTS.orchestratorModel),
+              model: models.chat(PROOF_DEFAULTS.orchestratorModel),
               middleware: forcedToolCallMiddleware,
             }),
             system: orchestratorSystemPrompt(workspace, toolPlan, this.scope),
@@ -1112,21 +1112,12 @@ export class MarketingOrchestrator extends AIChatAgent<
 
   /** A compact, per-user export of confirmed-write audit rows and turn summaries in retention. */
   private async exportAudit() {
-    const cutoff = new Date(Date.now() - AUDIT_RETENTION_MS).toISOString();
-    let confirmations: Record<string, unknown>[] = [];
-    try {
-      const rows = await this.env.APP_DB.prepare(
-        `SELECT confirmation_id, action, record_id, status, source_record_id, expires_at, created_at, updated_at
-         FROM confirmation_audit
-         WHERE workspace_id = ? AND principal_subject = ? AND created_at >= ?
-         ORDER BY created_at DESC LIMIT 500`,
-      )
-        .bind(this.state.workspaceId, this.principalSubject, cutoff)
-        .all<Record<string, unknown>>();
-      confirmations = rows.results;
-    } catch {
-      // The audit table is created on first write; no rows means no confirmed writes yet.
-    }
+    const confirmations = await dataPlatform(this.env).audit.list(
+      this.state.workspaceId,
+      this.principalSubject,
+      auditCutoff(),
+      500,
+    );
     const exportedAt = new Date().toISOString();
     return new Response(
       JSON.stringify(
@@ -1174,13 +1165,6 @@ export class MarketingOrchestrator extends AIChatAgent<
     );
   }
 
-  private async ensureImageDraftTable() {
-    if ((this.env.ENVIRONMENT as string) !== "local") return;
-    await this.env.APP_DB.exec(
-      "CREATE TABLE IF NOT EXISTS campaign_image_drafts (image_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, principal_subject TEXT NOT NULL, campaign_id TEXT NOT NULL, channel TEXT NOT NULL, prompt_summary TEXT NOT NULL, prompt_version TEXT NOT NULL, model_id TEXT NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, content_hash TEXT NOT NULL, r2_key TEXT NOT NULL UNIQUE, lifecycle TEXT NOT NULL, seed INTEGER, created_at TEXT NOT NULL, expires_at TEXT NOT NULL)",
-    );
-  }
-
   private async generateCampaignImage(request: Request) {
     if (this.imageGenerationInFlight)
       return json(
@@ -1219,13 +1203,8 @@ export class MarketingOrchestrator extends AIChatAgent<
       typeof body.seed === "number" && Number.isInteger(body.seed) && body.seed >= 0
         ? body.seed
         : undefined;
-    await this.ensureImageDraftTable();
-    const usage = await this.env.APP_DB.prepare(
-      "SELECT COUNT(*) AS count FROM campaign_image_drafts WHERE workspace_id = ?",
-    )
-      .bind(this.state.workspaceId)
-      .first<{ count: number }>();
-    if ((usage?.count ?? 0) >= 100)
+    const drafts = dataPlatform(this.env).imageDrafts;
+    if ((await drafts.countForWorkspace(this.state.workspaceId)) >= 100)
       return json(
         { error: { code: "RATE_LIMITED", message: "The 100-image proof cap has been reached." } },
         { status: 429 },
@@ -1239,26 +1218,22 @@ export class MarketingOrchestrator extends AIChatAgent<
         `Creative concept: ${concept}.`,
         "Editorial photography, warm natural light, inclusive but no identifiable real person, no text, no logo, no product claims.",
       ].join(" ");
-      const form = new FormData();
-      form.append("prompt", prompt);
-      form.append("width", String(1024));
-      form.append("height", String(1024));
-      if (seed !== undefined) form.append("seed", String(seed));
-      const encoded = new Response(form);
-      const result = await this.env.AI.run("@cf/black-forest-labs/flux-2-klein-4b", {
-        multipart: {
-          body: encoded.body ?? undefined,
-          contentType: encoded.headers.get("content-type") ?? undefined,
-        },
-      });
-      if (!result.image)
+      const models = modelPlatform(this.env);
+      const bytes = models
+        ? await models.image("@cf/black-forest-labs/flux-2-klein-4b", {
+            prompt,
+            width: 1024,
+            height: 1024,
+            seed,
+          })
+        : null;
+      if (!bytes)
         return json(
           {
             error: { code: "UPSTREAM_UNAVAILABLE", message: "The image model returned no image." },
           },
           { status: 502 },
         );
-      const bytes = decodeBase64(result.image);
       const dimensions = pngDimensions(bytes);
       if (
         bytes.byteLength > IMAGE_MAX_BYTES ||
@@ -1289,31 +1264,24 @@ export class MarketingOrchestrator extends AIChatAgent<
           promptVersion: IMAGE_PROMPT_VERSION,
         },
       });
-      await this.env.APP_DB.prepare(
-        `INSERT INTO campaign_image_drafts (
-          image_id, workspace_id, principal_subject, campaign_id, channel, prompt_summary,
-          prompt_version, model_id, width, height, content_hash, r2_key, lifecycle, seed,
-          created_at, expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
-      )
-        .bind(
-          id,
-          this.state.workspaceId,
-          this.principalSubject,
-          body.campaignId,
-          body.channel,
-          concept,
-          IMAGE_PROMPT_VERSION,
-          this.env.CAMPAIGN_IMAGE_MODEL,
-          dimensions.width,
-          dimensions.height,
-          contentHash,
-          r2Key,
-          seed ?? null,
-          now.toISOString(),
-          expiresAt,
-        )
-        .run();
+      await drafts.insert({
+        image_id: id,
+        workspace_id: this.state.workspaceId,
+        principal_subject: this.principalSubject,
+        campaign_id: body.campaignId,
+        channel: body.channel,
+        prompt_summary: concept,
+        prompt_version: IMAGE_PROMPT_VERSION,
+        model_id: this.env.CAMPAIGN_IMAGE_MODEL,
+        width: dimensions.width,
+        height: dimensions.height,
+        content_hash: contentHash,
+        r2_key: r2Key,
+        lifecycle: "draft",
+        seed: seed ?? null,
+        created_at: now.toISOString(),
+        expires_at: expiresAt,
+      });
       return json(
         GeneratedCampaignImageSchema.parse({
           id,
@@ -1337,23 +1305,11 @@ export class MarketingOrchestrator extends AIChatAgent<
 
   private async findImageDraft(imageId: string) {
     if (!/^[a-f0-9-]{36}$/.test(imageId)) return null;
-    await this.ensureImageDraftTable();
-    const draft = await this.env.APP_DB.prepare(
-      `SELECT image_id, campaign_id, channel, prompt_summary, content_hash, r2_key, lifecycle, expires_at
-       FROM campaign_image_drafts
-       WHERE image_id = ? AND workspace_id = ? AND principal_subject = ?`,
-    )
-      .bind(imageId, this.state.workspaceId, this.principalSubject)
-      .first<{
-        image_id: string;
-        campaign_id: string;
-        channel: string;
-        prompt_summary: string;
-        content_hash: string;
-        r2_key: string;
-        lifecycle: string;
-        expires_at: string;
-      }>();
+    const draft = await dataPlatform(this.env).imageDrafts.find(
+      imageId,
+      this.state.workspaceId,
+      this.principalSubject,
+    );
     return draft && Date.parse(draft.expires_at) > Date.now() ? draft : null;
   }
 
@@ -1388,28 +1344,14 @@ export class MarketingOrchestrator extends AIChatAgent<
   /** Lists this user's unexpired variants for a campaign, newest first, for review and selection. */
   private async listImageDrafts(campaignId: string | null) {
     if (!campaignId || !/^[a-zA-Z0-9]{15,18}$/.test(campaignId)) return [];
-    await this.ensureImageDraftTable();
-    const rows = await this.env.APP_DB.prepare(
-      `SELECT image_id, campaign_id, channel, prompt_summary, model_id, width, height, content_hash,
-         lifecycle, expires_at
-       FROM campaign_image_drafts
-       WHERE workspace_id = ? AND principal_subject = ? AND campaign_id = ? AND expires_at > ?
-       ORDER BY created_at DESC LIMIT 24`,
-    )
-      .bind(this.state.workspaceId, this.principalSubject, campaignId, new Date().toISOString())
-      .all<{
-        image_id: string;
-        campaign_id: string;
-        channel: string;
-        prompt_summary: string;
-        model_id: string;
-        width: number;
-        height: number;
-        content_hash: string;
-        lifecycle: string;
-        expires_at: string;
-      }>();
-    return rows.results.flatMap((row) => {
+    const rows = await dataPlatform(this.env).imageDrafts.listForCampaign(
+      this.state.workspaceId,
+      this.principalSubject,
+      campaignId,
+      new Date().toISOString(),
+      24,
+    );
+    return rows.flatMap((row) => {
       const parsed = GeneratedCampaignImageSchema.safeParse({
         id: row.image_id,
         campaignId: row.campaign_id,
@@ -1449,30 +1391,28 @@ export class MarketingOrchestrator extends AIChatAgent<
         },
         { status: 409 },
       );
-    await this.env.APP_DB.prepare(
-      "UPDATE campaign_image_drafts SET lifecycle = 'rejected' WHERE image_id = ? AND workspace_id = ?",
-    )
-      .bind(imageId, this.state.workspaceId)
-      .run();
+    await dataPlatform(this.env).imageDrafts.setLifecycle(
+      imageId,
+      this.state.workspaceId,
+      "rejected",
+    );
     return json({ id: imageId, lifecycle: "rejected" });
   }
 
   private async markImageAttached(imageId: string) {
-    await this.env.APP_DB.prepare(
-      "UPDATE campaign_image_drafts SET lifecycle = 'attached' WHERE image_id = ? AND workspace_id = ?",
-    )
-      .bind(imageId, this.state.workspaceId)
-      .run();
+    await dataPlatform(this.env).imageDrafts.setLifecycle(
+      imageId,
+      this.state.workspaceId,
+      "attached",
+    );
   }
 
   private async serveCampaignImage(imageId: string) {
-    await this.ensureImageDraftTable();
-    const image = await this.env.APP_DB.prepare(
-      `SELECT r2_key, expires_at FROM campaign_image_drafts
-       WHERE image_id = ? AND workspace_id = ? AND principal_subject = ?`,
-    )
-      .bind(imageId, this.state.workspaceId, this.principalSubject)
-      .first<{ r2_key: string; expires_at: string }>();
+    const image = await dataPlatform(this.env).imageDrafts.find(
+      imageId,
+      this.state.workspaceId,
+      this.principalSubject,
+    );
     if (!image || Date.parse(image.expires_at) <= Date.now())
       return json(
         { error: { code: "NOT_FOUND", message: "Image draft not found." } },
@@ -3412,38 +3352,21 @@ export class MarketingOrchestrator extends AIChatAgent<
     status: "pending" | "confirmed" | "denied" | "expired" | "executed",
     sourceRecordId?: string,
   ) {
-    if ((this.env.ENVIRONMENT as string) === "local")
-      await this.env.APP_DB.exec(
-        "CREATE TABLE IF NOT EXISTS confirmation_audit (confirmation_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, principal_subject TEXT NOT NULL, action TEXT NOT NULL, record_id TEXT NOT NULL, request_hash TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE, status TEXT NOT NULL, source_record_id TEXT, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
-      );
-    const now = new Date().toISOString();
-    await this.env.APP_DB.prepare(
-      `INSERT INTO confirmation_audit (
-        confirmation_id, workspace_id, principal_subject, action, record_id,
-        request_hash, idempotency_key, status, source_record_id, expires_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(confirmation_id) DO UPDATE SET
-        status = excluded.status,
-        source_record_id = excluded.source_record_id,
-        updated_at = excluded.updated_at`,
-    )
-      .bind(
-        confirmation.id,
-        this.state.workspaceId,
-        confirmation.principalSubject,
-        confirmation.action,
-        confirmation.recordId,
-        confirmation.requestHash,
-        confirmation.idempotencyKey,
-        status,
-        sourceRecordId ?? null,
-        confirmation.expiresAt,
-        now,
-        now,
-      )
-      .run();
+    await dataPlatform(this.env).audit.upsert({
+      confirmationId: confirmation.id,
+      workspaceId: this.state.workspaceId,
+      principalSubject: confirmation.principalSubject,
+      action: confirmation.action,
+      recordId: confirmation.recordId,
+      requestHash: confirmation.requestHash,
+      idempotencyKey: confirmation.idempotencyKey,
+      status,
+      sourceRecordId: sourceRecordId ?? null,
+      expiresAt: confirmation.expiresAt,
+      at: new Date().toISOString(),
+    });
     // The audit keeps 24 hours; older rows go on every write, and hourly by the cron.
-    await pruneConfirmationAudit(this.env.APP_DB);
+    await pruneConfirmationAudit(this.env);
   }
 
   /** The answer being streamed right now; the SDK keeps it private and offers no reader for it. */
@@ -3708,7 +3631,7 @@ export class MarketingOrchestrator extends AIChatAgent<
       const text = result.ok
         ? `${result.created ? "Remembered" : "Already remembered"} **${result.title}** (version ${result.version}) for this workspace for ${MEMORY_RETENTION_DAYS} days. Ask about it in a new chat, or forget it from History → Memory. Nothing was saved to Salesforce.`
         : `${result.message} Nothing was saved to Salesforce.`;
-      return scriptedResponse([text], {
+      return this.scripted([text], {
         model: POLICY_ROUTER,
         route: "memory",
         abortSignal,
@@ -3735,7 +3658,7 @@ export class MarketingOrchestrator extends AIChatAgent<
       const text = response.ok
         ? `**Ready to confirm:** ${body.summary}\n\nSalesforce checked your permissions; review the confirmation card and confirm it yourself. Nothing is created until you do.`
         : `I couldn't prepare the review request. ${body.error?.message ?? ""} Nothing was created.`;
-      return scriptedResponse([text], {
+      return this.scripted([text], {
         model: POLICY_ROUTER,
         route: policyIntent,
         abortSignal,
@@ -3745,7 +3668,7 @@ export class MarketingOrchestrator extends AIChatAgent<
     }
     if (policyIntent === "confirmation-required" && this.state.workingSet.focus) {
       const text = await this.proposeFocusSave();
-      return scriptedResponse([text], {
+      return this.scripted([text], {
         model: POLICY_ROUTER,
         route: policyIntent,
         abortSignal,
@@ -3754,7 +3677,7 @@ export class MarketingOrchestrator extends AIChatAgent<
       });
     }
     if (policyIntent)
-      return scriptedResponse(
+      return this.scripted(
         [policyResponse(policyIntent, this.focusReferent() ?? this.previousReplyReferent())],
         {
           model: POLICY_ROUTER,
@@ -3775,7 +3698,7 @@ export class MarketingOrchestrator extends AIChatAgent<
         workspaceId: this.state.workspaceId,
         now: () => new Date(),
       });
-      return scriptedResponse([text], {
+      return this.scripted([text], {
         model: "local-fixture",
         reasoning: "Local development has no model: answer from the workspace's long-term memory.",
         abortSignal,
@@ -3787,7 +3710,7 @@ export class MarketingOrchestrator extends AIChatAgent<
     // with a fixed forecast, and the workbench computes the same inventory risk.
     if (isInventoryCheck(utterance)) {
       const text = await this.localInventoryCheck(utterance);
-      return scriptedResponse([text], {
+      return this.scripted([text], {
         model: "local-fixture",
         reasoning:
           "Local development has no model or network: a fixed forecast, the graph's demand map, and the store inventory mock go through the same ingestion and risk check.",
@@ -3807,7 +3730,7 @@ export class MarketingOrchestrator extends AIChatAgent<
       if (stored?.steps[0])
         stored.steps[0] = { ...stored.steps[0], subject: "Rain outside? Warm soup is waiting." };
       await this.refreshPreview();
-      return scriptedResponse(
+      return this.scripted(
         [
           "The **Northstar Campaign Creation** agent refined the campaign preview (local fixture): the first email's subject is now “Rain outside? Warm soup is waiting.”\n\n",
           "The workspace reloaded the preview from the brief. Nothing was sent or activated.",
@@ -3827,7 +3750,7 @@ export class MarketingOrchestrator extends AIChatAgent<
       const focus = this.updateFocus(localDraft);
       this.suggestFocusSave();
       const current = currentFocusVersion(focus);
-      return scriptedResponse(
+      return this.scripted(
         [
           `The **Northstar Campaign Creation** agent (Marketing Cloud Next) drafted **${current.title}** (version ${current.version}) with its Draft a Campaign Brief action:\n\n`,
           ...current.fields.map((field) => `- **${field.label}:** ${field.value}\n`),
@@ -3843,7 +3766,7 @@ export class MarketingOrchestrator extends AIChatAgent<
         },
       );
     }
-    return scriptedResponse(
+    return this.scripted(
       [
         "I reviewed the fictional Northstar sample campaign. The **strongest signal is stable engagement**.\n\n",
         "**Readiness blockers**\n\n- Accessibility copy\n- Commercial-consent scope\n\n",

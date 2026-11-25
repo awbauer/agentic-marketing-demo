@@ -190,6 +190,7 @@ export function routeMap(
     seen?.streamFailed || (finish?.outcome && finish.outcome !== "completed"),
   );
   const thinking = working && viaModel && running.length === 0;
+  const google = seen?.start?.host === "google-cloud";
 
   const node = (
     id: string,
@@ -251,17 +252,22 @@ export function routeMap(
           ...(surface === "lightning"
             ? [node("relay", "Apex relay", reached ? "done" : "idle")]
             : []),
-          node("access", "Cloudflare Access", reached ? "done" : "idle"),
+          node(
+            "access",
+            google ? "Identity-Aware Proxy" : "Cloudflare Access",
+            reached ? "done" : "idle",
+          ),
           node(
             "router",
             "Policy router",
             started ? "done" : working ? "active" : "idle",
             started && !viaModel ? "Answered here" : "",
           ),
-          node("ai-gateway", "AI Gateway", modelState),
+          // On Google Cloud models are called directly on Vertex AI; there is no AI Gateway hop.
+          ...(google ? [] : [node("ai-gateway", "AI Gateway", modelState)]),
           node(
             "model",
-            "Workers AI",
+            google ? "Vertex AI" : "Workers AI",
             modelState,
             viaModel ? (seen?.start?.model.split("/").pop() ?? "") : "",
           ),
@@ -291,9 +297,10 @@ function routeSummary(
   if (working) {
     if (!seen?.start) return "The policy router is reading the request";
     if (running.length > 0) return runningSummary(running);
-    if (seen.open.text.size > 0) return "Workers AI is writing the answer";
-    if (seen.open.reasoning.size > 0) return "Workers AI is reasoning";
-    return "Workers AI is choosing the next step";
+    const models = seen.start.host === "google-cloud" ? "Vertex AI" : "Workers AI";
+    if (seen.open.text.size > 0) return `${models} is writing the answer`;
+    if (seen.open.reasoning.size > 0) return `${models} is reasoning`;
+    return `${models} is choosing the next step`;
   }
   if (!seen?.start) return "Send a message to see which components it passes through";
   const finish = seen.finish;

@@ -1,0 +1,15 @@
+{
+  "name": "@northstar/gcp",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@google-cloud/firestore": "9.4.1",
+    "@google-cloud/storage": "9.0.0",
+    "@northstar/architecture": "workspace:*",
+    "google-auth-library": "11.3.4",
+    "ws": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2"
+  }
+}
