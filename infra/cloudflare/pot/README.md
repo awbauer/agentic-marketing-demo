@@ -45,7 +45,7 @@ Connect the existing `northstar-marketing-workbench-pot` Worker to this reposito
 
 Keep preview builds disabled until separate preview D1, R2, Access, and Salesforce OAuth resources are configured. A branch preview must never share the production proof database, bucket, secrets, or upstream writes.
 
-The three runtime secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, and `CONFIRMATION_SIGNING_KEY` already belong to the Worker and must remain runtime secrets. Do not copy their values into repository settings, build variables, source control, or build logs. The non-secret runtime values and all resource bindings are owned by `wrangler.jsonc`; do not duplicate them in the dashboard.
+The runtime secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `CONFIRMATION_SIGNING_KEY` and `GOOGLE_WORKLOAD_IDENTITY` (Vertex AI federation, ADR-021; put on the Worker on 2026-11-25) already belong to the Worker and must remain runtime secrets. Do not copy their values into repository settings, build variables, source control, or build logs. The non-secret runtime values and all resource bindings are owned by `wrangler.jsonc`; do not duplicate them in the dashboard.
 
 ## Operator kill switches
 
