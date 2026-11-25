@@ -2159,3 +2159,16 @@
 .team-modal-list {
   padding-left: 18px;
 }
+
+/* The Evals tab's session bar: what this browser's session holds, and Reset. */
+.team-session-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+.team-session-bar p {
+  margin: 0;
+}

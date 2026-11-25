@@ -11,11 +11,9 @@ import {
   TEAM_PARTY_LABELS,
   TEAM_PROVIDER_LABELS,
   type TeamAgentId,
-  type TeamProvider,
   type TeamScorecard,
 } from "@northstar/architecture";
-import { useArch } from "../architecture/api";
-import { useScope } from "../scope";
+import { resetSessionMetrics, type SessionRun, useSessionMetrics } from "./session-metrics";
 import { type InfraLayer, isPeerMessage, type TeamState } from "./team-state";
 
 const short = (id: TeamAgentId) => TEAM_PARTY_LABELS[id];
@@ -367,102 +365,132 @@ function Scorecard({ scorecard }: { scorecard: TeamScorecard }) {
   );
 }
 
-type SavedRun = {
-  id: string;
-  title: string;
-  brand: string;
-  provider: TeamProvider;
-  status: string;
-  at: string;
-  scorecard: TeamScorecard | null;
-};
-
 const average = (values: number[]) =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 
-/** Past runs side by side, and the average per provider, so the providers can be compared. */
-function RunsCompared({ refreshKey }: { refreshKey: string }) {
-  const { scope } = useScope();
-  const { data, loading } = useArch<{ runs: SavedRun[] }>(
-    "/team/evals",
-    { persona: scope.persona, brand: "all" },
-    refreshKey.length,
-  );
-  const scored = (data?.runs ?? []).filter((run) => run.scorecard);
-  if (loading && !data) return <p className="arch-note">Loading past runs…</p>;
-  if (scored.length === 0)
-    return (
-      <p className="arch-note">
-        No scored runs yet. Every run is scored when it ends; <code>pnpm eval:team</code> scores the
-        reference briefs on each provider.
+const STATUS_LABELS: Record<SessionRun["status"], string> = {
+  done: "Finished",
+  waiting: "Waiting on a person",
+  stopped: "Stopped",
+};
+
+/**
+ * This session's runs side by side, and the average per provider, so the providers can be
+ * compared. Local to this browser: live runs and replays this reader finished, until Reset.
+ */
+function RunsCompared() {
+  const metrics = useSessionMetrics();
+  const scored = metrics.runs.filter((run) => run.scorecard);
+  const replays = metrics.runs.filter((run) => run.source === "replay").length;
+  const started = new Date(metrics.startedAt).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const header = (
+    <div className="team-session-bar">
+      <p className="arch-note" role="status">
+        This session, in this browser only, since {started}: {metrics.runs.length} run
+        {metrics.runs.length === 1 ? "" : "s"} ({metrics.runs.length - replays} live, {replays}{" "}
+        replayed), {scored.length} scored. Replays and scripted runs count.
       </p>
+      <button
+        type="button"
+        className="text-button"
+        onClick={resetSessionMetrics}
+        disabled={metrics.runs.length === 0}
+      >
+        Reset session metrics
+      </button>
+    </div>
+  );
+  if (metrics.runs.length === 0)
+    return (
+      <>
+        {header}
+        <p className="arch-note">
+          No runs in this session yet. A run counts once it ends or stops for a person, and a replay
+          counts once it plays to the end or is skipped to the end.
+        </p>
+      </>
     );
   const providers = [...new Set(scored.map((run) => run.provider))];
   return (
     <>
+      {header}
+      {providers.length > 0 && (
+        <div className="team-table-wrap">
+          <table className="team-table">
+            <caption>Average per provider, this session</caption>
+            <thead>
+              <tr>
+                <th scope="col">Provider</th>
+                <th scope="col">Scored runs</th>
+                <th scope="col">Score</th>
+                <th scope="col">Judge</th>
+                <th scope="col">Cost per run</th>
+                <th scope="col">Model time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {providers.map((provider) => {
+                const cards = scored
+                  .filter((run) => run.provider === provider)
+                  .map((run) => run.scorecard as TeamScorecard);
+                const judge = average(
+                  cards.flatMap((card) =>
+                    card.judge?.scores.length
+                      ? [
+                          card.judge.scores.reduce((sum, item) => sum + item.score, 0) /
+                            card.judge.scores.length,
+                        ]
+                      : [],
+                  ),
+                );
+                const cost = average(
+                  cards.flatMap((card) => (card.costUsd === null ? [] : [card.costUsd])),
+                );
+                return (
+                  <tr key={provider}>
+                    <th scope="row">{TEAM_PROVIDER_LABELS[provider]}</th>
+                    <td>{cards.length}</td>
+                    <td>{Math.round(average(cards.map((card) => card.overall)) ?? 0)}</td>
+                    <td>{judge === null ? "—" : `${judge.toFixed(1)}/5`}</td>
+                    <td>{cost === null ? "—" : `$${cost.toFixed(2)}`}</td>
+                    <td>
+                      {Math.round((average(cards.map((card) => card.modelMs)) ?? 0) / 1000)} s
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div className="team-table-wrap">
         <table className="team-table">
-          <caption>Average per provider</caption>
-          <thead>
-            <tr>
-              <th scope="col">Provider</th>
-              <th scope="col">Runs</th>
-              <th scope="col">Score</th>
-              <th scope="col">Judge</th>
-              <th scope="col">Cost per run</th>
-              <th scope="col">Model time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {providers.map((provider) => {
-              const cards = scored
-                .filter((run) => run.provider === provider)
-                .map((run) => run.scorecard as TeamScorecard);
-              const judge = average(
-                cards.flatMap((card) =>
-                  card.judge?.scores.length
-                    ? [
-                        card.judge.scores.reduce((sum, item) => sum + item.score, 0) /
-                          card.judge.scores.length,
-                      ]
-                    : [],
-                ),
-              );
-              const cost = average(
-                cards.flatMap((card) => (card.costUsd === null ? [] : [card.costUsd])),
-              );
-              return (
-                <tr key={provider}>
-                  <th scope="row">{TEAM_PROVIDER_LABELS[provider]}</th>
-                  <td>{cards.length}</td>
-                  <td>{Math.round(average(cards.map((card) => card.overall)) ?? 0)}</td>
-                  <td>{judge === null ? "—" : `${judge.toFixed(1)}/5`}</td>
-                  <td>{cost === null ? "—" : `$${cost.toFixed(2)}`}</td>
-                  <td>{Math.round((average(cards.map((card) => card.modelMs)) ?? 0) / 1000)} s</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className="team-table-wrap">
-        <table className="team-table">
-          <caption>Recent runs</caption>
+          <caption>Runs this session</caption>
           <thead>
             <tr>
               <th scope="col">Brief</th>
+              <th scope="col">Source</th>
               <th scope="col">Provider</th>
               <th scope="col">Status</th>
               <th scope="col">Score</th>
             </tr>
           </thead>
           <tbody>
-            {scored.slice(0, 12).map((run) => (
-              <tr key={run.id}>
+            {metrics.runs.slice(0, 20).map((run) => (
+              <tr key={run.key}>
                 <th scope="row">{run.title}</th>
+                <td>
+                  {run.source === "replay" ? "Replay" : "Live"}
+                  {run.scripted ? " · scripted" : ""}
+                </td>
                 <td>{TEAM_PROVIDER_LABELS[run.provider]}</td>
-                <td>{run.status}</td>
-                <td>{run.scorecard?.overall}</td>
+                <td>{STATUS_LABELS[run.status]}</td>
+                <td>{run.scorecard ? run.scorecard.overall : "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -492,7 +520,7 @@ export function EvalsPanel({ state }: { state: TeamState }) {
         </p>
       )}
       <h4>Runs compared</h4>
-      <RunsCompared refreshKey={state.scorecard?.runId ?? ""} />
+      <RunsCompared />
     </div>
   );
 }

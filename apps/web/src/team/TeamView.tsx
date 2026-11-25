@@ -36,6 +36,7 @@ import { EvalsPanel, InfrastructurePanel, SemanticLayerPanel } from "./TeamPlatf
 import { StrategyView, TeamWorkView } from "./TeamWork";
 import { REPLAY_SPEEDS, type ReplaySpeed, replayDelays } from "./replay";
 import { AgentModal } from "./AgentModal";
+import { recordSessionRun } from "./session-metrics";
 import { foldTeam, isPeerMessage, KIND_LABELS, TEAM_PHASES, type TeamMessage } from "./team-state";
 import "../architecture/architecture.css";
 import "./team.css";
@@ -617,7 +618,11 @@ export function TeamView({ onClose }: { onClose: () => void }) {
         setFromLibrary(false);
         stamps.current = null;
         const start = saved.events.find((event) => event.type === "start");
-        if (start?.type === "start" && start.mode) setModeState(start.mode);
+        // The page takes the run's mode and brief, so "Start a new run" runs what it shows.
+        if (start?.type === "start") {
+          setModeState(start.mode ?? "squad");
+          setBrief(start.brief);
+        }
         setStatus("done");
       })
       .catch(() => remember(null));
@@ -632,6 +637,33 @@ export function TeamView({ onClose }: { onClose: () => void }) {
 
   const visible = shown === null ? events : events.slice(0, shown);
   const state = useMemo(() => foldTeam(visible), [visible]);
+
+  // This session's metrics, kept in this browser: a live run counts when its request ends (it
+  // finished, stopped, or waits on a person), a replay when it plays or is skipped to the end.
+  // A run reopened after a reload is not new activity, so it is not counted again.
+  const lastStatus = useRef<Status>(status);
+  useEffect(() => {
+    const before = lastStatus.current;
+    lastStatus.current = status;
+    if (status !== "done" || shown !== null) return;
+    if (before !== "running" && before !== "replaying") return;
+    if (!state.id || !state.brief) return;
+    recordSessionRun({
+      runId: state.id,
+      title: state.brief.title,
+      brand: state.brief.brand,
+      mode: state.mode,
+      provider: state.infra?.provider ?? "cloudflare",
+      source: before === "replaying" ? "replay" : "live",
+      scripted: Boolean(state.infra?.scripted),
+      status: state.waiting
+        ? "waiting"
+        : state.done && (state.lifecycle ? state.lifecycle.finished : true)
+          ? "done"
+          : "stopped",
+      scorecard: state.scorecard,
+    });
+  }, [status, shown, state]);
 
   // While a run plays, keep the inspector on whichever agent is working now.
   useEffect(() => {
@@ -747,7 +779,11 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     // A library run may be someone else's; a reload should not try to reopen it as this person's.
     remember(null);
     const start = saved.events.find((event) => event.type === "start");
-    if (start?.type === "start") setModeState(start.mode ?? "squad");
+    // The page takes the run's mode and brief, so "Start a new run" runs what it shows.
+    if (start?.type === "start") {
+      setModeState(start.mode ?? "squad");
+      setBrief(start.brief);
+    }
     setEvents(saved.events);
     setFromLibrary(true);
     stamps.current = saved.stamps;
