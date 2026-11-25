@@ -509,7 +509,7 @@ The workbench can run on either of two hosts from the same commit. On **Cloudfla
 | | Cloudflare | Google Cloud |
 | --- | --- | --- |
 | The app's tables (audit, image drafts, architecture, squad library) | D1 | Firestore |
-| Models | Workers AI through AI Gateway | Vertex AI: gpt-oss-120b as a managed model, Gemini images, Claude |
+| Models (the default; the top bar can switch) | Workers AI through AI Gateway, or Vertex AI | Vertex AI: gpt-oss-120b as a managed model, Gemini images, Claude |
 | Sign-in | Cloudflare Access | Identity-Aware Proxy, plus a members list in Firestore |
 | Chats | A Durable Object per user | A Node agent host, each chat saved to Cloud Storage |
 
@@ -535,6 +535,7 @@ The feature code asks `dataPlatform(env)` for repositories and `modelPlatform(en
 - apps/gcp/src/ (the Node host, Firestore, Vertex AI, Cloud Storage)
 - scripts/gcp/bootstrap.sh, scripts/gcp/deploy.sh, infra/gcp/README.md
 - docs/decisions/ADR-018-google-cloud-target.md
+- Top bar → AI platform; GET /api/ai-platforms; docs/decisions/ADR-021-ai-platform-apart-from-host.md
 
 **Learn more**
 
@@ -543,6 +544,7 @@ The feature code asks `dataPlatform(env)` for repositories and `modelPlatform(en
 - Docs: [gpt-oss-120b on Vertex AI (managed API)](https://cloud.google.com/vertex-ai/generative-ai/docs/maas/openai/gpt-oss-120b)
 - Docs: [Identity-Aware Proxy for Cloud Run](https://cloud.google.com/iap/docs/enabling-cloud-run)
 - Docs: [Cloudflare chat agents](https://developers.cloudflare.com/agents/api-reference/chat-agents/)
+- Docs: [AI SDK: provider and model management (provider registry)](https://ai-sdk.dev/docs/ai-sdk-core/provider-management)
 
 ### 3.3 The workspace: focus, context, and records
 
@@ -645,6 +647,7 @@ flowchart TB
 The orchestrator runs **gpt-oss-20b**, OpenAI's open-weight reasoning model, on **Cloudflare Workers AI**, routed through **AI Gateway** for logging and cost visibility. The model ID is set in exactly one place: `PROOF_DEFAULTS.orchestratorModel`.
 
 - **Why 20b:** after the routing and reliability fixes, it matched or beat gpt-oss-120b through the pipeline at about 60% of the latency and lower cost (see *Evaluations*).
+- **Where it runs is a choice.** The top bar's **AI platform** menu can send a Cloudflare turn to **Vertex AI** instead (ADR-021). Vertex serves gpt-oss-120b, not 20b, so the turn runs on 120b there, and the trace says so.
 - **Its quirks** shaped several guards. It sometimes writes a tool call into its reasoning or answer text instead of calling the tool, and leaks its internal "harmony" channel markup into tool names.
 
 **Try it**
@@ -1122,7 +1125,7 @@ flowchart LR
 
 **Architecture workspaces.** The **Architecture** view is built differently from the chat: each tab is a *workspace manifest* (the roles, objects, tiles, agents and services it composes) drawn by one renderer, so a new workspace is data rather than a new screen. The same approval card also renders as an Adaptive Card, as data for a Lightning Web Component, and as an MCP Apps resource. See *Governed objects and workspaces*.
 
-**One scope in the header.** The **Brand** and **Run as** selectors apply everywhere: the chat (the message box suggests a prompt for the brand), the Graph (its brand filter), the use-case library, the Architecture workspaces and the turn history. The choice is remembered in the browser.
+**One scope in the header.** The **Brand** and **Run as** selectors apply everywhere: the chat (the message box suggests a prompt for the brand), the Graph (its brand filter), the use-case library, the Architecture workspaces and the turn history. Beside them, **AI platform** picks where the models run: Workers AI or Vertex AI. It lists only what this server can reach, says why an option isn't set up, and is greyed out when there is only one choice (ADR-021). Every choice is remembered in the browser.
 
 **In this demo**
 
@@ -1152,7 +1155,7 @@ flowchart LR
 
 > **Key idea:** Every turn leaves a trace for engineers and a history for reviewers.
 
-- **Route map** above the message box, in the browser and in Lightning: the components a turn passes through, lit as it runs, with a pulse on whichever is working now. The path runs from the page through Cloudflare Access to the policy router, then AI Gateway and Workers AI, and out through the agentic gateway to each MCP server. A turn that ran on Google Cloud says so in its trace, and its map shows Identity-Aware Proxy and Vertex AI, with no AI Gateway hop. A turn sent from Lightning also shows the Apex relay. It is read from the same trace as the view below, not from a script of what should happen, so a turn the policy router answers leaves the model dark, a tool the gateway denies marks the gateway and not the system behind it, and a failed tool marks that system. The first hops are implied, because a request can't reach the Worker without them; the router, model, and tools are recorded. The map keeps the finished route until the next message. It follows the query only: a confirmed write runs after the turn, and the write's own progress shows on its confirmation card. Lightning polls about once a second, so a hop shorter than that can appear already passed.
+- **Route map** above the message box, in the browser and in Lightning: the components a turn passes through, lit as it runs, with a pulse on whichever is working now. The path runs from the page through Cloudflare Access to the policy router, then AI Gateway and Workers AI, and out through the agentic gateway to each MCP server. A turn that ran on Google Cloud says so in its trace, and its map shows Identity-Aware Proxy in place of Access. The model hop is the AI platform the turn actually used: Workers AI behind AI Gateway, or Vertex AI called directly with no AI Gateway hop, whichever host served it. A turn sent from Lightning also shows the Apex relay. It is read from the same trace as the view below, not from a script of what should happen, so a turn the policy router answers leaves the model dark, a tool the gateway denies marks the gateway and not the system behind it, and a failed tool marks that system. The first hops are implied, because a request can't reach the Worker without them; the router, model, and tools are recorded. The map keeps the finished route until the next message. It follows the query only: a confirmed write runs after the turn, and the write's own progress shows on its confirmation card. Lightning polls about once a second, so a hop shorter than that can appear already passed.
 - **Live tool calls** under the trace while an answer streams: each call names its system and tool, with a spinner until its result comes back, then a check or a cross.
 - **Technical trace** at the top of each answer, so the answer streaming in below doesn't move it: every lifecycle event in order, with timing. It opens while the answer streams (or when something went wrong) and stays open after it finishes, until you close it.
   - turn start, step start and finish (finish reason, token counts)
@@ -1276,7 +1279,7 @@ flowchart TB
 
 > **Key idea:** Generated images stay private drafts until a person confirms, and Salesforce verifies the file's hash.
 
-**FLUX.2 klein** on Workers AI generates a 1024×1024 draft from a bounded prompt, with PII and injection checks on the concept.
+**FLUX.2 klein** on Workers AI generates a 1024×1024 draft from a bounded prompt, with PII and injection checks on the concept. With **Vertex AI** chosen in the top bar, Gemini's image model draws it instead, and the draft records which model did.
 - Drafts are stored privately in **R2** for 7 days, with provenance (model, prompt version, content hash) in **D1**.
 - The variant gallery lets you select, reject, or revise.
 - **Attach to campaign** runs the confirmation flow. Apex checks the PNG's SHA-256 against the confirmed hash, creates one Salesforce file on the Campaign, and reads back its checksum and link.
@@ -1856,7 +1859,7 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 
 **The infrastructure under the agents.** One **Under the hood** panel holds each agent's grants and calls, the infrastructure, the semantic layer, the evals and the decisions people took, as tabs that change only when you pick one. It lights the layers each event passes: the event stream to the page; the lead's coordination loop; the models, each call metered; the agentic gateway, which checks every tool call as `team:<tool>` and mints a token for it; tools and the semantic layer; the rule services; the agent-to-agent bus; the run's state, saved to D1; and operations, where an operator disables or constrains an agent without a deploy.
 
-**Three model providers, one gateway.** A switch runs the same squad on **Cloudflare Workers AI**, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same. Every request goes through the Cloudflare AI Gateway. Anthropic and OpenAI requests go through the Worker's AI binding to the gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it, and Cloudflare-billed fallback is off. On Google Cloud the open-model tier runs gpt-oss on Vertex AI, Anthropic is Claude on Vertex (the same SDK, its requests rewritten for Vertex), and OpenAI is off until approved. Claude Opus 5.5 does not accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message, and Claude's thinking blocks are replayed unchanged on the next turn.
+**Three model providers, one gateway.** A switch runs the same squad on **Cloudflare Workers AI**, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same. Every request goes through the Cloudflare AI Gateway. Anthropic and OpenAI requests go through the Worker's AI binding to the gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it, and Cloudflare-billed fallback is off. The open-model tier follows the top bar's **AI platform**: Workers AI, or gpt-oss on Vertex AI; the vendors keep the host's route. On Google Cloud the open-model tier runs gpt-oss on Vertex AI, Anthropic is Claude on Vertex (the same SDK, its requests rewritten for Vertex), and OpenAI is off until approved. Claude Opus 5.5 does not accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message, and Claude's thinking blocks are replayed unchanged on the next turn.
 
 **Opening an agent.** Click any agent on the team map (or press Enter on it) to open its details: its role, tier and model, with the provider, AI Gateway and effort; the exact system prompts it sent, one per distinct prompt, with the tools it was offered, the tool choice and its settings (each is recorded as a `prompt` event the first time the agent sends it, so a replay shows it too); its usage (model calls, input, cached and output tokens, model time, its share of the run and an estimated cost from the model's price); every message it sent and received, grouped by the party on the other end; and every tool call with the gateway's decision and its input, plus the work it saved.
 

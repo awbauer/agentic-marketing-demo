@@ -13,7 +13,7 @@ Built on Salesforce and Google Cloud (Cloud Run, Firestore, Vertex AI); the same
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![MCP](https://img.shields.io/badge/Model%20Context%20Protocol-tools-1f2937)
 
-[Features](#-features) · [Tour](#-a-quick-tour) · [Architecture](#-how-it-works) · [Run it](#-run-it-locally) · [Repo map](#-repository-map)
+[Features](#-features) · [Tour](#-a-quick-tour) · [Architecture](#-how-it-works) · [Patterns](#-architecture-patterns) · [Run it](#-run-it-locally) · [Repo map](#-repository-map)
 
 <br/>
 
@@ -29,7 +29,8 @@ A marketer asks a question in plain language. The orchestrator agent reads campa
 
 - 💬 **Chat with your campaigns.** Ask *"Is the fall campaign ready?"* and get an answer drawn from real records, as readable cards with links back to Salesforce.
 - 🛡️ **Nothing changes without you.** The agent can only propose a write. You confirm it, it's saved once, logged, and checked against Salesforce afterwards.
-- 🔍 **See the whole route.** Every answer shows which systems it touched (sign-in, router, model, Salesforce, graph) and a step-by-step trace of what the model did.
+- 🔍 **See the whole route.** Every answer shows which systems it touched (sign-in, router, classifier, model, Salesforce, graph) and a step-by-step trace of what the model did.
+- 🔀 **Pick the AI platform.** A menu in the top bar, beside Brand and Run as, runs the models on Workers AI or Vertex AI, whichever cloud hosts the app.
 - 🕸️ **A knowledge graph you can explore.** Brands, campaigns, audiences, approvals and disclosures in one connected graph. The agent uses it to ground answers (GraphRAG) and to remember things across chats.
 - 🤝 **A squad of agents.** A campaign lead hands a brief to four specialists. You play the compliance reviewer and the client, and pick a concept made from an approved image library.
 - 🧭 **Watch an asset get made.** Journeys run real agents from goal to approved asset, pausing only where a person must decide.
@@ -94,7 +95,7 @@ flowchart LR
   neo[("Neo4j<br/>knowledge graph")]
 
   user --> lb --> spa <-->|WebSocket| orch
-  orch --> ai
+  orch -->|AI SDK provider registry| ai
   orch --> gw
   gw --> mcp --> neo
   gw -->|per-user OAuth| sf
@@ -106,13 +107,15 @@ What happens when you ask a question:
 
 1. **You sign in** through Identity-Aware Proxy, which lets in only the workspace's members. Salesforce access is per user, so the agent only sees what you can see.
 2. **Your chat is an agent.** Each chat is a stateful agent (an Agents SDK chat agent, hosted on Cloud Run) that keeps the conversation and the records in focus, saves itself to Cloud Storage, and runs `gpt-oss` on Vertex AI.
-3. **It picks tools.** A router narrows a curated tool catalog for each step: Salesforce over Hosted MCP, plus MCP servers in the service for the graph, campaign context (weather, menus, inventory) and outside signals.
+3. **It picks tools, within policy.** A classifier labels the request (claims, a target list, Fed news, … or off topic). Cedar policies turn the labels, your brand and role, and what has already run into the tools on offer, so a claims question starts with the claims check and an off-topic one gets a plain answer with no tools. The model chooses among what is offered; nothing forces a call. The tools are Salesforce over Hosted MCP, plus MCP servers in the service for the graph, campaign context (weather, menus, inventory) and outside signals.
 4. **It asks before writing.** A proposed write becomes a confirmation card with an idempotency key. Once you confirm, it runs once, is logged in Firestore, and is read back from Salesforce.
 5. **It shows its work.** Answers render as cards with a trace and a route map, so you can see exactly how the answer was made.
 
 The Architecture and Campaign squad views take this further, with many narrow agents behind a single `gateway.invoke()`. [docs/architecture-roadmap.md](docs/architecture-roadmap.md) maps the reference architecture's AWS components to Google Cloud and Cloudflare.
 
 **Two hosts, one codebase.** The same commit also deploys to Cloudflare, where the pieces are a Worker, Cloudflare Access, Durable Objects, D1, R2, Workers AI through AI Gateway and a cron trigger. Only a thin platform layer differs ([ADR-018](docs/decisions/ADR-018-google-cloud-target.md)), and the page names whichever services it is running on.
+
+**The AI platform is chosen apart from the host** ([ADR-021](docs/decisions/ADR-021-ai-platform-apart-from-host.md)). Workers AI and Vertex AI are providers in one [AI SDK](https://ai-sdk.dev) registry, and the top bar's **AI platform** menu picks one per request. Cloudflare offers Workers AI, plus Vertex AI once the Worker holds a Google credential; Google Cloud offers Vertex AI. The trace and route map name the platform each turn ran on.
 
 | | Google Cloud | Cloudflare |
 | --- | --- | --- |
@@ -121,8 +124,27 @@ The Architecture and Campaign squad views take this further, with many narrow ag
 | Chats | Node agent host, each chat saved to Cloud Storage | Durable Objects |
 | Data | Firestore | D1 |
 | Images | Cloud Storage | R2 |
-| Models | Vertex AI (gpt-oss-120b, Gemini image, Claude) | Workers AI via AI Gateway |
+| Models (default) | Vertex AI (gpt-oss-120b, Gemini image, Claude) | Workers AI via AI Gateway; Vertex AI with a Google credential |
 | Hourly job | Cloud Scheduler | Cron trigger |
+
+## 🏗️ Architecture patterns
+
+The design choices that carry the demo, each with the decision record that explains it:
+
+| Pattern | What it means here | Decision |
+| --- | --- | --- |
+| **A stateful agent per chat** | Each chat is an Agents SDK chat agent with its own storage: a Durable Object on Cloudflare, a Node agent host saving SQLite snapshots to Cloud Storage on Google Cloud. | [ADR-002](docs/decisions/ADR-002-phase-1-cloudflare-foundation.md), [ADR-018](docs/decisions/ADR-018-google-cloud-target.md) |
+| **Tools over MCP behind one gateway** | Every tool, whether Salesforce, the graph or an internal one, is an MCP tool called through one agentic gateway that checks policy, asks for confirmation and audits. | [ADR-010](docs/decisions/ADR-010-architecture-agents-on-real-models.md), [ADR-020](docs/decisions/ADR-020-cedar-policies-and-request-classifier.md) |
+| **Policy as code (Cedar)** | One Cedar decision both offers a tool and allows its call, so a model is never shown a tool it may not use. The context is the brand, role, surface, pharma stage, the classifier's labels and the tools already run. | [ADR-020](docs/decisions/ADR-020-cedar-policies-and-request-classifier.md) |
+| **Classify, then scope; never force** | Rules plus a small model label the request. Labels scope the tools on offer, and the model chooses. Guardrails: look before answering, ground before drafting, write last. | [ADR-019](docs/decisions/ADR-019-scoped-tools-not-forced-calls.md), [ADR-020](docs/decisions/ADR-020-cedar-policies-and-request-classifier.md) |
+| **Propose, confirm, write once** | Writes are proposals with an idempotency key. A person confirms, the write runs once, is audited and is read back from Salesforce. | [ADR-008](docs/decisions/ADR-008-marketing-cloud-agents-create-campaigns.md) |
+| **GraphRAG and long-term memory** | Answers are grounded in a Neo4j knowledge graph, and decisions are remembered across chats in that graph, with expiry. | [ADR-006](docs/decisions/ADR-006-neo4j-knowledge-graph.md), [ADR-007](docs/decisions/ADR-007-long-term-graph-memory.md) |
+| **Models chosen by evaluation** | A model catalog routes each task class to the champion an evaluation picked, and every run is scored by a judge. | [ADR-005](docs/decisions/ADR-005-gpt-oss-20b-and-campaign-context.md), [ADR-009](docs/decisions/ADR-009-model-catalog-and-routing.md) |
+| **Hub-and-spoke agent squad** | A campaign lead coordinates specialists over a shared bus and semantic layer, with people as the compliance reviewer and client. | [ADR-013](docs/decisions/ADR-013-campaign-squad.md), [ADR-014](docs/decisions/ADR-014-squad-people-and-evals.md) |
+| **Governed lifecycle** | Content moves through plan, brief, create, review, approve, deploy and learn. Per-stage tools are decided by policy, and claims are managed objects. | [ADR-015](docs/decisions/ADR-015-pharma-campaign-lifecycle.md), [ADR-017](docs/decisions/ADR-017-claims-managed-lifecycle.md) |
+| **A platform seam, not a fork** | Data, chats, sign-in and scheduling sit behind small interfaces, so one commit runs on Cloudflare or Google Cloud. | [ADR-018](docs/decisions/ADR-018-google-cloud-target.md) |
+| **Pluggable AI platforms** | Models come from an AI SDK provider registry, chosen per request, independent of the host. | [ADR-021](docs/decisions/ADR-021-ai-platform-apart-from-host.md) |
+| **Observable by default** | Every turn streams a trace (classification, steps, tools, tokens), a route map and a turn record, and every write leaves an audit row. | [Learn: observability](docs/learn-google-cloud.md) |
 
 ## 🚀 Run it locally
 
