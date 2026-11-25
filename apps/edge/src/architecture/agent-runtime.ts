@@ -24,6 +24,7 @@ import {
   type World,
 } from "@northstar/architecture";
 import { generateText, type LanguageModel, stepCountIs, streamText, wrapLanguageModel } from "ai";
+import type { AiPlatformId } from "@northstar/contracts";
 import { modelPlatform } from "../platform/models";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import { objectView, type RunState, type ToolStep, toolsFor } from "./agent-tools";
@@ -46,9 +47,9 @@ export const AGENT_GENERATION = {
  * The models the agents run on: Workers AI through AI Gateway. `AGENT_MODEL=scripted` selects a
  * scripted stand-in that only the hermetic worker tests set; no deployed environment sets it.
  */
-export function modelFactory(env: ArchEnv): ModelFactory {
+export function modelFactory(env: ArchEnv, aiPlatform?: AiPlatformId): ModelFactory {
   if (env.AGENT_MODEL === "scripted") return () => scriptedModel();
-  const models = modelPlatform(env);
+  const models = modelPlatform(env, aiPlatform);
   if (!models)
     throw new ArchError(
       503,
@@ -270,7 +271,7 @@ export async function runModelAgent(
   const prompt = agent.promptId ? promptById(agent.promptId) : undefined;
   if (!prompt) throw new ArchError(400, "BAD_REQUEST", `${agent.id} has no catalog prompt.`);
   const route = modelFor(agent, ctx.env);
-  const model = modelFactory(ctx.env)(route.model);
+  const model = modelFactory(ctx.env, ctx.aiPlatform)(route.model);
   const started = Date.now();
   // Offered exactly the capabilities the gateway allows this agent on its kind of object and this
   // brand (agents.cedar); each call is then checked the same way.

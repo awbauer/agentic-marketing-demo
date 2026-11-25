@@ -8,7 +8,7 @@ import { MemorySnapshotStore } from "./agent/snapshots";
 import { firestoreDataPlatform, firestoreMembers } from "./platform/firestore";
 import { gcsObjectStore, gcsSnapshotStore } from "./platform/gcs";
 import { staticAssets } from "./platform/static";
-import { vertexModels } from "./platform/vertex";
+import { GoogleAuth } from "google-auth-library";
 
 export type GcpConfig = {
   project: string;
@@ -63,28 +63,20 @@ export function buildEnv(config: GcpConfig, source: NodeJS.ProcessEnv = process.
   const firestore = new Firestore({ projectId });
   const bucket = new Storage({ projectId }).bucket(config.bucket || "northstar-local-assets");
   const assets = staticAssets(config.staticDir, "google-cloud");
-  let modelMap: Record<string, string> = {};
-  try {
-    modelMap = JSON.parse(source.VERTEX_MODEL_MAP ?? "{}") as Record<string, string>;
-  } catch {
-    console.warn("[gcp] VERTEX_MODEL_MAP is not valid JSON; using the default models.");
-  }
   const env = {
     ...vars,
     DATA: firestoreDataPlatform(firestore, config.collectionPrefix),
     MEMBERS: firestoreMembers(firestore, config.collectionPrefix),
-    MODELS: config.project
-      ? vertexModels({
-          project: config.project,
-          location: source.VERTEX_LOCATION ?? config.location,
-          ...(source.VERTEX_IMAGE_LOCATION ? { imageLocation: source.VERTEX_IMAGE_LOCATION } : {}),
-          ...(source.VERTEX_ANTHROPIC_LOCATION
-            ? { anthropicLocation: source.VERTEX_ANTHROPIC_LOCATION }
-            : {}),
-          imageModel: vars.CAMPAIGN_IMAGE_MODEL,
-          modelMap,
-        })
-      : undefined,
+    // Vertex AI runs on the service account's own credentials (no key); the shared model layer
+    // builds the platform from these (ADR-021). Without a project, local runs have no models.
+    ...(config.project
+      ? {
+          VERTEX_PROJECT: config.project,
+          VERTEX_LOCATION: source.VERTEX_LOCATION ?? config.location,
+          VERTEX_IMAGE_MODEL: vars.CAMPAIGN_IMAGE_MODEL,
+          GOOGLE_ACCESS_TOKEN: adcToken(),
+        }
+      : {}),
     CAMPAIGN_ASSETS: gcsObjectStore(bucket),
     ASSETS: { fetch: (input: Request | string) => assets(new Request(input)) },
   } as unknown as WorkbenchEnv;
@@ -92,4 +84,14 @@ export function buildEnv(config: GcpConfig, source: NodeJS.ProcessEnv = process.
   const snapshots =
     source.SNAPSHOT_STORE === "memory" ? new MemorySnapshotStore() : gcsSnapshotStore(bucket);
   return { env, assets, firestore, snapshots };
+}
+
+/** Access tokens from Application Default Credentials: Cloud Run's service account, or gcloud's. */
+function adcToken(): () => Promise<string> {
+  const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
+  return async () => {
+    const token = await auth.getAccessToken();
+    if (!token) throw new Error("Application Default Credentials returned no access token.");
+    return token;
+  };
 }

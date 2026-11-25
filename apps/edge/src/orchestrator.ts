@@ -1,5 +1,6 @@
 import { AIChatAgent, type OnChatMessageOptions } from "@cloudflare/ai-chat";
 import {
+  type AiPlatformId,
   AUDIT_RETENTION_HOURS,
   AUDIT_RETENTION_MS,
   type Confirmation,
@@ -20,6 +21,7 @@ import {
   PHASE_2_AUTONOMOUS_TOOLS,
   PHASE_2_CURATED_TOOLS,
   PROOF_DEFAULTS,
+  isAiPlatformId,
   parseOperationControls,
   policyResponse,
   referentFromReply,
@@ -780,6 +782,8 @@ export class MarketingOrchestrator extends AIChatAgent<
   private principalSubject = "unknown";
   /** The brand and role chosen in the header, sent with each chat message. */
   private scope: WorkbenchScope = DEFAULT_SCOPE;
+  /** The AI platform this message chose in the top bar; the server's default when unset (ADR-021). */
+  private aiPlatform: AiPlatformId | undefined;
 
   /** Every model-called tool passes the agentic gateway as `tool:<name>`; a gateway fault fails closed. */
   /**
@@ -878,7 +882,7 @@ export class MarketingOrchestrator extends AIChatAgent<
     const turnMessages = conversationWindow(messages);
     // The classifier labels the request while the tools connect; its labels decide, through the
     // Cedar policies, which tools this turn is offered (ADR-020).
-    const models = modelPlatform(this.env);
+    const models = modelPlatform(this.env, this.aiPlatform);
     const classifying = classifyRequest(latestUserText(turnMessages), {
       model: models ? models.chat(PROOF_DEFAULTS.orchestratorModel) : null,
     });
@@ -1032,6 +1036,7 @@ export class MarketingOrchestrator extends AIChatAgent<
           requiredTool,
           route: "model",
           ...this.traceHost(),
+          aiPlatform: models.kind,
           classification,
           timeoutSeconds: TURN_TIMEOUT.totalMs / 1000,
           userAbortSignal: abortSignal,
@@ -1297,7 +1302,7 @@ export class MarketingOrchestrator extends AIChatAgent<
         `Creative concept: ${concept}.`,
         "Editorial photography, warm natural light, inclusive but no identifiable real person, no text, no logo, no product claims.",
       ].join(" ");
-      const models = modelPlatform(this.env);
+      const models = modelPlatform(this.env, this.aiPlatform);
       const bytes = models
         ? await models.image("@cf/black-forest-labs/flux-2-klein-4b", {
             prompt,
@@ -1351,7 +1356,7 @@ export class MarketingOrchestrator extends AIChatAgent<
         channel: body.channel,
         prompt_summary: concept,
         prompt_version: IMAGE_PROMPT_VERSION,
-        model_id: this.env.CAMPAIGN_IMAGE_MODEL,
+        model_id: models?.imageModel ?? this.env.CAMPAIGN_IMAGE_MODEL,
         width: dimensions.width,
         height: dimensions.height,
         content_hash: contentHash,
@@ -1371,7 +1376,7 @@ export class MarketingOrchestrator extends AIChatAgent<
           width: dimensions.width,
           height: dimensions.height,
           contentHash,
-          model: this.env.CAMPAIGN_IMAGE_MODEL,
+          model: models?.imageModel ?? this.env.CAMPAIGN_IMAGE_MODEL,
           lifecycle: "draft",
           expiresAt,
         }),
@@ -3696,7 +3701,9 @@ export class MarketingOrchestrator extends AIChatAgent<
   ): Promise<Response> {
     if (options?.abortSignal?.aborted) return new Response(null, { status: 499 });
     const abortSignal = options?.abortSignal;
-    this.scope = parseScope((options?.body as { scope?: unknown } | undefined)?.scope);
+    const body = options?.body as { scope?: unknown; aiPlatform?: unknown } | undefined;
+    this.scope = parseScope(body?.scope);
+    this.aiPlatform = isAiPlatformId(body?.aiPlatform) ? body.aiPlatform : undefined;
     // Writes and forbidden actions never reach the model, so it cannot claim they happened.
     const utterance = latestUserText(evidenceTurnMessages(this.messages));
     // "Remember this draft" stores the focus in long-term memory; the server writes it, not the model.

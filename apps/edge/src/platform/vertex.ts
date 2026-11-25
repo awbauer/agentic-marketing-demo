@@ -1,13 +1,13 @@
-// Vertex AI as the model platform on Google Cloud (ADR-018). Chat models go through Vertex's
-// OpenAI-compatible endpoint, which serves gpt-oss-120b as a managed model; images come from
-// Gemini's image model;
-// the squad's Anthropic provider reaches Claude on Vertex. Every call authenticates with the
-// service account's own credentials (ADC), so there is no key to store.
+// Vertex AI as a model platform, on either host (ADR-018, ADR-021). Chat models go through
+// Vertex's OpenAI-compatible endpoint, which serves gpt-oss-120b as a managed model; images come
+// from Gemini's image model; the squad's Anthropic provider reaches Claude on Vertex. Plain fetch
+// and WebCrypto only, so it runs in a Worker as well as in Node. The caller supplies the access
+// token: on Cloud Run the service account's own (ADC, no key stored); elsewhere one minted from a
+// service-account key (google-token.ts).
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { generateText, type LanguageModel, wrapLanguageModel } from "ai";
-import { GoogleAuth } from "google-auth-library";
-import type { ImageRequest, JudgeVerdict, ModelPlatform } from "../../../edge/src/platform/models";
+import type { ImageRequest, JudgeVerdict, ModelPlatform } from "./models";
 
 export type VertexOptions = {
   project: string;
@@ -21,9 +21,10 @@ export type VertexOptions = {
   imageModel?: string;
   /** JSON object of catalog id → Vertex model id, overriding the defaults below. */
   modelMap?: Record<string, string>;
-  /** Tests pass a fake fetch and token; everything else uses ADC. */
+  /** Tests pass a fake fetch. */
   fetch?: typeof fetch;
-  accessToken?: () => Promise<string>;
+  /** A current Google access token with the cloud-platform scope. */
+  accessToken: () => Promise<string>;
 };
 
 /** The open models Vertex hosts as managed models, by catalog id. */
@@ -51,15 +52,6 @@ function host(location: string) {
   return location === "global"
     ? "aiplatform.googleapis.com"
     : `${location}-aiplatform.googleapis.com`;
-}
-
-function adcToken() {
-  const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
-  return async () => {
-    const token = await auth.getAccessToken();
-    if (!token) throw new Error("No Google Cloud access token is available (ADC).");
-    return token;
-  };
 }
 
 type CallParams = LanguageModelV4CallOptions;
@@ -175,11 +167,16 @@ export function anthropicOnVertexFetch(options: {
   };
 }
 
-const decodeBase64 = (value: string) => new Uint8Array(Buffer.from(value, "base64"));
+function decodeBase64(value: string) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
 
 export function vertexModels(options: VertexOptions): ModelPlatform {
   const baseFetch = options.fetch ?? fetch;
-  const token = options.accessToken ?? adcToken();
+  const token = options.accessToken;
   const map = options.modelMap ?? {};
   const authed = loggingFetch(baseFetch, token, "vertex-ai");
   const openai = createOpenAI({
@@ -196,6 +193,7 @@ export function vertexModels(options: VertexOptions): ModelPlatform {
   return {
     kind: "vertex",
     label: "Vertex AI",
+    imageModel,
     chat,
     served: (modelId) => servedCatalogId(modelId, map),
     async image(_model: string, request: ImageRequest) {

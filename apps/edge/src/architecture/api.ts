@@ -13,7 +13,7 @@ import {
   WORKSPACES,
   workspaceById,
 } from "@northstar/architecture";
-import type { Principal } from "@northstar/contracts";
+import { isAiPlatformId, type Principal } from "@northstar/contracts";
 import { handleTeam } from "../team/api";
 import { type ArchEnv, ArchError, type Ctx, invoke, makeCtx } from "./context";
 import {
@@ -74,10 +74,14 @@ export function contextFor(
   const brand = request.headers.get("x-brand");
   if (brand && !(BRANDS as readonly string[]).includes(brand))
     throw new ArchError(400, "BAD_REQUEST", `Unknown brand ${brand}.`);
+  // The AI platform chosen in the top bar; one this server can't run falls back to its default.
+  const aiPlatform = request.headers.get("x-ai-platform");
   return makeCtx(
     env,
     { subject: principal.subject, persona: requested, brands: brand ? [brand as Brand] : "all" },
     correlationId,
+    undefined,
+    isAiPlatformId(aiPlatform) ? aiPlatform : undefined,
   );
 }
 

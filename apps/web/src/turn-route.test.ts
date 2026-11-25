@@ -263,6 +263,18 @@ describe("a turn on Google Cloud", () => {
   });
 });
 
+describe("a turn on another AI platform (ADR-021)", () => {
+  it("keeps Cloudflare Access but calls Vertex AI directly, with no AI Gateway hop", () => {
+    const map = live(assistant([{ ...modelStart, aiPlatform: "vertex" }, stepStart]));
+    expect(node(map, "access").label).toBe("Cloudflare Access");
+    expect(node(map, "model").label).toBe("Vertex AI");
+    expect(map.lanes.flatMap((lane) => lane.nodes).some((item) => item.id === "ai-gateway")).toBe(
+      false,
+    );
+    expect(map.summary).toBe("Vertex AI is choosing the next step");
+  });
+});
+
 describe("a classified turn", () => {
   it("shows the classifier's labels as a hop after the policy router", () => {
     const map = live(

@@ -1,0 +1,99 @@
+// The AI platform choice (ADR-021): which platforms a server can run, which one a request gets,
+// and the service-account token that lets a Cloudflare Worker call Vertex AI.
+import { exportPKCS8, generateKeyPair, jwtVerify } from "jose";
+import { describe, expect, it } from "vitest";
+import { aiPlatformOptions, aiPlatforms, modelPlatform } from "../../../edge/src/platform/models";
+import {
+  parseServiceAccountKey,
+  serviceAccountToken,
+} from "../../../edge/src/platform/google-token";
+
+const fakeAi = { run: async () => ({}) } as unknown as Ai;
+
+describe("AI platforms", () => {
+  it("offers Workers AI alone on a Worker with no Google credentials", () => {
+    const env = { AI: fakeAi };
+    expect(Object.keys(aiPlatforms(env).available)).toEqual(["workers-ai"]);
+    expect(aiPlatformOptions(env)).toMatchObject({
+      default: "workers-ai",
+      platforms: [
+        { id: "workers-ai", available: true },
+        { id: "vertex", available: false, reason: expect.stringContaining("VERTEX_PROJECT") },
+      ],
+    });
+  });
+
+  it("offers both on a Worker with a project and a key, and honours each request's choice", () => {
+    const env = {
+      AI: fakeAi,
+      VERTEX_PROJECT: "p",
+      GOOGLE_ACCESS_TOKEN: async () => "t",
+    };
+    expect(modelPlatform(env)?.kind).toBe("workers-ai");
+    expect(modelPlatform(env, "vertex")?.kind).toBe("vertex");
+    expect(modelPlatform(env, "workers-ai")?.kind).toBe("workers-ai");
+    // An unknown choice gets the default rather than an error.
+    expect(modelPlatform(env, "openrouter")?.kind).toBe("workers-ai");
+    expect(aiPlatforms(env).registry.languageModel("vertex:@cf/openai/gpt-oss-120b")).toBeTruthy();
+  });
+
+  it("lets AI_PLATFORM pick the default", () => {
+    const env = {
+      AI: fakeAi,
+      AI_PLATFORM: "vertex",
+      VERTEX_PROJECT: "p",
+      GOOGLE_ACCESS_TOKEN: async () => "t",
+    };
+    expect(modelPlatform(env)?.kind).toBe("vertex");
+    expect(aiPlatformOptions(env).default).toBe("vertex");
+  });
+
+  it("offers Vertex AI alone on Google Cloud, and falls back to it when Workers AI is asked for", () => {
+    const env = { HOST: "google-cloud", VERTEX_PROJECT: "p", GOOGLE_ACCESS_TOKEN: async () => "t" };
+    expect(modelPlatform(env, "workers-ai")?.kind).toBe("vertex");
+    expect(aiPlatformOptions(env).platforms.map((platform) => platform.id)).toEqual(["vertex"]);
+  });
+
+  it("has no platform when nothing is configured", () => {
+    expect(modelPlatform({})).toBeNull();
+    expect(aiPlatformOptions({}).default).toBeNull();
+  });
+
+  it("explains a key that is not a service-account key", () => {
+    const env = { AI: fakeAi, VERTEX_PROJECT: "p", GOOGLE_SERVICE_ACCOUNT_KEY: "{}" };
+    expect(aiPlatformOptions(env).platforms[1]).toMatchObject({
+      available: false,
+      reason: expect.stringContaining("client_email"),
+    });
+  });
+});
+
+describe("service-account tokens", () => {
+  it("signs a JWT assertion, exchanges it, and reuses the token until near expiry", async () => {
+    const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+    const key = parseServiceAccountKey(
+      JSON.stringify({
+        client_email: "vertex@p.iam.gserviceaccount.com",
+        private_key: await exportPKCS8(privateKey),
+      }),
+    );
+    let now = 1_000_000;
+    const assertions: string[] = [];
+    const fetcher: typeof fetch = async (_input, init) => {
+      const assertion = new URLSearchParams(String(init?.body)).get("assertion") ?? "";
+      assertions.push(assertion);
+      return Response.json({ access_token: `token-${assertions.length}`, expires_in: 3600 });
+    };
+    const token = serviceAccountToken(key, { fetch: fetcher, now: () => now });
+    expect(await token()).toBe("token-1");
+    expect(await token()).toBe("token-1");
+    const { payload } = await jwtVerify(assertions[0] ?? "", publicKey, {
+      issuer: "vertex@p.iam.gserviceaccount.com",
+      audience: "https://oauth2.googleapis.com/token",
+      currentDate: new Date(now),
+    });
+    expect(payload.scope).toBe("https://www.googleapis.com/auth/cloud-platform");
+    now += 56 * 60_000;
+    expect(await token()).toBe("token-2");
+  });
+});

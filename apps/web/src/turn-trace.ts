@@ -1,4 +1,5 @@
 import {
+  AI_PLATFORM_TERMS,
   hostTerms,
   ORCHESTRATOR_TOOLS,
   SALESFORCE_AGENTS,
@@ -249,7 +250,7 @@ function rowsFromTrace(message: UIMessage, trace: TurnTrace): TraceRow[] {
             detail: [
               event.route && event.route !== "model"
                 ? ROUTE_DETAIL[event.route]
-                : `Model ${event.model}`,
+                : `Model ${event.model}${event.aiPlatform ? ` on ${AI_PLATFORM_TERMS[event.aiPlatform].label}` : ""}`,
               `${plural(event.toolCount, "governed tool")} available`,
               event.intents?.length
                 ? `classified as ${event.intents.join(", ")}${event.classifiedBy && event.classifiedBy !== "none" ? ` (${event.classifiedBy})` : ""}`

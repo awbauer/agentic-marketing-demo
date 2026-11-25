@@ -15,7 +15,7 @@ import {
   servedCatalogId,
   vertexModelId,
   vertexModels,
-} from "../../src/platform/vertex";
+} from "../../../edge/src/platform/vertex";
 
 type Call = { url: string; init: RequestInit | undefined; body: Record<string, unknown> };
 

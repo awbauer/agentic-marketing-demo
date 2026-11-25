@@ -1,6 +1,7 @@
 import { PROOF_DEFAULTS } from "@northstar/contracts";
 import { getAgentByName } from "agents";
 import { handleWorkbenchRequest, runScheduledMaintenance, type WorkbenchEnv } from "./app";
+import { aiPlatforms } from "./platform/models";
 
 export { MarketingOrchestrator } from "./orchestrator";
 
@@ -20,6 +21,7 @@ export default {
         durableObject: true,
         staticAssets: Boolean(env.ASSETS),
         workersAi: Boolean(env.AI),
+        vertexAi: Boolean(aiPlatforms(env).available.vertex),
         d1: Boolean(env.APP_DB),
         r2: Boolean(env.CAMPAIGN_ASSETS),
       }),

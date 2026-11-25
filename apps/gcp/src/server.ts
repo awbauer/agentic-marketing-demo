@@ -11,6 +11,7 @@ import {
 } from "../../edge/src/app";
 import { AuthError, deriveAgentKey, resolvePrincipal } from "../../edge/src/auth";
 import { MarketingOrchestrator } from "../../edge/src/orchestrator";
+import { aiPlatforms } from "../../edge/src/platform/models";
 import { createAgentHost } from "./agent/host";
 import type { SnapshotStore } from "./agent/snapshots";
 import { buildEnv, loadConfig } from "./env";
@@ -102,7 +103,7 @@ export function createGcpServer(options: GcpServerOptions) {
         agentHost: true,
         staticAssets: true,
         firestore: Boolean((env as { DATA?: unknown }).DATA),
-        vertexAi: Boolean((env as { MODELS?: unknown }).MODELS),
+        vertexAi: Boolean(aiPlatforms(env).available.vertex),
         cloudStorage: Boolean(env.CAMPAIGN_ASSETS),
       })),
   };

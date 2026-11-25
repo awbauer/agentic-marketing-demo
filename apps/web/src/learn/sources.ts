@@ -41,6 +41,8 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
     "scripts/gcp/",
     "infra/gcp/",
     "docs/decisions/ADR-018-google-cloud-target.md",
+    "docs/decisions/ADR-021-ai-platform-apart-from-host.md",
+    "apps/web/src/ai-platform.ts",
   ],
   workspace: [
     "apps/edge/src/working-set.ts",

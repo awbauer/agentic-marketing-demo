@@ -125,7 +125,7 @@ async function drive(ctx: Ctx, state: State, emitOut: Emit) {
     emitOut(event);
   };
   const route = routeModel("orchestrate", { champions: championsFrom(ctx.env) });
-  const model = modelFactory(ctx.env)(route.model);
+  const model = modelFactory(ctx.env, ctx.aiPlatform)(route.model);
   let paused: { moduleUrn: string } | null = null;
   let finished: string | null = null;
   let stopped = false;
@@ -387,7 +387,7 @@ export async function startOrchestration(ctx: Ctx, flowId: string) {
     messages: [{ role: "user", content: `${goal.goal}\n\nInput: ${JSON.stringify({ flowId })}` }],
     events: [],
   };
-  modelFactory(ctx.env);
+  modelFactory(ctx.env, ctx.aiPlatform);
   return async (emit: Emit) => {
     const event: FlowEvent = {
       type: "start",

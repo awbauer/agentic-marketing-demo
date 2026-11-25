@@ -34,6 +34,7 @@ import { LearnView } from "./learn/LearnView";
 import { Markdown } from "./Markdown";
 import { RouteMapPanel } from "./RouteMapPanel";
 import { SalesforceAgentsPanel } from "./SalesforceAgents";
+import { currentAiPlatform } from "./ai-platform";
 import { ScopeBar } from "./ScopeBar";
 import { SourceList } from "./SourceList";
 import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
@@ -1192,7 +1193,11 @@ export function App() {
               event.preventDefault();
               const text = input.trim();
               if (!text || busy || resetting) return;
-              void sendMessage({ text }, { body: { scope } });
+              const aiPlatform = currentAiPlatform();
+              void sendMessage(
+                { text },
+                { body: { scope, ...(aiPlatform ? { aiPlatform } : {}) } },
+              );
               setInput("");
             }}
           >

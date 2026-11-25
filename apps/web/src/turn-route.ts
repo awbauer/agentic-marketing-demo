@@ -6,6 +6,7 @@ import {
   toolSystem,
 } from "@northstar/contracts";
 import type { UIMessage } from "ai";
+import { currentAiPlatform } from "./ai-platform";
 import {
   isKnownTool,
   plural,
@@ -198,6 +199,12 @@ export function routeMap(
   const thinking = working && viaModel && running.length === 0;
   // A turn's trace names its host; before the first turn, the page's host does.
   const google = (seen?.start ? seen.start.host : pageHost()) === "google-cloud";
+  // The models run where the turn's trace says (ADR-021); before the first turn, where the top
+  // bar points; failing both, on the host's own platform.
+  const vertex =
+    (seen?.start?.aiPlatform ??
+      (seen?.start ? null : currentAiPlatform()) ??
+      (google ? "vertex" : "workers-ai")) === "vertex";
 
   const node = (
     id: string,
@@ -274,11 +281,11 @@ export function routeMap(
           ...(seen?.start?.intents?.length
             ? [node("classifier", "Classifier", "done", seen.start.intents.join(", "))]
             : []),
-          // On Google Cloud models are called directly on Vertex AI; there is no AI Gateway hop.
-          ...(google ? [] : [node("ai-gateway", "AI Gateway", modelState)]),
+          // Vertex AI is called directly, from either host; only Workers AI goes through AI Gateway.
+          ...(vertex ? [] : [node("ai-gateway", "AI Gateway", modelState)]),
           node(
             "model",
-            google ? "Vertex AI" : "Workers AI",
+            vertex ? "Vertex AI" : "Workers AI",
             modelState,
             viaModel ? (seen?.start?.model.split("/").pop() ?? "") : "",
           ),
@@ -308,7 +315,11 @@ function routeSummary(
   if (working) {
     if (!seen?.start) return "The policy router is reading the request";
     if (running.length > 0) return runningSummary(running);
-    const models = seen.start.host === "google-cloud" ? "Vertex AI" : "Workers AI";
+    const models =
+      (seen.start.aiPlatform ?? (seen.start.host === "google-cloud" ? "vertex" : "workers-ai")) ===
+      "vertex"
+        ? "Vertex AI"
+        : "Workers AI";
     if (seen.open.text.size > 0) return `${models} is writing the answer`;
     if (seen.open.reasoning.size > 0) return `${models} is reasoning`;
     return `${models} is choosing the next step`;

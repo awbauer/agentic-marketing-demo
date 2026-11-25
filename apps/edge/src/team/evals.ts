@@ -69,7 +69,9 @@ export async function judgeRun(run: TeamRun): Promise<JudgeResult | null> {
   const { ctx } = run;
   const modelId = routeModel("judge", { champions: championsFrom(ctx.env) }).model;
   const base =
-    ctx.env.AGENT_MODEL === "scripted" ? teamScriptedModel() : modelFactory(ctx.env)(modelId);
+    ctx.env.AGENT_MODEL === "scripted"
+      ? teamScriptedModel()
+      : modelFactory(ctx.env, ctx.aiPlatform)(modelId);
   let captured: JudgeResult | null = null;
   await generateText({
     model: wrapLanguageModel({ model: base, middleware: forcedToolCallMiddleware }),

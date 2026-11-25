@@ -82,3 +82,48 @@ export function pageHost(
 
 /** The page's host terms: what the browser should call each piece of infrastructure. */
 export const hostTerms = (host: HostId = pageHost()) => HOST_TERMS[host];
+
+// The AI platform, chosen apart from the host (ADR-021): where a turn's models run. A Cloudflare
+// deployment offers Workers AI and, with a Google service-account key, Vertex AI; a Google Cloud
+// deployment offers Vertex AI. The browser sends its choice with each message, like the brand.
+
+export const AI_PLATFORMS = ["workers-ai", "vertex"] as const;
+export type AiPlatformId = (typeof AI_PLATFORMS)[number];
+
+export type AiPlatformTerms = {
+  id: AiPlatformId;
+  /** "Workers AI" or "Vertex AI". */
+  label: string;
+  /** The cloud that runs it. */
+  cloud: string;
+  /** The model gateway its calls pass through, if any. */
+  gateway: string | null;
+  /** The image model campaign images come from. */
+  imageModel: string;
+};
+
+export const AI_PLATFORM_TERMS: Record<AiPlatformId, AiPlatformTerms> = {
+  "workers-ai": {
+    id: "workers-ai",
+    label: "Workers AI",
+    cloud: "Cloudflare",
+    gateway: "AI Gateway",
+    imageModel: "FLUX on Workers AI",
+  },
+  vertex: {
+    id: "vertex",
+    label: "Vertex AI",
+    cloud: "Google Cloud",
+    gateway: null,
+    imageModel: "Gemini image on Vertex AI",
+  },
+};
+
+export const isAiPlatformId = (value: unknown): value is AiPlatformId =>
+  typeof value === "string" && (AI_PLATFORMS as readonly string[]).includes(value);
+
+/** What /api/ai-platforms reports: what this server can run, and what it runs by default. */
+export type AiPlatformOptions = {
+  default: AiPlatformId | null;
+  platforms: Array<{ id: AiPlatformId; label: string; available: boolean; reason?: string }>;
+};

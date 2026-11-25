@@ -251,7 +251,7 @@ export function teamModels(
     },
   }[provider];
   // On Vertex the open-model tier is served by the models Vertex hosts; show those (ADR-018).
-  const models = provider === "cloudflare" ? modelPlatform(ctx.env) : null;
+  const models = provider === "cloudflare" ? modelPlatform(ctx.env, ctx.aiPlatform) : null;
   const served = (id: string) => (models ? models.served(id) : id);
   return Object.fromEntries(
     TEAM_AGENTS.map((agent) => [
@@ -301,20 +301,27 @@ export function providerStatus(ctx: Ctx) {
     anthropic: vendor("anthropic"),
     openai: vendor("openai"),
   };
-  const vertex = platform?.kind === "vertex";
-  return TEAM_PROVIDERS.map((id) => ({
-    id,
-    label: teamProviderLabel(id, vertex ? "google-cloud" : "cloudflare"),
-    ...status[id],
-    models: teamModels(ctx, id),
-    gateway: vertex ? null : (ctx.env.AI_GATEWAY_ID ?? null),
-    /** Vendor keys are the ones stored on the gateway; Workers AI needs none. Vertex uses IAM. */
-    keys: vertex
-      ? "none needed (Google Cloud IAM)"
-      : id === "cloudflare"
-        ? "none needed"
-        : "stored on the AI Gateway",
-  }));
+  // The open-model tier runs on the AI platform chosen in the top bar; the vendors keep the
+  // server's own route (the AI Gateway on Cloudflare, Claude on Vertex on Google Cloud).
+  const chosen = modelPlatform(ctx.env, ctx.aiPlatform) ?? platform;
+  return TEAM_PROVIDERS.map((id) => {
+    const vertex = (id === "cloudflare" ? chosen : platform)?.kind === "vertex";
+    return {
+      id,
+      label: teamProviderLabel(id, vertex ? "google-cloud" : "cloudflare"),
+      ...status[id],
+      models: teamModels(ctx, id),
+      gateway: vertex ? null : (ctx.env.AI_GATEWAY_ID ?? null),
+      /** Vendor keys are the ones stored on the gateway; Workers AI needs none. Vertex uses IAM. */
+      keys: vertex
+        ? serverHost(ctx.env) === "google-cloud"
+          ? "none needed (Google Cloud IAM)"
+          : "a Google service-account key, held as a Worker secret"
+        : id === "cloudflare"
+          ? "none needed"
+          : "stored on the AI Gateway",
+    };
+  });
 }
 
 /** Refuses a provider that can't run here, before anything streams. */
@@ -340,7 +347,7 @@ export function teamModel(
   const { ctx, provider } = run;
   if (ctx.env.AGENT_MODEL === "scripted") return teamScriptedModel();
   const modelId = teamModels(ctx, provider)[agent];
-  if (provider === "cloudflare") return modelFactory(ctx.env)(modelId);
+  if (provider === "cloudflare") return modelFactory(ctx.env, ctx.aiPlatform)(modelId);
   const platform = modelPlatform(ctx.env);
   if (platform?.vendor) {
     const route = platform.vendor(provider, { run: run.id, agent });

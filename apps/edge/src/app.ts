@@ -17,7 +17,7 @@ import { createCampaignContextMcpServer } from "./campaign-context/server";
 import { createKnowledgeGraphMcpServer, knowledgeGraphBackend } from "./knowledge-graph/server";
 import { pruneConfirmationAudit } from "./orchestrator";
 import { type DataBindings, dataPlatform } from "./platform/data";
-import type { ModelBindings } from "./platform/models";
+import { aiPlatformOptions, type ModelBindings } from "./platform/models";
 import { surfaceBootstrap, surfaceLoginPage } from "./surface";
 
 // The workbench's HTTP surface, shared by both hosts: the Cloudflare Worker (index.ts) and the
@@ -158,6 +158,11 @@ export async function handleWorkbenchRequest(
         checks: host.readiness(),
         correlationId: id,
       });
+    // What the top bar's AI platform menu offers: what this server can run, and its default.
+    if (url.pathname === "/api/ai-platforms") {
+      await resolvePrincipal(request, env);
+      return json({ ...aiPlatformOptions(env), correlationId: id });
+    }
     if (url.pathname === "/api/session") {
       const principal = await resolvePrincipal(request, env);
       const agentKey = await deriveAgentKey(principal, PROOF_DEFAULTS.workspaceId);
