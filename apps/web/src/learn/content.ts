@@ -462,7 +462,7 @@ Feature code asks \`dataPlatform(env)\` for repositories (D1, or the Firestore t
 
 ::: details Credentials, tracing and narrowing the menu
 - The Worker needs no Google key: through **Workload Identity Federation** it signs its own short-lived token, which Google's Security Token Service exchanges for an hour's access as a service account that may only call Vertex AI.
-- The route map and trace name the platform each turn ran on. A Vertex turn has no AI Gateway hop, whichever host served it.
+- The route map and trace name the platform each turn ran on. A Vertex, Azure or Bedrock turn has no AI Gateway hop, whichever host served it.
 - \`AI_PLATFORMS_ENABLED\` (a dashboard variable on the Worker, which deploys keep; a Cloud Run environment variable) narrows the menu: a comma-separated list; a platform left out is neither listed nor run, even if requested.
 :::
 
@@ -547,7 +547,7 @@ Why it's trustworthy:
         body: `The orchestrator runs {{workers-ai: **gpt-oss-20b**, OpenAI's open-weight reasoning model, on **Workers AI**, through **AI Gateway** for logging and cost visibility. || vertex: **gpt-oss-120b**, OpenAI's open-weight reasoning model, as a managed model on **Vertex AI**.}}{{google-cloud:  Every model call is logged to Cloud Logging.}} Its ID is set in one place: \`PROOF_DEFAULTS.orchestratorModel\`.
 
 - **Why {{workers-ai: 20b || vertex: the catalog names 20b}}:** after the routing and reliability fixes, 20b matched or beat gpt-oss-120b through the pipeline at about 60% of the latency and lower cost (see *Evaluations*).{{vertex:  Vertex AI serves no 20b, so the orchestrator runs the 120b it was compared with, and the trace names the model served.}}
-- **Where it runs.** The top bar's **AI platform** menu {{cloudflare: picks Workers AI or Vertex AI || google-cloud: shows where the models run: Vertex AI on Google Cloud}} (ADR-021).
+- **Where it runs.** The top bar's **AI platform** menu {{cloudflare: picks Workers AI or Vertex AI || google-cloud: shows where the models run: Vertex AI on Google Cloud}}, plus Azure AI Foundry and Amazon Bedrock where they are set up (ADR-021, ADR-023).
 
 ::: details The model's tool-calling quirks
 - **Its quirks** shaped several guards: it sometimes writes a tool call into its reasoning or answer instead of calling the tool, and leaks its "harmony" channel markup into tool names.

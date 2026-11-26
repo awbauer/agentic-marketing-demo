@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-26T16:39:04.822Z",
-  "status": "passed",
+  "generatedAt": "2026-11-26T16:46:32.624Z",
+  "status": "failed",
   "baseRef": "origin/main",
-  "mergeBase": "309cf3422c6a50e093fe69a2847504d7342a0f01",
+  "mergeBase": "22582b6c9829809f0ec5490f0ff01052b0c42887",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,13 +13,63 @@
   },
   "drift": [
     {
+      "section": "orchestrator",
+      "status": "stale",
+      "paths": [
+        "apps/edge/src/index.ts"
+      ]
+    },
+    {
       "section": "two-hosts",
       "status": "updated",
       "paths": [
-        "docs/decisions/ADR-021-ai-platform-apart-from-host.md"
+        "apps/edge/src/platform/azure.ts",
+        "apps/edge/src/platform/bedrock.ts",
+        "apps/edge/src/platform/models.ts",
+        "apps/edge/src/platform/vertex.ts",
+        "packages/contracts/src/host.ts"
+      ]
+    },
+    {
+      "section": "reliability",
+      "status": "stale",
+      "paths": [
+        "apps/edge/src/turn-trace.ts"
+      ]
+    },
+    {
+      "section": "ui",
+      "status": "stale",
+      "paths": [
+        "apps/web/src/ScopeBar.tsx"
+      ]
+    },
+    {
+      "section": "campaign-squad",
+      "status": "stale",
+      "paths": [
+        "apps/web/src/team/TeamPlatform.tsx",
+        "apps/web/src/team/session-metrics.ts",
+        "packages/architecture/src/team.ts"
+      ]
+    },
+    {
+      "section": "observability",
+      "status": "stale",
+      "paths": [
+        "apps/web/src/turn-route.ts"
+      ]
+    },
+    {
+      "section": "governance",
+      "status": "stale",
+      "paths": [
+        "packages/contracts/src/index.ts"
       ]
     }
   ],
   "notices": [],
-  "failures": []
+  "failures": [
+    "Learn drift: this branch changes code that these Learn sections explain, but the sections didn't change:\n  • orchestrator (“The orchestrator agent”) ← apps/edge/src/index.ts\n  • reliability (“Reliability guards for tool calling”) ← apps/edge/src/turn-trace.ts\n  • ui (“Structured UI: Markdown, HXL cards, and native fallbacks”) ← apps/web/src/ScopeBar.tsx\n  • campaign-squad (“The campaign squad: a lead, four spokes, and the platform under them”) ← apps/web/src/team/TeamPlatform.tsx, apps/web/src/team/session-metrics.ts, packages/architecture/src/team.ts\n  • observability (“Observability: route map, technical trace, turn history, and audit export”) ← apps/web/src/turn-route.ts\n  • governance (“Governance: permissions, confirmations, and kill switches”) ← packages/contracts/src/index.ts\nUpdate each section in apps/web/src/learn/content.ts (or its lesson or reference entries) so it teaches the change.\nIf nothing a reader learns has changed, say so in a commit trailer:\n  Learn-Reviewed: orchestrator, reliability, ui, campaign-squad, observability, governance (why no Learn update is needed)"
+  ]
 }
