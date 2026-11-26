@@ -35,6 +35,7 @@ import { Markdown } from "./Markdown";
 import { RouteMapPanel } from "./RouteMapPanel";
 import { SalesforceAgentsPanel } from "./SalesforceAgents";
 import { aiPlatformHeaders, currentAiPlatform } from "./ai-platform";
+import { useView } from "./views";
 import { ScopeBar } from "./ScopeBar";
 import { SourceList } from "./SourceList";
 import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
@@ -194,17 +195,8 @@ export function App() {
     memoryEnabled: true,
     disabledTools: [],
   });
-  const [view, setView] = useState<
-    | "chat"
-    | "history"
-    | "evaluations"
-    | "learn"
-    | "graph"
-    | "usecases"
-    | "journeys"
-    | "architecture"
-    | "team"
-  >("chat");
+  // Each page has its own address (/squad, /learn, …), so a reload stays on it.
+  const [view, setView] = useView();
   // History and the use-case library open from the chat page, so the rail shows them as Chat.
   const chatViews: ReadonlyArray<typeof view> = ["chat", "history", "usecases"];
   const confirmationRef = useRef<HTMLElement>(null);
