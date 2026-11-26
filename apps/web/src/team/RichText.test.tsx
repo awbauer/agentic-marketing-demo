@@ -44,8 +44,9 @@ describe("RichText", () => {
       "Searches spiked after the congress.",
       "The window sits inside that period.",
     ]);
-    expect(markup).toContain("<code>lt-seg-hf-specialists</code>");
-    expect(markup).toContain("<code>lt-sig-congress-data</code>");
+    // Each source is a chip that opens its details.
+    expect(markup).toMatch(/<button[^>]*team-claim-chip[^>]*>lt-seg-hf-specialists<\/button>/);
+    expect(markup).toMatch(/<button[^>]*team-claim-chip[^>]*>lt-sig-congress-data<\/button>/);
   });
 
   it("leaves a short passage as it is", () => {

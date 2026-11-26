@@ -4,17 +4,8 @@
 // requires. The details come from the run's own get_claims_library reads, so they match what the
 // agents saw; a claim no agent has read yet shows the library's record.
 import { CLAIM_RECORDS, type LibraryClaim } from "@northstar/architecture";
-import {
-  type CSSProperties,
-  createContext,
-  useContext,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
+import { createContext, useContext } from "react";
+import { IdCard } from "./IdCard";
 import type { TeamState } from "./team-state";
 
 export type ClaimInfo = Partial<LibraryClaim> & {
@@ -126,178 +117,87 @@ export function claimIndex(state: Pick<TeamState, "agents">): ClaimIndex {
 
 const ClaimsContext = createContext<ClaimIndex>(fromRecords());
 export const ClaimsProvider = ClaimsContext.Provider;
+/** The claims the page knows, by topic and by claim ID. */
+export const useClaims = () => useContext(ClaimsContext);
 
 const referenceText = (reference: NonNullable<ClaimInfo["references"]>[number]) =>
   `${reference.source}${reference.anchor ? `, ${reference.anchor}` : ""}${
     reference.expiresOn ? ` (until ${reference.expiresOn})` : ""
   }`;
 
-const CARD_WIDTH = 380;
-const MARGIN = 8;
-
-/**
- * Where the card goes: fixed to the viewport just under the chip (or above it when there's no room
- * below), and kept on screen. It's rendered outside the chip's own containers, so a scrolling
- * table or a modal can't clip or hide it, which on narrow screens such as an iPad they did.
- */
-function cardPlacement(chip: DOMRect, card: { width: number; height: number }): CSSProperties {
-  const width = Math.min(CARD_WIDTH, window.innerWidth - MARGIN * 2);
-  const left = Math.max(MARGIN, Math.min(chip.left, window.innerWidth - width - MARGIN));
-  const below = chip.bottom + 4;
-  const above = chip.top - 4 - card.height;
-  const top =
-    below + card.height <= window.innerHeight - MARGIN || above < MARGIN
-      ? Math.min(below, Math.max(MARGIN, window.innerHeight - card.height - MARGIN))
-      : above;
-  return { position: "fixed", top, left, width };
-}
-
-/** Off screen at its final width, so its height can be measured before it's placed. */
-const measuring = (): CSSProperties => ({
-  position: "fixed",
-  top: 0,
-  left: 0,
-  width: Math.min(CARD_WIDTH, window.innerWidth - MARGIN * 2),
-  visibility: "hidden",
-});
-
-/** A claim's topic or ID. Click or tap it for the library's details; Escape or a tap outside closes. */
+/** A claim's topic or ID. Click or tap it for the library's details. */
 export function Claim({ id, label }: { id: string; label?: string }) {
   const claim = useContext(ClaimsContext).get(id);
-  const [open, setOpen] = useState(false);
-  const [style, setStyle] = useState<CSSProperties>({ position: "fixed", visibility: "hidden" });
-  const chip = useRef<HTMLButtonElement>(null);
-  const card = useRef<HTMLSpanElement>(null);
-  const panelId = useId();
-  // Placed after it renders, once its height is known; again on resize.
-  useLayoutEffect(() => {
-    if (!open) return;
-    const place = () => {
-      const anchor = chip.current?.getBoundingClientRect();
-      const box = card.current?.getBoundingClientRect();
-      if (anchor && box) setStyle(cardPlacement(anchor, box));
-    };
-    place();
-    window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
-  }, [open]);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    // Pointer events cover mouse, pen and touch (iPad); the card itself and its chip don't close it.
-    const onPointer = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!chip.current?.contains(target) && !card.current?.contains(target)) setOpen(false);
-    };
-    // The card is fixed to the viewport, so scrolling the page under it closes it.
-    const onScroll = (event: Event) => {
-      if (!card.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("scroll", onScroll, true);
-    };
-  }, [open]);
   if (!claim) return <code>{label ?? id}</code>;
   const status = claim.status
     ? `${claim.status} · ${claim.usable ? "usable in this campaign" : "not usable here"}`
     : "Not read by an agent in this run yet";
   return (
-    <span className="team-claim">
-      <button
-        ref={chip}
-        type="button"
-        className={`team-claim-chip${claim.usable === false ? " unusable" : ""}`}
-        aria-expanded={open}
-        aria-controls={panelId}
-        title="Show this claim's details"
-        onClick={() => {
-          setStyle(measuring());
-          setOpen((value) => !value);
-        }}
-      >
-        {label ?? id}
-      </button>
-      {open &&
-        createPortal(
-          <span
-            ref={card}
-            id={panelId}
-            className="team-claim-card"
-            role="dialog"
-            aria-label={`Claim ${claim.claimId ?? claim.topic}`}
-            style={style}
-          >
-            <strong>
-              {claim.claimId ?? "No library ID"} · <code>{claim.topic}</code>
-            </strong>
-            {claim.text ? <q>{claim.text}</q> : null}
-            <span className="team-claim-status">
-              {status}
-              {claim.type ? ` · ${claim.type}` : ""}
-            </span>
-            {claim.issues?.length ? (
-              <span className="team-claim-issues">{claim.issues.join(" ")}</span>
-            ) : null}
-            <dl>
-              {claim.scope && (
-                <>
-                  <dt>Scope</dt>
-                  <dd>
-                    {[
-                      claim.scope.audiences.join(", "),
-                      claim.scope.markets.join(", "),
-                      claim.scope.channels.join(", "),
-                      claim.scope.indication,
-                    ].join(" · ")}
-                  </dd>
-                </>
-              )}
-              {claim.labelVersion && (
-                <>
-                  <dt>Label</dt>
-                  <dd>
-                    {claim.labelVersion}
-                    {claim.expiresOn ? ` · claim expires ${claim.expiresOn}` : ""}
-                  </dd>
-                </>
-              )}
-              {claim.references?.length ? (
-                <>
-                  <dt>References</dt>
-                  <dd>{claim.references.map(referenceText).join("; ")}</dd>
-                </>
-              ) : null}
-              {claim.requires?.length ? (
-                <>
-                  <dt>Requires</dt>
-                  <dd>{claim.requires.join(", ")}</dd>
-                </>
-              ) : null}
-              {claim.mustNotAppearWith?.length ? (
-                <>
-                  <dt>Never with</dt>
-                  <dd>{claim.mustNotAppearWith.join(", ")}</dd>
-                </>
-              ) : null}
-              {claim.context && (
-                <>
-                  <dt>Context</dt>
-                  <dd>{claim.context}</dd>
-                </>
-              )}
-            </dl>
-          </span>,
-          // Inside an open modal dialog (the agent details), the card must live in that dialog: a
-          // modal sits in the browser's top layer, above anything rendered into the page body.
-          chip.current?.closest("dialog[open]") ?? document.body,
+    <IdCard
+      label={label ?? id}
+      cardLabel={`Claim ${claim.claimId ?? claim.topic}`}
+      hint="Show this claim's details"
+      tone={claim.usable === false ? "warn" : undefined}
+    >
+      <strong>
+        {claim.claimId ?? "No library ID"} · <code>{claim.topic}</code>
+      </strong>
+      {claim.text ? <q>{claim.text}</q> : null}
+      <span className="team-claim-status">
+        {status}
+        {claim.type ? ` · ${claim.type}` : ""}
+      </span>
+      {claim.issues?.length ? (
+        <span className="team-claim-issues">{claim.issues.join(" ")}</span>
+      ) : null}
+      <dl>
+        {claim.scope && (
+          <>
+            <dt>Scope</dt>
+            <dd>
+              {[
+                claim.scope.audiences.join(", "),
+                claim.scope.markets.join(", "),
+                claim.scope.channels.join(", "),
+                claim.scope.indication,
+              ].join(" · ")}
+            </dd>
+          </>
         )}
-    </span>
+        {claim.labelVersion && (
+          <>
+            <dt>Label</dt>
+            <dd>
+              {claim.labelVersion}
+              {claim.expiresOn ? ` · claim expires ${claim.expiresOn}` : ""}
+            </dd>
+          </>
+        )}
+        {claim.references?.length ? (
+          <>
+            <dt>References</dt>
+            <dd>{claim.references.map(referenceText).join("; ")}</dd>
+          </>
+        ) : null}
+        {claim.requires?.length ? (
+          <>
+            <dt>Requires</dt>
+            <dd>{claim.requires.join(", ")}</dd>
+          </>
+        ) : null}
+        {claim.mustNotAppearWith?.length ? (
+          <>
+            <dt>Never with</dt>
+            <dd>{claim.mustNotAppearWith.join(", ")}</dd>
+          </>
+        ) : null}
+        {claim.context && (
+          <>
+            <dt>Context</dt>
+            <dd>{claim.context}</dd>
+          </>
+        )}
+      </dl>
+    </IdCard>
   );
 }
