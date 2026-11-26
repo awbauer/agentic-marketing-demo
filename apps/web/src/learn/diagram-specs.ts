@@ -96,7 +96,7 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
         ],
         steps: [
           {
-            title: "gpt-oss-20b",
+            title: "{{workers-ai: gpt-oss-20b || vertex: gpt-oss-120b}}",
             caption: "reads the whole window",
             tone: "model",
             glyph: "◆",
@@ -121,7 +121,8 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
         layers: [
           {
             name: "Working memory",
-            where: "Agent Durable Object · chat messages",
+            where:
+              "{{cloudflare: Agent Durable Object || google-cloud: Agent host (Cloud Run)}} · chat messages",
             reader: "Read by the model",
             life: "Until New chat",
             width: 22,
@@ -719,7 +720,7 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
   architecture: {
     label: "How a turn travels through the system",
     caption:
-      "The browser talks to one Worker behind Cloudflare Access; each user's orchestrator reaches the model and three MCP servers.",
+      "The browser talks to {{cloudflare: one Worker behind Cloudflare Access || google-cloud: one Cloud Run service behind Identity-Aware Proxy}}; each user's orchestrator reaches the model and three MCP servers.",
     blocks: [
       {
         kind: "architecture",
@@ -736,17 +737,18 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
             ],
           },
           {
-            label: "Cloudflare edge",
+            label: "{{cloudflare: Cloudflare edge || google-cloud: Google Cloud}}",
             steps: [
               {
-                title: "Worker + Access",
+                title: "{{cloudflare: Worker + Access || google-cloud: Cloud Run + IAP}}",
                 caption: "identity, routing, assets",
                 tone: "edge",
                 glyph: "⛨",
               },
               {
                 title: "Orchestrator",
-                caption: "Durable Object per user",
+                caption:
+                  "{{cloudflare: Durable Object per user || google-cloud: Agent host, chat per user}}",
                 tone: "edge",
                 glyph: "◎",
               },
@@ -756,8 +758,9 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
             label: "Model and tools",
             steps: [
               {
-                title: "Workers AI",
-                caption: "gpt-oss-20b via AI Gateway",
+                title: "{{workers-ai: Workers AI || vertex: Vertex AI}}",
+                caption:
+                  "{{workers-ai: gpt-oss-20b via AI Gateway || vertex: gpt-oss-120b, managed}}",
                 tone: "model",
                 glyph: "◆",
               },
@@ -791,7 +794,7 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
                 glyph: "▤",
               },
               {
-                title: "D1 + R2",
+                title: "{{cloudflare: D1 + R2 || google-cloud: Firestore + Cloud Storage}}",
                 caption: "confirmations, image drafts",
                 tone: "store",
                 glyph: "▤",
@@ -885,14 +888,15 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
             label: "Every turn",
             steps: [
               {
-                title: "gpt-oss-20b",
+                title: "{{workers-ai: gpt-oss-20b || vertex: gpt-oss-120b}}",
                 caption: "open-weight reasoning model",
                 tone: "model",
                 glyph: "◆",
               },
               {
-                title: "AI Gateway",
-                caption: "logs, cost, caching",
+                title: "{{workers-ai: AI Gateway || vertex: Turn trace}}",
+                caption:
+                  "{{workers-ai: logs, cost, caching || vertex: every model call, with its latency}}",
                 tone: "edge",
                 glyph: "⛨",
               },
@@ -1380,13 +1384,13 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
             glyph: "✎",
           },
           {
-            title: "FLUX.2 klein",
+            title: "{{workers-ai: FLUX.2 klein || vertex: Gemini image}}",
             caption: "1024 × 1024 draft",
             tone: "model",
             glyph: "◆",
           },
           {
-            title: "R2 draft",
+            title: "{{cloudflare: R2 draft || google-cloud: Cloud Storage draft}}",
             caption: "private, 7 days",
             tone: "store",
             glyph: "▤",

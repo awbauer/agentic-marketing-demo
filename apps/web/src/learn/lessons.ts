@@ -67,7 +67,7 @@ export const PART_LESSONS: Record<string, PartLesson> = {
       ],
       answer: 1,
       explain:
-        "Models keep nothing between calls. Each turn sends the last 8 messages (text only) and a summary of the workspace: the draft in progress, open records, and context gathered. Turn history is for people, and the graph is queried through tools.",
+        "Models keep nothing between calls. Each turn sends the last 8 messages (text only) and a workspace summary: the draft, open records and gathered context. Turn history is for people; the graph is queried through tools.",
     },
   },
   graphrag: {
@@ -77,7 +77,7 @@ export const PART_LESSONS: Record<string, PartLesson> = {
     outcomes: [
       "Explain retrieve → augment → generate",
       "Say when a graph beats similarity search",
-      "Describe how the demo's six graph tools return evidence paths",
+      "Describe how the demo's curated graph tools return evidence paths",
     ],
     check: {
       question: "Which question needs GraphRAG rather than plain vector RAG?",
@@ -89,7 +89,7 @@ export const PART_LESSONS: Record<string, PartLesson> = {
       ],
       answer: 1,
       explain:
-        "It joins facts across accounts, campaigns, engagement, and consent: a multi-hop question. Similarity search finds similar text but can't follow relationships.",
+        "It joins accounts, campaigns, engagement and consent: a multi-hop question. Similarity search finds similar text; it can't follow relationships.",
     },
   },
   concepts: {
@@ -111,7 +111,7 @@ export const PART_LESSONS: Record<string, PartLesson> = {
       ],
       answer: 2,
       explain:
-        "Salesforce owns authorization. The workbench asks it, as you, before preparing the write and shows each check on the confirmation card; Apex enforces the same permissions again when the write runs. The model only drafts and proposes.",
+        "Salesforce owns authorization. The workbench asks it, as you, before preparing a write and shows each check on the confirmation card; the write enforces the same permissions again. The model only drafts and proposes.",
     },
   },
 };
@@ -163,7 +163,7 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
   "graphrag-here": {
     diagram: "graph-tools",
     keyIdea:
-      "Nine curated, read-only queries, each returning evidence paths, with a local copy that must match Neo4j exactly.",
+      "Curated, read-only graph queries return evidence paths, and a local copy must match Neo4j exactly.",
     tryIt: [
       { kind: "prompt", label: "Ask a graph question", prompt: BUYER_GROUP_PROMPT },
       { kind: "view", label: "Open the graph explorer", view: "graph" },
@@ -177,7 +177,7 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
   "two-hosts": {
     diagram: "architecture",
     keyIdea:
-      "Only storage, models, sign-in and where chats live differ between hosts; everything else is the same code.",
+      "Only storage, sign-in, where chats live and the default models differ between hosts; everything else is the same code.",
   },
   workspace: {
     diagram: "workspace",
@@ -205,7 +205,7 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
   salesforce: {
     diagram: "salesforce",
     keyIdea:
-      "Salesforce is the system of record: drafts become real campaigns, briefs, and messages there, through Apex actions the model can't call.",
+      "Salesforce is the system of record. Every Salesforce fact comes from its tools, and only a confirmed write, run as you, changes it; the model never holds a write tool.",
     tryIt: [
       {
         kind: "prompt",
@@ -267,13 +267,13 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
   "object-model": {
     diagram: "agent-lifecycle",
     keyIdea:
-      "Every plan, brief, module, claim and result is one object with an identifier it keeps for life. Governance travels with it, and everything else (lineage, screens, channels) is derived from it, never copied.",
+      "Every plan, brief, module, claim and result is one object with a lifelong identifier. Governance travels with it; lineage, screens and channels are derived from it, never copied.",
     tryIt: [{ kind: "view", label: "Open the Architecture view", view: "architecture" }],
   },
   gateway: {
     diagram: "agent-lifecycle",
     keyIdea:
-      "Nothing acts except through one gateway: default-deny policy, a per-call identity, and a record of the decision. An agent that is denied leaves a trace; it never gets a second route.",
+      "Nothing acts except through one gateway: default-deny policy, a per-call identity and a recorded decision. A denied agent leaves a trace and gets no second route.",
     tryIt: [{ kind: "view", label: "See the swimlane and policies", view: "architecture" }],
   },
   lifecycle: {
@@ -285,13 +285,13 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
   "agent-operations": {
     diagram: "agent-lifecycle",
     keyIdea:
-      "Agents, prompts and models are catalogued and scored, so a regression is caught before it ships and an agent that drifts is constrained before anyone has to notice.",
+      "Agents, prompts and models are catalogued and scored, so a regression is caught before it ships and a drifting agent is constrained automatically.",
     tryIt: [{ kind: "view", label: "See evaluations and trust", view: "architecture" }],
   },
   "use-cases": {
     diagram: "use-cases",
     keyIdea:
-      "Each use case pairs a live outside service with the graph: the service says what's happening, and the graph says who or what it affects: people and how to reach them, or dishes and the stock they draw on.",
+      "Each use case pairs a live outside service with the graph: the service says what's happening; the graph says who or what it affects, and how to reach them.",
     tryIt: [
       {
         kind: "prompt",
@@ -323,13 +323,13 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
   "campaign-squad": {
     diagram: "agent-lifecycle",
     keyIdea:
-      "A lead coordinates and judges; spokes do the work and talk to each other. Code, not prompts, enforces the rules, one semantic layer defines every number, the gateway governs every call, people take the decisions no agent may, and every run is scored the same way whichever provider's model ran.",
+      "A lead coordinates; spokes do the work and talk to each other. Code enforces the rules, one semantic layer defines every number, the gateway governs every call, people take the decisions, and every run is scored the same way on any provider.",
     tryIt: [{ kind: "view", label: "Open the Campaign squad", view: "team" }],
   },
   "pharma-lifecycle": {
     diagram: "agent-lifecycle",
     keyIdea:
-      "Agents do every step of a regulated campaign and code checks each one against the claims library, the asset library, consent and the label; people decide at the nine points a brand team, MLR and operations would, and the MLR system routes the job reviewer to reviewer.",
+      "Agents do every step of a regulated campaign and code checks each against the claims library, asset library, consent and label. People decide where a brand team, MLR and operations would.",
     tryIt: [{ kind: "view", label: "Open the Campaign squad", view: "team" }],
   },
   "long-term-memory": {

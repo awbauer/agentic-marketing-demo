@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "../Markdown";
 import { pageHost } from "@northstar/contracts";
-import type { LearnPart, LearnSection } from "./content";
+import { useAiPlatform } from "../ai-platform";
+import { LEARN_PARTS as COURSE, type LearnPart, type LearnSection } from "./content";
 import { Diagram } from "./diagrams";
 import { learnFor } from "./host";
 import { PART_LESSONS, type PartLesson, SECTION_LESSONS, type TryIt } from "./lessons";
 import { LEARN_REFERENCE, REFERENCE_KINDS, type ReferenceKind } from "./reference";
 import "./learn.css";
 
-// The course as written for the host this page came from (ADR-018).
-const {
-  title: LEARN_TITLE,
-  lede: LEARN_LEDE,
-  parts: LEARN_PARTS,
-  glossary: GLOSSARY,
-} = learnFor(pageHost());
+/** The course for this page's host (ADR-018) and the AI platform chosen in the top bar (ADR-021). */
+function useCourse() {
+  const { platform } = useAiPlatform();
+  return learnFor(pageHost(), platform);
+}
 
 type View = "graph" | "history" | "evaluations" | "journeys" | "architecture" | "team";
 const READ_KEY = "northstar.learn.read.v1";
@@ -50,7 +49,7 @@ function jumpTo(id: string) {
   target.focus({ preventScroll: true });
 }
 
-const TOTAL_SECTIONS = LEARN_PARTS.reduce((sum, part) => sum + part.sections.length, 0);
+const TOTAL_SECTIONS = COURSE.reduce((sum, part) => sum + part.sections.length, 0);
 
 export function LearnView({
   onClose,
@@ -61,6 +60,7 @@ export function LearnView({
   onTryPrompt: (prompt: string) => void;
   onOpenView: (view: View) => void;
 }) {
+  const { title: LEARN_TITLE, lede: LEARN_LEDE, parts: LEARN_PARTS } = useCourse();
   const [read, setRead] = useState<Set<string>>(() => loadRead());
   const toggleRead = (id: string, value?: boolean) =>
     setRead((current) => {
@@ -418,6 +418,7 @@ function Check({ partId, check }: { partId: string; check: PartLesson["check"] }
 }
 
 function Glossary() {
+  const { glossary: GLOSSARY } = useCourse();
   const [query, setQuery] = useState("");
   const entries = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -428,7 +429,7 @@ function Glossary() {
             entry.definition.toLowerCase().includes(term),
         )
       : GLOSSARY;
-  }, [query]);
+  }, [query, GLOSSARY]);
   return (
     <section
       id="learn-glossary"
@@ -469,15 +470,16 @@ function Glossary() {
   );
 }
 
-const SECTION_TITLES = new Map(
-  LEARN_PARTS.flatMap((part) => part.sections.map((section) => [section.id, section.title])),
-);
+const sectionTitles = (parts: LearnPart[]) =>
+  new Map(parts.flatMap((part) => part.sections.map((section) => [section.id, section.title])));
 
 /**
  * Every tool, write action, graph type, operator control, and Salesforce component in the code,
  * each linked to the section that teaches it. `pnpm learn:check` keeps this list complete.
  */
 function ReferenceIndex({ onJump }: { onJump: (id: string) => void }) {
+  const { parts } = useCourse();
+  const SECTION_TITLES = useMemo(() => sectionTitles(parts), [parts]);
   const [kind, setKind] = useState<ReferenceKind>("Tool");
   const [query, setQuery] = useState("");
   const entries = useMemo(() => {

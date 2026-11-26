@@ -37,7 +37,7 @@ A marketer asks a question in plain language. The orchestrator agent reads campa
 - 🏛️ **An architecture you can click through.** Governed objects, one gateway for every call, agent and prompt catalogs, and a plan-to-learn content lifecycle.
 - 📊 **Scored, not assumed.** An evaluation suite compares models on quality, routing, cost and speed, so the production model is chosen on evidence.
 - 🔗 **Every page has a link.** `/squad`, `/architecture`, `/journeys`, `/graph`, `/learn` and `/evaluations` survive a reload and work from the back button.
-- 🎓 **A built-in course.** 29 short lessons explain context, RAG and GraphRAG, and every moving part of the demo. A CI check keeps them in step with the code.
+- 🎓 **A built-in course.** 29 short lessons explain context, RAG and GraphRAG, and every moving part of the demo, written for the cloud you're on and the AI platform you picked. A CI check keeps them in step with the code.
 - 🔐 **Secure by default.** Identity-Aware Proxy sign-in (Cloudflare Access on Cloudflare), per-user Salesforce OAuth, allow-listed tools, and kill switches for writes, tools and memory.
 
 ## 📸 A quick tour

@@ -3,7 +3,7 @@
 // Usage: pnpm learn:export          (rewrite docs/learn.md)
 //        pnpm learn:export --check  (fail when docs/learn.md is out of date; part of learn:check)
 import { readFileSync, writeFileSync } from "node:fs";
-import { forGoogleCloud, learnFor } from "../apps/web/src/learn/host.ts";
+import { diagramSpecsFor, learnFor } from "../apps/web/src/learn/host.ts";
 import { DIAGRAM_SPECS } from "../apps/web/src/learn/diagram-specs.ts";
 import { PART_LESSONS, SECTION_LESSONS } from "../apps/web/src/learn/lessons.ts";
 import { LEARN_REFERENCE, REFERENCE_KINDS } from "../apps/web/src/learn/reference.ts";
@@ -162,7 +162,8 @@ export function renderLearnMarkdown(host = "cloudflare") {
     parts: LEARN_PARTS,
     glossary: GLOSSARY,
   } = learnFor(host));
-  SPECS = host === "google-cloud" ? forGoogleCloud(DIAGRAM_SPECS) : DIAGRAM_SPECS;
+  // Each edition uses its host's default AI platform: Workers AI on Cloudflare, Vertex AI on Google Cloud.
+  SPECS = diagramSpecsFor(host);
   const anchor = anchors();
   const out = [];
   const push = (...blocks) => out.push(...blocks.filter((block) => block !== null));
