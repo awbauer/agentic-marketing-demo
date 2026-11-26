@@ -8,8 +8,6 @@ export type DiagramId =
   | "context-window"
   | "memory-layers"
   | "context-defenses"
-  | "rag-flow"
-  | "graph-path"
   | "graph-tools"
   | "architecture"
   | "workspace"
@@ -50,10 +48,10 @@ export type PartLesson = {
 export const PART_LESSONS: Record<string, PartLesson> = {
   context: {
     number: 1,
-    tagline: "What the model can see, and why it matters",
+    tagline: "What the model sees each turn, and where the rest is kept",
     minutes: 6,
     outcomes: [
-      "Name what fills a model's context window on every call",
+      "Name what fills the model's context window on every turn here",
       "Tell working memory, the audit trail, and long-term memory apart",
       "Spot the context failures the demo defends against",
     ],
@@ -73,23 +71,23 @@ export const PART_LESSONS: Record<string, PartLesson> = {
   graphrag: {
     number: 2,
     tagline: "Grounding answers in connected facts",
-    minutes: 7,
+    minutes: 4,
     outcomes: [
-      "Explain retrieve → augment → generate",
-      "Say when a graph beats similarity search",
-      "Describe how the demo's curated graph tools return evidence paths",
+      "Name what each brand contributes to the graph",
+      "Explain why the model picks curated queries instead of writing Cypher",
+      "Find the evidence paths behind a graph answer",
     ],
     check: {
-      question: "Which question needs GraphRAG rather than plain vector RAG?",
+      question: "What stops a graph tool from changing the graph?",
       options: [
-        "“Find the paragraph in the brief about the offer.”",
-        "“Which accounts engaged with two campaigns and lack SMS consent?”",
-        "“Summarize this email draft.”",
-        "“Translate the headline into Spanish.”",
+        "The system prompt tells the model not to",
+        "Tool queries run in Neo4j's read access mode, so the database rejects writes",
+        "The model only sees a summary of the graph",
+        "Nothing: the tools can write, but rarely do",
       ],
       answer: 1,
       explain:
-        "It joins accounts, campaigns, engagement and consent: a multi-hop question. Similarity search finds similar text; it can't follow relationships.",
+        "The guarantee is in the database, not the prompt: tool queries run in read access mode. The only writes are the server's fixed long-term memory statements, kept to their own dataset.",
     },
   },
   concepts: {
@@ -126,7 +124,7 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
   "what-is-context": {
     diagram: "context-window",
     keyIdea:
-      "The model sees only what's in this call's window. Good context is the smallest set of high-signal facts for the next step.",
+      "The model sees only this call's window: rules, the route's tools, the last 8 messages as text, this turn's tool results and a workspace summary.",
     tryIt: [
       {
         kind: "prompt",
@@ -148,17 +146,6 @@ export const SECTION_LESSONS: Record<string, SectionLesson> = {
     tryIt: [
       { kind: "prompt", label: "Try a blocked request", prompt: "Publish and send the campaign" },
     ],
-  },
-  rag: {
-    diagram: "rag-flow",
-    keyIdea:
-      "RAG adds retrieved facts to the context so answers come from your data, not training.",
-  },
-  "graphrag-explained": {
-    diagram: "graph-path",
-    keyIdea:
-      "GraphRAG follows relationships, so an answer can join many facts and show the path that proves it.",
-    tryIt: [{ kind: "view", label: "Explore the graph", view: "graph" }],
   },
   "graphrag-here": {
     diagram: "graph-tools",

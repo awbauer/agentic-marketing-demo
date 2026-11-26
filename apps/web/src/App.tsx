@@ -31,6 +31,7 @@ import { GraphEvidencePanel } from "./GraphEvidence";
 import { GraphView } from "./graph/GraphView";
 import { HistoryView } from "./HistoryView";
 import { LearnView } from "./learn/LearnView";
+import { PlaybookView } from "./playbook/PlaybookView";
 import { Markdown } from "./Markdown";
 import { RouteMapPanel } from "./RouteMapPanel";
 import { SalesforceAgentsPanel } from "./SalesforceAgents";
@@ -636,6 +637,14 @@ export function App() {
             </button>
             <button
               type="button"
+              className={`nav-item ${view === "playbook" ? "active" : ""}`}
+              aria-current={view === "playbook" ? "page" : undefined}
+              onClick={() => setView("playbook")}
+            >
+              <span>☰</span>Playbook
+            </button>
+            <button
+              type="button"
               className={`nav-item ${view === "graph" ? "active" : ""}`}
               aria-current={view === "graph" ? "page" : undefined}
               onClick={() => setView("graph")}
@@ -786,6 +795,16 @@ export function App() {
               setView("chat");
             }}
             onOpenView={setView}
+          />
+        )}
+        {view === "playbook" && (
+          <PlaybookView
+            onClose={() => setView("chat")}
+            onOpenLearn={(section) => {
+              setView("learn");
+              // The Learn page opens at the section the address names.
+              if (section) history.replaceState(null, "", `${location.pathname}#${section}`);
+            }}
           />
         )}
         {view === "graph" && <GraphView onClose={() => setView("chat")} />}

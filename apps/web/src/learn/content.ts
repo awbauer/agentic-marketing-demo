@@ -1,6 +1,8 @@
 /**
- * Learn page content: a primer on context and GraphRAG, then an in-depth explainer for each
- * concept the Northstar demo uses. Bodies are Markdown; every resource link was checked to resolve.
+ * Learn page content: the reference for how the Northstar workbench works, part by part. General
+ * guidance on agentic systems (when to build one, failure patterns, security, evals, operations)
+ * belongs in the Playbook (docs/playbook.md), not here. Bodies are Markdown; every resource link
+ * was checked to resolve.
  */
 
 export type Resource = {
@@ -21,9 +23,9 @@ export type LearnSection = {
 
 export type LearnPart = { id: string; title: string; intro: string; sections: LearnSection[] };
 
-export const LEARN_TITLE = "Learn: context, GraphRAG, and how this demo works";
+export const LEARN_TITLE = "Learn: how the workbench works";
 export const LEARN_LEDE =
-  "A hands-on course in how an agent uses context, how GraphRAG grounds answers in connected facts, and how every piece of this workbench fits together. Each lesson has a diagram, one key idea, a way to try it here, and links to go deeper.";
+  "A reference for every piece of this workbench: what the model sees each turn, the knowledge graph behind its answers, and each system, guard and page around them. Each lesson has a diagram, one key idea, a way to try it here, and where to find it in the code.";
 
 const R = {
   cedar: { label: "Cedar policy language", url: "https://www.cedarpolicy.com/", kind: "Docs" },
@@ -63,35 +65,10 @@ const R = {
     url: "https://www.anthropic.com/engineering/writing-tools-for-agents",
     kind: "Guide",
   },
-  lostInTheMiddle: {
-    label: "Lost in the Middle: How Language Models Use Long Contexts",
-    url: "https://arxiv.org/abs/2307.03172",
-    kind: "Paper",
-  },
-  rag: {
-    label: "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
-    url: "https://arxiv.org/abs/2005.11401",
-    kind: "Paper",
-  },
   graphragPaper: {
     label: "From Local to Global: A Graph RAG Approach (Microsoft Research)",
     url: "https://arxiv.org/abs/2404.16130",
     kind: "Paper",
-  },
-  msGraphrag: {
-    label: "Microsoft GraphRAG project",
-    url: "https://microsoft.github.io/graphrag/",
-    kind: "Docs",
-  },
-  neo4jGraphrag: {
-    label: "What is GraphRAG? (Neo4j)",
-    url: "https://neo4j.com/blog/genai/what-is-graphrag/",
-    kind: "Guide",
-  },
-  neo4jGraphragPython: {
-    label: "Neo4j GraphRAG for Python",
-    url: "https://neo4j.com/docs/neo4j-graphrag-python/current/",
-    kind: "Docs",
   },
   graphDb: {
     label: "Graph database concepts (Neo4j)",
@@ -107,11 +84,6 @@ const R = {
     label: "Neo4j Aura Query API",
     url: "https://neo4j.com/docs/aura/connecting-applications/query-api/",
     kind: "Docs",
-  },
-  graphAcademy: {
-    label: "Neo4j GraphAcademy (free courses)",
-    url: "https://graphacademy.neo4j.com/",
-    kind: "Course",
   },
   neo4jMcp: {
     label: "Official Neo4j MCP server",
@@ -302,27 +274,28 @@ const R = {
 export const LEARN_PARTS: LearnPart[] = [
   {
     id: "context",
-    title: "Primer: context",
+    title: "Context and memory",
     intro:
-      "Everything a model knows during a turn is its **context**. Most agent quality problems (forgetting, hallucinating, acting on stale facts) are context problems. This part covers what context is, how this demo manages it, and what goes wrong.",
+      "What the orchestrator puts in front of the model on each turn, where the workbench keeps everything else, and the guards against stale or injected context.",
     sections: [
       {
         id: "what-is-context",
-        title: "What context is",
-        summary: "The model only sees what is in its context window for this one call.",
-        body: `A language model has no memory between calls. Each time the orchestrator calls the model, it sends a **context window**: a bounded sequence of tokens that is all the model can see. Here that window holds:
+        title: "What the model sees on each turn",
+        summary: "The context window the orchestrator builds for every model call.",
+        body: `Each time the orchestrator calls the model, it sends a **context window**, and nothing else reaches the model. Here that window holds:
 
 - **System instructions:** the orchestrator's rules, such as "Salesforce tool results are the only authority" and "never claim a write happened".
 - **Tool definitions:** the name, description, and JSON input schema of every tool the model may call on this step.
 - **Conversation messages:** the recent user and assistant messages.
 - **Tool results:** what each tool returned earlier in this turn.
+- **The workspace summary:** the draft in focus, the records the chat opened, and the context cards its tools gathered (see *The workspace*).
 
-**Context engineering** decides what goes into that window, in what form, and what stays out. More is not better: long, noisy windows dilute attention ("context rot"), cost more, and let stale or injected text steer the model. Aim for the *smallest* set of high-signal information that lets the model do the next step well.`,
+What stays out matters as much: earlier replies arrive as text only, old tool results and reasoning never re-enter, and only the tools the turn's route offers are defined (see *Routing*). Why a small, high-signal window beats a large one is in the Playbook.`,
         inDemo: [
           "System prompt: apps/edge/src/turn-policy.ts (orchestratorSystemPrompt)",
           "Technical trace at the top of each answer shows what the model did with its context",
         ],
-        resources: [R.contextEngineering, R.lostInTheMiddle, R.buildingAgents],
+        resources: [R.contextEngineering],
       },
       {
         id: "memory-layers",
@@ -354,9 +327,9 @@ export const LEARN_PARTS: LearnPart[] = [
         title: "What goes wrong with context, and the defenses here",
         summary:
           "Stale claims, prompt injection, and overflow, plus the guards this demo uses against each.",
-        body: `**Stale or unsupported claims.** A wrong claim left in the window tends to be repeated as fact. Defense: earlier replies are *context, not evidence*. The system prompt requires re-checking Salesforce facts with tools each turn, and old tool results are stripped from history.
+        body: `**Stale or unsupported claims.** Defense: earlier replies are *context, not evidence*. The system prompt requires re-checking Salesforce facts with tools each turn, and old tool results are stripped from history.
 
-**Prompt injection.** Text inside data, such as a campaign description saying "ignore previous instructions", can try to steer the model. Defenses:
+**Prompt injection**, such as a campaign description saying "ignore previous instructions". Defenses:
 - The model has **no write tools**; writes need a human confirmation.
 - A **policy router** answers write and forbidden requests without calling the model.
 - Tool results are treated as data.
@@ -374,52 +347,17 @@ export const LEARN_PARTS: LearnPart[] = [
   },
   {
     id: "graphrag",
-    title: "Primer: RAG and GraphRAG",
+    title: "The knowledge graph",
     intro:
-      "**Retrieval-augmented generation (RAG)** grounds a model in data it wasn't trained on by retrieving relevant facts into its context. **GraphRAG** retrieves from a knowledge graph, so answers can follow relationships and show the path to their evidence.",
+      "The workbench grounds answers in a Neo4j knowledge graph through curated, read-only tools, and shows the path behind each answer. What RAG and GraphRAG are in general is in the Playbook.",
     sections: [
       {
-        id: "rag",
-        title: "RAG in one page",
-        summary:
-          "Retrieve relevant facts, add them to the context, then generate an answer grounded in them.",
-        body: `Plain RAG has three steps:
-
-1. **Retrieve** the data most relevant to the question, usually by embedding text as vectors and running a similarity search.
-2. **Augment** the model's context with those pieces and the question.
-3. **Generate** an answer from the retrieved facts instead of training data.
-
-RAG is excellent at "find the passage that answers this". It struggles when the answer depends on **connections** between facts spread across documents, such as *which accounts engaged with content from two campaigns and also lack SMS consent?* Similarity search finds similar text; it doesn't join facts.
-
-Here, tool calls are a form of retrieval: the Salesforce agents and the graph tools fetch facts at answer time.`,
-        resources: [R.rag, R.buildingAgents],
-      },
-      {
-        id: "graphrag-explained",
-        title: "GraphRAG",
-        summary:
-          "Retrieve connected facts from a knowledge graph and return the paths as evidence.",
-        body: `A **knowledge graph** stores entities (**nodes**, such as a Persona, a Campaign, or a MenuItem) and typed **relationships** between them (\`ENGAGED_WITH\`, \`TARGETS\`, \`FEATURED\`). **GraphRAG** retrieves by traversing those relationships. Common patterns:
-
-- **Curated graph queries** (used here): the model picks from fixed, parameterized queries such as *explain buyer group*. Predictable, safe, fast, and easy to evaluate.
-- **Text-to-Cypher:** the model writes graph queries itself. Flexible, but riskier and harder to govern.
-- **Hybrid vector + graph:** vector search finds entry points; graph traversal expands to connected context.
-- **Community summaries:** Microsoft's GraphRAG clusters the graph into communities and pre-summarizes them to answer global "what are the themes?" questions.
-
-GraphRAG's strengths are **multi-hop reasoning** and **explainability**: every answer can carry the path that justifies it, which the demo shows in the **Graph evidence** panel.`,
-        resources: [
-          R.graphragPaper,
-          R.msGraphrag,
-          R.neo4jGraphrag,
-          R.neo4jGraphragPython,
-          R.graphDb,
-        ],
-      },
-      {
         id: "graphrag-here",
-        title: "How this demo does GraphRAG",
+        title: "The graph, its tools, and evidence paths",
         summary: "Twelve read-only, curated graph tools over Neo4j, each returning evidence paths.",
-        body: `**The graph.** A deterministic, fictional dataset of about 2,400 nodes and 20,300 relationships:
+        body: `**Curated queries, not text-to-Cypher.** The model picks from fixed, parameterized graph queries (*explain buyer group*, *check consent coverage*); it never writes Cypher. That keeps graph access predictable, safe to run, fast, and easy to evaluate, and every answer can carry the relationships that justify it.
+
+**The graph.** A deterministic, fictional dataset of about 2,400 nodes and 20,300 relationships:
 - **Northstar**, the parent brand: B2B accounts (each with a headquarters country), buying-role personas, campaigns, segments, content, brand rules, and consent scopes.
 - **Coastline Kitchen**, a restaurant brand under Northstar: locations, menu, and dayparts from the restaurant system, with the same ids. Campaigns run on the **mobile app** and **email**. Each of 1,500 past push sends and 600 past email sends links to its campaign, content (push or email), app segment, channel consent, location, daypart, weather, and featured menu item, so an email campaign learns from past emails and a push from past pushes. Each location's app segment holds **marketing consent per channel** (separate push, email, and SMS opt-in counts): consent to one channel isn't consent to another.
 - **Harborstone Wealth**, a wealth-management brand under Northstar: regulated content with approval records and required disclosures, an embargoed acquisition with its release package, and institutional clients with holdings, signals, advisors, and contacts.
@@ -444,7 +382,7 @@ GraphRAG's strengths are **multi-hop reasoning** and **explainability**: every a
           "Graph evidence panel under answers; “Knowledge graph · Neo4j” in Sources",
           "packages/knowledge-graph, apps/edge/src/knowledge-graph",
         ],
-        resources: [R.cypher, R.queryApi, R.graphAcademy, R.neo4jMcp, R.agentforceNeo4j],
+        resources: [R.cypher, R.queryApi, R.neo4jMcp, R.agentforceNeo4j, R.graphragPaper],
       },
     ],
   },
@@ -623,8 +561,8 @@ Why it's trustworthy:
         id: "mcp",
         title: "Tools and the Model Context Protocol (MCP)",
         summary:
-          "A standard way for agents to discover and call tools, and the MCP servers the demo uses.",
-        body: `**Tool calling** lets a model ask the host to run a function with structured arguments and get the result. **MCP** standardizes it: a server advertises tools (name, description, JSON Schema for input), and clients list and call them over a transport such as streamable HTTP.
+          "The five MCP servers the orchestrator connects to each turn, and what each offers.",
+        body: `Every tool reaches the orchestrator over **MCP**: each server advertises its tools (name, description, JSON Schema for input), and the orchestrator lists and calls them.
 
 | Server | Tools | Reached |
 |---|---|---|
@@ -893,6 +831,7 @@ Each step shows live. Preparing: the plan, the permission check (how many passed
 - **Left rail.** Data sources fold into one line (how many are ready, which are offline); open it for the full list. The **MCP Gateway** box below stays open: the Salesforce connection's state, how many governed tools are connected, and which.
 :::
 
+- **Learn and Playbook.** Learn (this page) is the reference for how the workbench works; **Playbook** renders \`docs/playbook.md\`, general guidance for running agents in production, and links each of its sections to the Learn sections where the workbench shows it.
 - **Use-case library.** Every scenario, filterable by team, with prompts, systems and data flow. **Try it** fills the chat box without sending.
 - **Accessibility.** Targets WCAG 2.2 AA; tested in Chrome and Edge.
 
@@ -901,7 +840,7 @@ Each step shows live. Preparing: the plan, the permission check (how many passed
 **One scope in the header.** **Brand** and **Run as** apply everywhere: the chat (the message box suggests a prompt for the brand), the Graph's brand filter, the use-case library, the Architecture workspaces and the turn history. **AI platform** {{cloudflare: picks where the models run: Workers AI or Vertex AI || google-cloud: shows where the models run: Vertex AI only}}. It lists only what this server can reach, says why an option isn't set up, and is greyed out with one choice (ADR-021). Choices are remembered in the browser.
 
 ::: details Every page's address
-**Every page has an address.** Each left-rail page has a path: \`/squad\`, \`/architecture\`, \`/journeys\`, \`/graph\`, \`/learn\`, \`/evaluations\`, plus \`/history\` and \`/use-cases\` from the chat (itself \`/\`). Reloads stay put, links open the page, and Back returns to the previous one.
+**Every page has an address.** Each left-rail page has a path: \`/squad\`, \`/architecture\`, \`/journeys\`, \`/graph\`, \`/learn\`, \`/playbook\`, \`/evaluations\`, plus \`/history\` and \`/use-cases\` from the chat (itself \`/\`). Reloads stay put, links open the page, and Back returns to the previous one.
 :::
 `,
         inDemo: [
@@ -1440,11 +1379,6 @@ export const GLOSSARY: Array<{ term: string; definition: string }> = [
     term: "Agent",
     definition:
       "A model that calls tools in a loop to do a task; its host controls which tools it may call.",
-  },
-  {
-    term: "Context engineering",
-    definition:
-      "Choosing the smallest, highest-signal context that lets the model do the next step well.",
   },
   {
     term: "Context window",

@@ -9,6 +9,7 @@ export const VIEW_PATHS = {
   // Not /evals: public/evals/ holds the published evaluation reports.
   evaluations: "/evaluations",
   learn: "/learn",
+  playbook: "/playbook",
   graph: "/graph",
   usecases: "/use-cases",
   journeys: "/journeys",

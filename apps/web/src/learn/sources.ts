@@ -9,12 +9,10 @@
  * Entries are path prefixes: a directory ends with "/", and anything else is a file.
  */
 export const SECTION_SOURCES: Record<string, readonly string[]> = {
-  // Primers explain ideas rather than code; they change when the ideas do.
+  // These explain how the workbench assembles context rather than one file.
   "what-is-context": [],
   "memory-layers": ["apps/edge/src/turn-history.ts"],
   "context-risks": [],
-  rag: [],
-  "graphrag-explained": [],
   "graphrag-here": [
     "packages/knowledge-graph/src/dataset.ts",
     "packages/knowledge-graph/src/tools.ts",
@@ -244,6 +242,10 @@ export const TAUGHT_ROOTS = [
 /** Source files that aren't concepts a reader needs taught, and why. */
 export const UNTAUGHT_SOURCES: ReadonlyArray<{ path: string; reason: string }> = [
   { path: "apps/web/src/learn/", reason: "The Learn page itself" },
+  {
+    path: "apps/web/src/playbook/",
+    reason: "The Playbook page: general guidance from docs/playbook.md, not a workbench concept",
+  },
   { path: "apps/web/src/main.tsx", reason: "React entry point" },
   { path: "apps/edge/src/worker-configuration.d.ts", reason: "Generated Worker types" },
   { path: "apps/edge/src/worker.test-helpers.ts", reason: "Test helpers" },
