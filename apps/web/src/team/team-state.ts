@@ -72,6 +72,63 @@ export const TEAM_PHASES = [
 ] as const;
 export type TeamPhase = (typeof TEAM_PHASES)[number]["id"];
 
+/**
+ * A guardrail that stopped an agent: a rule check refusing a save, the policy gateway denying a
+ * call, or a tool's input contract rejecting it. The same refusal repeated in a row is one hit
+ * with a count; a hit is fixed once the same agent's next call to that tool succeeds.
+ */
+export type GuardrailHit = {
+  agent: TeamAgentId;
+  tool: string;
+  kind: "rule" | "gateway" | "contract";
+  /** What the guardrail said, as the agent received it. */
+  detail: string;
+  policyId?: string;
+  count: number;
+  fixed: boolean;
+};
+
+const REFUSED = /^Refused\. Fix every problem and save again:\s*/;
+const REJECTED = /^Rejected before it ran:\s*/;
+
+/** The guardrail a tool call ran into, if any. A prose answer the worker nudges is not one. */
+export function guardrailOf(
+  step: TeamToolStep,
+): Pick<GuardrailHit, "kind" | "detail" | "policyId"> | null {
+  if (step.decision?.decision === "deny")
+    return { kind: "gateway", detail: step.decision.reason, policyId: step.decision.policyId };
+  if (step.ok || !step.error) return null;
+  if (REFUSED.test(step.error)) return { kind: "rule", detail: step.error.replace(REFUSED, "") };
+  if (REJECTED.test(step.error))
+    return { kind: "contract", detail: step.error.replace(REJECTED, "") };
+  return null;
+}
+
+/** Adds a tool call to the guardrail log: a new hit, a repeat of the last one, or a fix. */
+function logGuardrail(hits: GuardrailHit[], agent: TeamAgentId, step: TeamToolStep) {
+  const hit = guardrailOf(step);
+  if (!hit) {
+    if (!step.ok) return hits;
+    // A call that went through fixes what stopped this agent's earlier calls to the same tool.
+    return hits.some((item) => item.agent === agent && item.tool === step.tool && !item.fixed)
+      ? hits.map((item) =>
+          item.agent === agent && item.tool === step.tool ? { ...item, fixed: true } : item,
+        )
+      : hits;
+  }
+  const last = hits.at(-1);
+  if (
+    last &&
+    !last.fixed &&
+    last.agent === agent &&
+    last.tool === step.tool &&
+    last.kind === hit.kind &&
+    last.detail === hit.detail
+  )
+    return [...hits.slice(0, -1), { ...last, count: last.count + 1 }];
+  return [...hits, { agent, tool: step.tool, ...hit, count: 1, fixed: false }];
+}
+
 export type TeamState = {
   id: string | null;
   mode: TeamMode;
@@ -96,6 +153,8 @@ export type TeamState = {
   error: string | null;
   toolCalls: number;
   denied: number;
+  /** Every guardrail an agent ran into, in order (repeats merged). */
+  guardrails: GuardrailHit[];
   /** The infrastructure the run reported at its start. */
   infra: Extract<TeamEvent, { type: "start" }>["infra"] | null;
   modelCalls: Array<{
@@ -235,6 +294,7 @@ export function emptyTeamState(): TeamState {
     error: null,
     toolCalls: 0,
     denied: 0,
+    guardrails: [],
     infra: null,
     modelCalls: [],
     prompts: [],
@@ -310,6 +370,7 @@ export function reduceTeam(state: TeamState, event: TeamEvent): TeamState {
       view.tools = [...view.tools, event.step];
       next.toolCalls += 1;
       if (event.step.decision?.decision === "deny") next.denied += 1;
+      next.guardrails = logGuardrail(state.guardrails, event.agent, event.step);
       const label = ACTIVITY[event.step.tool] ?? event.step.tool;
       view.activity = event.step.ok ? label : `${label}: refused, fixing`;
       if (SAVE_TOOLS.has(event.step.tool) && event.step.decision?.decision === "allow")

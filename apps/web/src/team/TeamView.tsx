@@ -39,6 +39,7 @@ import { EvalsPanel, InfrastructurePanel, SemanticLayerPanel } from "./TeamPlatf
 import { StrategyView, TeamWorkView } from "./TeamWork";
 import { REPLAY_SPEEDS, type ReplaySpeed, replayDelays } from "./replay";
 import { AgentModal } from "./AgentModal";
+import { GuardrailPanel } from "./Guardrails";
 import { recordSessionRun } from "./session-metrics";
 import { foldTeam, isPeerMessage, KIND_LABELS, TEAM_PHASES, type TeamMessage } from "./team-state";
 import "../architecture/architecture.css";
@@ -921,6 +922,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
       <p className="team-diagram-hint arch-note">
         Click an agent for its prompt, model, usage and calls.
       </p>
+      <GuardrailPanel hits={state.guardrails} />
       <dl className="team-stats compact" aria-live="polite">
         <div>
           <dt>Messages</dt>

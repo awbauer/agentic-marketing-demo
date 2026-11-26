@@ -85,6 +85,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   ],
   ui: [
     "apps/web/src/App.tsx",
+    "apps/web/src/views.ts",
     "apps/web/src/SourceList.tsx",
     "apps/web/src/WriteProgress.tsx",
     "apps/web/src/ScopeBar.tsx",
