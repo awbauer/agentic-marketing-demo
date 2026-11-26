@@ -208,41 +208,6 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
       },
     ],
   },
-  "rag-flow": {
-    label: "Retrieval-augmented generation",
-    caption: "Retrieval puts the right facts in the window before the model answers.",
-    blocks: [
-      {
-        kind: "flow",
-        numbered: true,
-        steps: [
-          {
-            title: "Question",
-            tone: "person",
-            glyph: "?",
-          },
-          {
-            title: "Retrieve",
-            caption: "search your data",
-            tone: "tool",
-            glyph: "⌕",
-          },
-          {
-            title: "Augment",
-            caption: "add facts to the context",
-            tone: "store",
-            glyph: "+",
-          },
-          {
-            title: "Generate",
-            caption: "answer from those facts",
-            tone: "model",
-            glyph: "◆",
-          },
-        ],
-      },
-    ],
-  },
   "marketing-cloud": {
     label: "How a campaign is created in Marketing Cloud Next",
     caption:
@@ -561,94 +526,6 @@ export const DIAGRAM_SPECS: Record<DiagramId, DiagramSpec> = {
                 glyph: "⏱",
               },
             ],
-          },
-        ],
-      },
-    ],
-  },
-  "graph-path": {
-    label: "An evidence path in the knowledge graph",
-    caption:
-      "Answering “why is Acme in the fall audience?” means following relationships. The highlighted path is the evidence.",
-    blocks: [
-      {
-        kind: "graph-path",
-        description:
-          "Fall Loyalty campaign targets the fall audience segment, which includes the economic buyer persona, who works at Acme Outfitters. The persona also has email marketing consent and engaged with the hero email.",
-        nodes: [
-          {
-            id: "campaign",
-            label: "Campaign",
-            name: "Fall Loyalty",
-            x: 70,
-            y: 60,
-          },
-          {
-            id: "segment",
-            label: "Segment",
-            name: "Fall audience",
-            x: 230,
-            y: 60,
-          },
-          {
-            id: "persona",
-            label: "Persona",
-            name: "Economic buyer",
-            x: 390,
-            y: 60,
-          },
-          {
-            id: "account",
-            label: "Account",
-            name: "Acme Outfitters",
-            x: 550,
-            y: 60,
-          },
-          {
-            id: "consent",
-            label: "ConsentScope",
-            name: "Email marketing",
-            x: 540,
-            y: 180,
-          },
-          {
-            id: "asset",
-            label: "ContentAsset",
-            name: "Hero email",
-            x: 240,
-            y: 180,
-          },
-        ],
-        edges: [
-          {
-            from: "campaign",
-            to: "segment",
-            type: "TARGETS",
-            path: true,
-          },
-          {
-            from: "segment",
-            to: "persona",
-            type: "INCLUDES",
-            path: true,
-          },
-          {
-            from: "persona",
-            to: "account",
-            type: "WORKS_AT",
-            path: true,
-          },
-          {
-            from: "persona",
-            to: "consent",
-            type: "HAS_CONSENT",
-            path: false,
-          },
-          {
-            from: "persona",
-            to: "asset",
-            type: "ENGAGED_WITH",
-            path: false,
           },
         ],
       },

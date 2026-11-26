@@ -36,8 +36,8 @@ A marketer asks a question in plain language. The orchestrator agent reads campa
 - 🧭 **Watch an asset get made.** Journeys run real agents from goal to approved asset, pausing only where a person must decide.
 - 🏛️ **An architecture you can click through.** Governed objects, one gateway for every call, agent and prompt catalogs, and a plan-to-learn content lifecycle.
 - 📊 **Scored, not assumed.** An evaluation suite compares models on quality, routing, cost and speed, so the production model is chosen on evidence.
-- 🔗 **Every page has a link.** `/squad`, `/architecture`, `/journeys`, `/graph`, `/learn` and `/evaluations` survive a reload and work from the back button.
-- 🎓 **A built-in course.** 29 short lessons explain context, RAG and GraphRAG, and every moving part of the demo, written for the cloud you're on and the AI platform you picked, with low-level detail folded away until you open it. A CI check keeps them in step with the code.
+- 🔗 **Every page has a link.** `/squad`, `/architecture`, `/journeys`, `/graph`, `/learn`, `/playbook` and `/evaluations` survive a reload and work from the back button.
+- 🎓 **A built-in reference, and a playbook.** 27 short lessons explain what the model sees, the knowledge graph, and every moving part of the demo, written for the cloud you're on and the AI platform you picked, with low-level detail folded away until you open it. A CI check keeps them in step with the code. A separate **Playbook** page carries the general guidance (when to build an agent, failure patterns, security, evals, operations) and links each section to the lessons that show it here.
 - 🔐 **Secure by default.** Identity-Aware Proxy sign-in (Cloudflare Access on Cloudflare), per-user Salesforce OAuth, allow-listed tools, and kill switches for writes, tools and memory.
 
 ## 📸 A quick tour
@@ -70,7 +70,7 @@ A marketer asks a question in plain language. The orchestrator agent reads campa
     </td>
     <td width="50%">
       <img src="docs/images/readme/learn.jpg" alt="Learn course with three parts and a lesson on what context is"/>
-      <p align="center"><b>Learn</b><br/><sub>A hands-on course in context, GraphRAG and this demo.</sub></p>
+      <p align="center"><b>Learn</b><br/><sub>The reference for how the workbench works, lesson by lesson.</sub></p>
     </td>
   </tr>
 </table>
@@ -199,7 +199,7 @@ The deploy builds the image with Cloud Build, runs it on Cloud Run behind a glob
 
 ```text
 apps/
-  web/              React front end: chat, every view, the Learn course
+  web/              React front end: chat, every view, the Learn course and the Playbook page
   edge/             the shared server: orchestrator, gateway, MCP servers, APIs, platform seam;
                     plus the Cloudflare Worker entry
   gcp/              the Google Cloud host: Node server, chat host, Firestore, Vertex AI, Cloud Storage
@@ -214,11 +214,11 @@ migrations/         D1 schema
 scripts/            verification gates, evals, seeding, live proofs
 tests/              Playwright end-to-end tests
 infra/              Google Cloud and Cloudflare deployment notes
-docs/               plan, decisions, work units, security notes, the Learn course (both hosts)
+docs/               plan, decisions, work units, security notes, the Learn course (both hosts), the playbook
 ```
 
 ## 🤖 Built by agents
 
 This repository is agent-first: coding agents build, test, document and refine it. People step in for sign-ins, consent and final review. If you're an agent picking up work, start with the [getting-started checklist](docs/getting-started-for-agents.md) and [AGENTS.md](AGENTS.md), and don't infer live Salesforce, Google Cloud or Cloudflare state from this README.
 
-**Read more:** [the Learn course as one page](docs/learn-google-cloud.md) ([Cloudflare edition](docs/learn.md)) · [the plan](docs/agentic-marketing-workbench-plan.md) · [decision records](docs/decisions/) · [work units](docs/work-units/) · [Google Cloud deployment](infra/gcp/README.md) · [Cloudflare deployment gates](infra/cloudflare/pot/README.md) · [the Salesforce side](salesforce/README.md)
+**Read more:** [the agentic systems playbook](docs/playbook.md) · [the Learn course as one page](docs/learn-google-cloud.md) ([Cloudflare edition](docs/learn.md)) · [the plan](docs/agentic-marketing-workbench-plan.md) · [decision records](docs/decisions/) · [work units](docs/work-units/) · [Google Cloud deployment](infra/gcp/README.md) · [Cloudflare deployment gates](infra/cloudflare/pot/README.md) · [the Salesforce side](salesforce/README.md)

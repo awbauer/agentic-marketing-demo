@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-26T02:05:30.678Z",
-  "status": "failed",
-  "baseRef": "upstream/main",
-  "mergeBase": "a04900a419f98c389f82cdfafd737c2e24509f14",
+  "generatedAt": "2026-11-26T03:56:13.370Z",
+  "status": "passed",
+  "baseRef": "origin/main",
+  "mergeBase": "9355da3fed365fd8def009f7537c4f725dd8e823",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,33 +13,14 @@
   },
   "drift": [
     {
-      "section": "two-hosts",
-      "status": "stale",
-      "paths": [
-        "apps/edge/src/platform/vertex.ts"
-      ]
-    },
-    {
-      "section": "pharma-lifecycle",
+      "section": "ui",
       "status": "updated",
       "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts"
-      ]
-    },
-    {
-      "section": "campaign-squad",
-      "status": "updated",
-      "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts",
-        "apps/web/src/team/TeamView.tsx",
-        "apps/web/src/team/ToolLibrary.tsx"
+        "apps/web/src/App.tsx",
+        "apps/web/src/views.ts"
       ]
     }
   ],
   "notices": [],
-  "failures": [
-    "Learn drift: this branch changes code that these Learn sections explain, but the sections didn't change:\n  • two-hosts (“Two hosts: Cloudflare and Google Cloud”) ← apps/edge/src/platform/vertex.ts\nUpdate each section in apps/web/src/learn/content.ts (or its lesson or reference entries) so it teaches the change.\nIf nothing a reader learns has changed, say so in a commit trailer:\n  Learn-Reviewed: two-hosts (why no Learn update is needed)"
-  ]
+  "failures": []
 }

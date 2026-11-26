@@ -38,6 +38,17 @@
   color: var(--ink);
   max-width: 52ch;
 }
+.learn-hero-aside {
+  margin: -6px 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 60ch;
+}
+.learn-hero-aside .text-button {
+  padding: 0;
+  font-size: inherit;
+}
 .learn-progress {
   display: grid;
   gap: 6px;

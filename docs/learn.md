@@ -1,19 +1,17 @@
-# Learn: context, GraphRAG, and how this demo works
+# Learn: how the workbench works
 
 > Generated from the Learn page's sources in `apps/web/src/learn` by `pnpm learn:export`. Don't edit it by hand: `pnpm learn:check` fails when it's out of date.
 
-A hands-on course in how an agent uses context, how GraphRAG grounds answers in connected facts, and how every piece of this workbench fits together. Each lesson has a diagram, one key idea, a way to try it here, and links to go deeper.
+A reference for every piece of this workbench: what the model sees each turn, the knowledge graph behind its answers, and each system, guard and page around them. Each lesson has a diagram, one key idea, a way to try it here, and where to find it in the code.
 
 ## Contents
 
-- [Part 1: Primer: context](#part-1-primer-context): What the model can see, and why it matters (3 lessons, 6 min)
-  - [1.1 What context is](#11-what-context-is)
+- [Part 1: Context and memory](#part-1-context-and-memory): What the model sees each turn, and where the rest is kept (3 lessons, 6 min)
+  - [1.1 What the model sees on each turn](#11-what-the-model-sees-on-each-turn)
   - [1.2 Three layers of memory](#12-three-layers-of-memory)
   - [1.3 What goes wrong with context, and the defenses here](#13-what-goes-wrong-with-context-and-the-defenses-here)
-- [Part 2: Primer: RAG and GraphRAG](#part-2-primer-rag-and-graphrag): Grounding answers in connected facts (3 lessons, 7 min)
-  - [2.1 RAG in one page](#21-rag-in-one-page)
-  - [2.2 GraphRAG](#22-graphrag)
-  - [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag)
+- [Part 2: The knowledge graph](#part-2-the-knowledge-graph): Grounding answers in connected facts (1 lessons, 4 min)
+  - [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths)
 - [Part 3: Every concept in the demo](#part-3-every-concept-in-the-demo): Every moving part of the workbench (23 lessons, 20 min)
   - [3.1 The orchestrator agent](#31-the-orchestrator-agent)
   - [3.2 Two hosts: Cloudflare and Google Cloud](#32-two-hosts-cloudflare-and-google-cloud)
@@ -41,21 +39,21 @@ A hands-on course in how an agent uses context, how GraphRAG grounds answers in 
 - [Glossary](#glossary)
 - [Reference: every concept in the code](#reference-every-concept-in-the-code)
 
-## Part 1: Primer: context
+## Part 1: Context and memory
 
-*What the model can see, and why it matters* · 3 lessons · 6 min
+*What the model sees each turn, and where the rest is kept* · 3 lessons · 6 min
 
-Everything a model knows during a turn is its **context**. Most agent quality problems (forgetting, hallucinating, acting on stale facts) are context problems. This part covers what context is, how this demo manages it, and what goes wrong.
+What the orchestrator puts in front of the model on each turn, where the workbench keeps everything else, and the guards against stale or injected context.
 
 **You'll be able to**
 
-- Name what fills a model's context window on every call
+- Name what fills the model's context window on every turn here
 - Tell working memory, the audit trail, and long-term memory apart
 - Spot the context failures the demo defends against
 
-### 1.1 What context is
+### 1.1 What the model sees on each turn
 
-*The model only sees what is in its context window for this one call.*
+*The context window the orchestrator builds for every model call.*
 
 **Diagram: What fills the context window**
 
@@ -77,16 +75,17 @@ flowchart TB
 
 *One model call. Proportions are illustrative; the window is rebuilt from scratch every call.*
 
-> **Key idea:** The model sees only what's in this call's window. Good context is the smallest set of high-signal facts for the next step.
+> **Key idea:** The model sees only this call's window: rules, the route's tools, the last 8 messages as text, this turn's tool results and a workspace summary.
 
-A language model has no memory between calls. Each time the orchestrator calls the model, it sends a **context window**: a bounded sequence of tokens that is all the model can see. Here that window holds:
+Each time the orchestrator calls the model, it sends a **context window**, and nothing else reaches the model. Here that window holds:
 
 - **System instructions:** the orchestrator's rules, such as "Salesforce tool results are the only authority" and "never claim a write happened".
 - **Tool definitions:** the name, description, and JSON input schema of every tool the model may call on this step.
 - **Conversation messages:** the recent user and assistant messages.
 - **Tool results:** what each tool returned earlier in this turn.
+- **The workspace summary:** the draft in focus, the records the chat opened, and the context cards its tools gathered (see *The workspace*).
 
-**Context engineering** decides what goes into that window, in what form, and what stays out. More is not better: long, noisy windows dilute attention ("context rot"), cost more, and let stale or injected text steer the model. Aim for the *smallest* set of high-signal information that lets the model do the next step well.
+What stays out matters as much: earlier replies arrive as text only, old tool results and reasoning never re-enter, and only the tools the turn's route offers are defined (see *Routing*). Why a small, high-signal window beats a large one is in the Playbook.
 
 **Try it**
 
@@ -100,8 +99,6 @@ A language model has no memory between calls. Each time the orchestrator calls t
 **Learn more**
 
 - Guide: [Effective context engineering for AI agents (Anthropic)](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
-- Paper: [Lost in the Middle: How Language Models Use Long Contexts](https://arxiv.org/abs/2307.03172)
-- Guide: [Building effective agents (Anthropic)](https://www.anthropic.com/engineering/building-effective-agents)
 
 ### 1.2 Three layers of memory
 
@@ -183,9 +180,9 @@ flowchart TB
 
 > **Key idea:** Treat earlier replies and tool results as data, not instructions, and never let the model hold write tools.
 
-**Stale or unsupported claims.** A wrong claim left in the window tends to be repeated as fact. Defense: earlier replies are *context, not evidence*. The system prompt requires re-checking Salesforce facts with tools each turn, and old tool results are stripped from history.
+**Stale or unsupported claims.** Defense: earlier replies are *context, not evidence*. The system prompt requires re-checking Salesforce facts with tools each turn, and old tool results are stripped from history.
 
-**Prompt injection.** Text inside data, such as a campaign description saying "ignore previous instructions", can try to steer the model. Defenses:
+**Prompt injection**, such as a campaign description saying "ignore previous instructions". Defenses:
 - The model has **no write tools**; writes need a human confirmation.
 - A **policy router** answers write and forbidden requests without calling the model.
 - Tool results are treated as data.
@@ -223,99 +220,19 @@ Which of these does the model see on every turn?
 
 </details>
 
-## Part 2: Primer: RAG and GraphRAG
+## Part 2: The knowledge graph
 
-*Grounding answers in connected facts* · 3 lessons · 7 min
+*Grounding answers in connected facts* · 1 lessons · 4 min
 
-**Retrieval-augmented generation (RAG)** grounds a model in data it wasn't trained on by retrieving relevant facts into its context. **GraphRAG** retrieves from a knowledge graph, so answers can follow relationships and show the path to their evidence.
+The workbench grounds answers in a Neo4j knowledge graph through curated, read-only tools, and shows the path behind each answer. What RAG and GraphRAG are in general is in the Playbook.
 
 **You'll be able to**
 
-- Explain retrieve → augment → generate
-- Say when a graph beats similarity search
-- Describe how the demo's curated graph tools return evidence paths
+- Name what each brand contributes to the graph
+- Explain why the model picks curated queries instead of writing Cypher
+- Find the evidence paths behind a graph answer
 
-### 2.1 RAG in one page
-
-*Retrieve relevant facts, add them to the context, then generate an answer grounded in them.*
-
-**Diagram: Retrieval-augmented generation**
-
-```mermaid
-flowchart TB
-  rag_flow0_0["1. ? Question"]
-  rag_flow0_1["2. ⌕ Retrieve<br/>search your data"]
-  rag_flow0_2["3. + Augment<br/>add facts to the context"]
-  rag_flow0_3["4. ◆ Generate<br/>answer from those facts"]
-  rag_flow0_0 --> rag_flow0_1 --> rag_flow0_2 --> rag_flow0_3
-```
-
-*Retrieval puts the right facts in the window before the model answers.*
-
-> **Key idea:** RAG adds retrieved facts to the context so answers come from your data, not training.
-
-Plain RAG has three steps:
-
-1. **Retrieve** the data most relevant to the question, usually by embedding text as vectors and running a similarity search.
-2. **Augment** the model's context with those pieces and the question.
-3. **Generate** an answer from the retrieved facts instead of training data.
-
-RAG is excellent at "find the passage that answers this". It struggles when the answer depends on **connections** between facts spread across documents, such as *which accounts engaged with content from two campaigns and also lack SMS consent?* Similarity search finds similar text; it doesn't join facts.
-
-Here, tool calls are a form of retrieval: the Salesforce agents and the graph tools fetch facts at answer time.
-
-**Learn more**
-
-- Paper: [Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks](https://arxiv.org/abs/2005.11401)
-- Guide: [Building effective agents (Anthropic)](https://www.anthropic.com/engineering/building-effective-agents)
-
-### 2.2 GraphRAG
-
-*Retrieve connected facts from a knowledge graph and return the paths as evidence.*
-
-**Diagram: An evidence path in the knowledge graph**
-
-```mermaid
-flowchart LR
-  campaign(("Fall Loyalty<br/>Campaign"))
-  segment(("Fall audience<br/>Segment"))
-  persona(("Economic buyer<br/>Persona"))
-  account(("Acme Outfitters<br/>Account"))
-  consent(("Email marketing<br/>ConsentScope"))
-  asset(("Hero email<br/>ContentAsset"))
-  campaign ==>|TARGETS| segment
-  segment ==>|INCLUDES| persona
-  persona ==>|WORKS_AT| account
-  persona -.->|HAS_CONSENT| consent
-  persona -.->|ENGAGED_WITH| asset
-```
-
-*Answering “why is Acme in the fall audience?” means following relationships. The highlighted path is the evidence.*
-
-> **Key idea:** GraphRAG follows relationships, so an answer can join many facts and show the path that proves it.
-
-A **knowledge graph** stores entities (**nodes**, such as a Persona, a Campaign, or a MenuItem) and typed **relationships** between them (`ENGAGED_WITH`, `TARGETS`, `FEATURED`). **GraphRAG** retrieves by traversing those relationships. Common patterns:
-
-- **Curated graph queries** (used here): the model picks from fixed, parameterized queries such as *explain buyer group*. Predictable, safe, fast, and easy to evaluate.
-- **Text-to-Cypher:** the model writes graph queries itself. Flexible, but riskier and harder to govern.
-- **Hybrid vector + graph:** vector search finds entry points; graph traversal expands to connected context.
-- **Community summaries:** Microsoft's GraphRAG clusters the graph into communities and pre-summarizes them to answer global "what are the themes?" questions.
-
-GraphRAG's strengths are **multi-hop reasoning** and **explainability**: every answer can carry the path that justifies it, which the demo shows in the **Graph evidence** panel.
-
-**Try it**
-
-- Explore the graph (opens the graph view)
-
-**Learn more**
-
-- Paper: [From Local to Global: A Graph RAG Approach (Microsoft Research)](https://arxiv.org/abs/2404.16130)
-- Docs: [Microsoft GraphRAG project](https://microsoft.github.io/graphrag/)
-- Guide: [What is GraphRAG? (Neo4j)](https://neo4j.com/blog/genai/what-is-graphrag/)
-- Docs: [Neo4j GraphRAG for Python](https://neo4j.com/docs/neo4j-graphrag-python/current/)
-- Docs: [Graph database concepts (Neo4j)](https://neo4j.com/docs/getting-started/graph-database/)
-
-### 2.3 How this demo does GraphRAG
+### 2.1 The graph, its tools, and evidence paths
 
 *Twelve read-only, curated graph tools over Neo4j, each returning evidence paths.*
 
@@ -333,6 +250,8 @@ flowchart TB
 *Each tool is a fixed, parameterized Cypher query in read mode that returns an answer plus evidence paths.*
 
 > **Key idea:** Curated, read-only graph queries return evidence paths, and a local copy must match Neo4j exactly.
+
+**Curated queries, not text-to-Cypher.** The model picks from fixed, parameterized graph queries (*explain buyer group*, *check consent coverage*); it never writes Cypher. That keeps graph access predictable, safe to run, fast, and easy to evaluate, and every answer can carry the relationships that justify it.
 
 **The graph.** A deterministic, fictional dataset of about 2,400 nodes and 20,300 relationships:
 - **Northstar**, the parent brand: B2B accounts (each with a headquarters country), buying-role personas, campaigns, segments, content, brand rules, and consent scopes.
@@ -373,22 +292,22 @@ flowchart TB
 
 - Docs: [Cypher manual: introduction](https://neo4j.com/docs/cypher-manual/current/introduction/)
 - Docs: [Neo4j Aura Query API](https://neo4j.com/docs/aura/connecting-applications/query-api/)
-- Course: [Neo4j GraphAcademy (free courses)](https://graphacademy.neo4j.com/)
 - Code: [Official Neo4j MCP server](https://github.com/neo4j/mcp)
 - Guide: [Salesforce Agentforce + Neo4j (Neo4j Labs)](https://neo4j.com/labs/genai-ecosystem/genai-frameworks/salesforce-agentforce/)
+- Paper: [From Local to Global: A Graph RAG Approach (Microsoft Research)](https://arxiv.org/abs/2404.16130)
 
 ### Check your understanding
 
-Which question needs GraphRAG rather than plain vector RAG?
+What stops a graph tool from changing the graph?
 
-1. “Find the paragraph in the brief about the offer.”
-2. “Which accounts engaged with two campaigns and lack SMS consent?”
-3. “Summarize this email draft.”
-4. “Translate the headline into Spanish.”
+1. The system prompt tells the model not to
+2. Tool queries run in Neo4j's read access mode, so the database rejects writes
+3. The model only sees a summary of the graph
+4. Nothing: the tools can write, but rarely do
 
 <details><summary>Answer</summary>
 
-**2. “Which accounts engaged with two campaigns and lack SMS consent?”** It joins accounts, campaigns, engagement and consent: a multi-hop question. Similarity search finds similar text; it can't follow relationships.
+**2. Tool queries run in Neo4j's read access mode, so the database rejects writes** The guarantee is in the database, not the prompt: tool queries run in read access mode. The only writes are the server's fixed long-term memory statements, kept to their own dataset.
 
 </details>
 
@@ -747,7 +666,7 @@ The orchestrator runs **gpt-oss-20b**, OpenAI's open-weight reasoning model, on 
 
 ### 3.5 Tools and the Model Context Protocol (MCP)
 
-*A standard way for agents to discover and call tools, and the MCP servers the demo uses.*
+*The five MCP servers the orchestrator connects to each turn, and what each offers.*
 
 **Diagram: How MCP works**
 
@@ -771,7 +690,7 @@ flowchart LR
 
 > **Key idea:** MCP lets any agent list and call tools the same way, whether the server is remote or in-process.
 
-**Tool calling** lets a model ask the host to run a function with structured arguments and get the result. **MCP** standardizes it: a server advertises tools (name, description, JSON Schema for input), and clients list and call them over a transport such as streamable HTTP.
+Every tool reaches the orchestrator over **MCP**: each server advertises its tools (name, description, JSON Schema for input), and the orchestrator lists and calls them.
 
 | Server | Tools | Reached |
 |---|---|---|
@@ -1289,6 +1208,7 @@ flowchart LR
 
 </details>
 
+- **Learn and Playbook.** Learn (this page) is the reference for how the workbench works; **Playbook** renders `docs/playbook.md`, general guidance for running agents in production, and links each of its sections to the Learn sections where the workbench shows it.
 - **Use-case library.** Every scenario, filterable by team, with prompts, systems and data flow. **Try it** fills the chat box without sending.
 - **Accessibility.** Targets WCAG 2.2 AA; tested in Chrome and Edge.
 
@@ -1299,7 +1219,7 @@ flowchart LR
 <details>
 <summary>Every page's address</summary>
 
-**Every page has an address.** Each left-rail page has a path: `/squad`, `/architecture`, `/journeys`, `/graph`, `/learn`, `/evaluations`, plus `/history` and `/use-cases` from the chat (itself `/`). Reloads stay put, links open the page, and Back returns to the previous one.
+**Every page has an address.** Each left-rail page has a path: `/squad`, `/architecture`, `/journeys`, `/graph`, `/learn`, `/playbook`, `/evaluations`, plus `/history` and `/use-cases` from the chat (itself `/`). Reloads stay put, links open the page, and Back returns to the previous one.
 
 </details>
 
@@ -2452,7 +2372,6 @@ Who decides whether you may create a campaign from the workbench?
 ## Glossary
 
 - **Agent**: A model that calls tools in a loop to do a task; its host controls which tools it may call.
-- **Context engineering**: Choosing the smallest, highest-signal context that lets the model do the next step well.
 - **Context window**: Everything the model sees in one call: instructions, tool definitions, messages and tool results.
 - **Cypher**: Neo4j's graph query language, which matches patterns of nodes and relationships.
 - **Durable Object**: A single-threaded, stateful Cloudflare instance with its own storage; one per user here.
@@ -2557,11 +2476,11 @@ Who decides whether you may create a campaign from the workbench?
 | `get_public_holidays` | Upcoming public holidays for a country from Nager.Date, a free public API. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `get_weather_alerts` | Active National Weather Service alerts at a Coastline Kitchen location, most severe first. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `get_fed_announcements` | The latest FOMC rate decision from the Federal Reserve's public press feed, and the market event it maps to. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
-| `get_graph_overview` | Counts of nodes and relationships in the knowledge graph, and its dataset version. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `explain_buyer_group` | Ranks an account's people for a buyer group, with the engagement paths behind each. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `find_audience_overlap` | Finds other campaigns whose audiences share people with a campaign's audience. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `check_consent_coverage` | How much of a campaign's audience holds consent for a channel, with uncovered examples. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `find_similar_past_pushes` | Past Coastline sends on the campaign's channel (emails or pushes) for a location, daypart, and weather, which menu items and content performed best, and the audience's opt-ins for that channel. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
+| `get_graph_overview` | Counts of nodes and relationships in the knowledge graph, and its dataset version. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `explain_buyer_group` | Ranks an account's people for a buyer group, with the engagement paths behind each. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `find_audience_overlap` | Finds other campaigns whose audiences share people with a campaign's audience. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `check_consent_coverage` | How much of a campaign's audience holds consent for a channel, with uncovered examples. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `find_similar_past_pushes` | Past Coastline sends on the campaign's channel (emails or pushes) for a location, daypart, and weather, which menu items and content performed best, and the audience's opt-ins for that channel. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
 | `plan_account_outreach` | An account's contacts in priority order, their consented channels, and the account's country. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `map_weather_demand` | The dishes forecast weather lifts, what they're made with, and the location's store manager. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `assess_location_impact` | The app audience near a location, how many can be reached on each channel, and campaigns to pause. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
@@ -2581,7 +2500,7 @@ Who decides whether you may create a campaign from the workbench?
 | `build_hcp_target_list` | Lumera's hospitals and prescriber groups ranked for a drug by patients, formulary access, share, decile and opted-in channels, with the first move at each. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `check_clinical_claims` | Each clinical claim for a drug: the trial behind it, whether its indication is on the label, and the MLR-approved content that carries it, with blockers. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `plan_hospital_engagement` | A hospital's formulary status and P&T timing for each Lumera drug, the value dossier to send (usable or blocked), its prescriber groups and consent, and ordered next steps. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
-| `trace_content_lineage` | Traces a campaign's content back to its brief and brand-rule results. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
+| `trace_content_lineage` | Traces a campaign's content back to its brief and brand-rule results. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
 | `recall_decisions` | Recalls remembered drafts and decisions about a subject in this workspace, dated and sourced. | [3.23 Long-term memory: remembering across chats](#323-long-term-memory-remembering-across-chats) |
 | `recall_recent_work` | Lists this workspace's most recent remembered drafts and decisions. | [3.23 Long-term memory: remembering across chats](#323-long-term-memory-remembering-across-chats) |
 | `explain_memory` | Shows where one memory came from: its record, the draft versions it replaced, and its subjects. | [3.23 Long-term memory: remembering across chats](#323-long-term-memory-remembering-across-chats) |
@@ -2600,16 +2519,16 @@ Who decides whether you may create a campaign from the workbench?
 
 | Name | What it is | Taught in |
 | --- | --- | --- |
-| `Brand` | Northstar and its brands: Coastline Kitchen (restaurants) and Harborstone Wealth (wealth management). | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `Channel` | Email, SMS, and the mobile app. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `ConsentScope` | A consent a person or segment holds for a channel. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `BrandRule` | A brand rule that content passes or fails. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `Campaign` | A marketing campaign, for Northstar or Coastline Kitchen. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `Brief` | The brief a campaign's content is built from. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `ContentAsset` | An email, push, or other piece of campaign content. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `Segment` | An audience a campaign targets. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `Account` | A fictional B2B customer account. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `Persona` | A buying role at an account; roles, not real people. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
+| `Brand` | Northstar and its brands: Coastline Kitchen (restaurants) and Harborstone Wealth (wealth management). | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `Channel` | Email, SMS, and the mobile app. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `ConsentScope` | A consent a person or segment holds for a channel. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `BrandRule` | A brand rule that content passes or fails. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `Campaign` | A marketing campaign, for Northstar or Coastline Kitchen. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `Brief` | The brief a campaign's content is built from. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `ContentAsset` | An email, push, or other piece of campaign content. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `Segment` | An audience a campaign targets. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `Account` | A fictional B2B customer account. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `Persona` | A buying role at an account; roles, not real people. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
 | `Daypart` | A time of day: breakfast, lunch, afternoon, dinner, and so on. | [3.15 Campaign context: restaurant data and live weather](#315-campaign-context-restaurant-data-and-live-weather) |
 | `WeatherCondition` | A weather bucket: clear, cloudy, fog, rain, or heat. | [3.15 Campaign context: restaurant data and live weather](#315-campaign-context-restaurant-data-and-live-weather) |
 | `Menu` | Coastline Kitchen's menu. | [3.15 Campaign context: restaurant data and live weather](#315-campaign-context-restaurant-data-and-live-weather) |
@@ -2617,8 +2536,8 @@ Who decides whether you may create a campaign from the workbench?
 | `Location` | A Coastline Kitchen restaurant in California. | [3.15 Campaign context: restaurant data and live weather](#315-campaign-context-restaurant-data-and-live-weather) |
 | `InventoryItem` | Stock a restaurant keeps, counted in kitchen units. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `StoreManager` | A restaurant's store manager, by name only. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
-| `PushSend` | One past push notification send and how it performed. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `EmailSend` | One past Coastline email send: its opens, clicks, and orders. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
+| `PushSend` | One past push notification send and how it performed. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `EmailSend` | One past Coastline email send: its opens, clicks, and orders. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
 | `Approval` | A compliance approval record: approved, expired, or pending, with its dates and any embargo. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `Disclosure` | Required disclosure text a regulated asset must carry. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `MarketEvent` | A market event Harborstone prepares approved content for. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
@@ -2646,27 +2565,27 @@ Who decides whether you may create a campaign from the workbench?
 
 | Name | What it is | Taught in |
 | --- | --- | --- |
-| `PART_OF` | A sub-brand under its parent brand, or a push send within its campaign. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `FOR` | A consent scope for its channel, a brief for its campaign, or a push for a location. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `RULE_OF` | A brand rule belonging to its brand. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `BELONGS_TO` | A campaign belonging to its brand. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `ON` | A campaign or push send on its channel. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `USES` | A campaign using a content asset. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `BUILT_FROM` | Content built from its brief. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `PASSED` | Content that passed a brand rule. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `FAILED` | Content that failed a brand rule. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `TARGETS` | A campaign targeting a segment. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `WORKS_AT` | A persona at its account. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `ENGAGED_WITH` | A persona that engaged with a content asset. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `INCLUDES` | A segment including a persona. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `HAS_CONSENT` | A persona or segment holding a consent scope; segments carry opt-in counts per channel. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
+| `PART_OF` | A sub-brand under its parent brand, or a push send within its campaign. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `FOR` | A consent scope for its channel, a brief for its campaign, or a push for a location. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `RULE_OF` | A brand rule belonging to its brand. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `BELONGS_TO` | A campaign belonging to its brand. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `ON` | A campaign or push send on its channel. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `USES` | A campaign using a content asset. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `BUILT_FROM` | Content built from its brief. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `PASSED` | Content that passed a brand rule. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `FAILED` | Content that failed a brand rule. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `TARGETS` | A campaign targeting a segment. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `WORKS_AT` | A persona at its account. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `ENGAGED_WITH` | A persona that engaged with a content asset. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `INCLUDES` | A segment including a persona. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `HAS_CONSENT` | A persona or segment holding a consent scope; segments carry opt-in counts per channel. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
 | `MENU_OF` | A menu belonging to its brand. | [3.15 Campaign context: restaurant data and live weather](#315-campaign-context-restaurant-data-and-live-weather) |
 | `ON_MENU` | A menu item on the menu. | [3.15 Campaign context: restaurant data and live weather](#315-campaign-context-restaurant-data-and-live-weather) |
 | `AVAILABLE_DURING` | A menu item offered during a daypart. | [3.15 Campaign context: restaurant data and live weather](#315-campaign-context-restaurant-data-and-live-weather) |
 | `FAVORITE` | A brand's favorite menu item. | [3.15 Campaign context: restaurant data and live weather](#315-campaign-context-restaurant-data-and-live-weather) |
 | `OPERATES` | A brand operating a location. | [3.15 Campaign context: restaurant data and live weather](#315-campaign-context-restaurant-data-and-live-weather) |
 | `SERVES` | A location serving a menu. | [3.15 Campaign context: restaurant data and live weather](#315-campaign-context-restaurant-data-and-live-weather) |
-| `NEAR` | An app segment near a location. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
+| `NEAR` | An app segment near a location. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
 | `MADE_WITH` | A menu item made with an inventory item, per serving. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `LIFTS_DEMAND` | Weather that raises a menu item's orders, learned from past pushes. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `MANAGED_BY` | A location managed by its store manager. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
@@ -2699,12 +2618,12 @@ Who decides whether you may create a campaign from the workbench?
 | `ON_FORMULARY` | A hospital and a drug, with its formulary status and days to the next P&T review. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `SEES_PATIENTS_WITH` | A hospital and a condition, with its annual patient count. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
 | `PRESCRIBES` | A prescriber group and a drug, with Lumera's share of the class. | [3.16 The use-case library: marketing, sales, service, and financial services](#316-the-use-case-library-marketing-sales-service-and-financial-services) |
-| `USED` | A push send that used a content asset. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `SENT_TO` | A push send delivered to a segment. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `SENT_UNDER` | A push send made under a consent scope. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `FEATURED` | A push send featuring a menu item. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `SENT_DURING` | A push send made during a daypart. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
-| `UNDER` | A push send made under a weather condition. | [2.3 How this demo does GraphRAG](#23-how-this-demo-does-graphrag) |
+| `USED` | A push send that used a content asset. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `SENT_TO` | A push send delivered to a segment. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `SENT_UNDER` | A push send made under a consent scope. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `FEATURED` | A push send featuring a menu item. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `SENT_DURING` | A push send made during a daypart. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
+| `UNDER` | A push send made under a weather condition. | [2.1 The graph, its tools, and evidence paths](#21-the-graph-its-tools-and-evidence-paths) |
 | `IN_WORKSPACE` | A memory event in its workspace. | [3.23 Long-term memory: remembering across chats](#323-long-term-memory-remembering-across-chats) |
 | `CREATED` | The memory event that created a draft or decision. | [3.23 Long-term memory: remembering across chats](#323-long-term-memory-remembering-across-chats) |
 | `SUPERSEDES` | A draft version replacing the one before it. | [3.23 Long-term memory: remembering across chats](#323-long-term-memory-remembering-across-chats) |
