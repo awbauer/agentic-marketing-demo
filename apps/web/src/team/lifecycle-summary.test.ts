@@ -11,16 +11,18 @@ import { provenanceOf, stagesOf } from "./TeamLifecycle";
 import { foldTeam } from "./team-state";
 
 describe("the lifecycle in a content team's words", () => {
-  it("says where a paused run stands without the lead's instruction to itself", () => {
+  it("says where a run stands from its state, not the wording of the lead's note", () => {
     const state = newLifecycle();
-    expect(plainStatus(state)).toBe(
-      "Paused in Business focus (Brief & strategy). Next: the insights and targeting agent hands in two or three focus areas, each citing its data.",
+    // Waiting on nobody: the lead stopped (out of attempts, or denied), and the run can't go on.
+    expect(plainStatus(state, false)).toBe(
+      "Stopped in Business focus (Brief & strategy), before the insights and targeting agent hands in two or three focus areas, each citing its data. This run can't continue; start a new run.",
     );
     recordArtifact(state, "propose_focus_areas", "audience-analyst", { areas: [] });
-    expect(plainStatus(state)).toBe(
+    expect(plainStatus(state, true)).toBe(
       "Paused in Business focus (Brief & strategy). Waiting on the brand lead: choose the focus area.",
     );
-    expect(plainStatus({ ...state, finished: true })).toBe(
+    expect(plainStatus(state, false)).toMatch(/^Stopped in Business focus .* start a new run\.$/);
+    expect(plainStatus({ ...state, finished: true }, false)).toBe(
       "The campaign has been through every phase.",
     );
   });

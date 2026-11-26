@@ -1104,6 +1104,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                       <LifecycleStatus
                         lifecycle={state.lifecycle}
                         summary={state.done.summary}
+                        waiting={Boolean(state.waiting)}
                         technical={technical}
                       />
                     ) : state.done ? (

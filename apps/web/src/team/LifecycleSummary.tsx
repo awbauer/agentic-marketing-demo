@@ -12,43 +12,54 @@ import {
 import { Term } from "./detail";
 import type { TeamState } from "./team-state";
 
-/** Where a stopped or finished lifecycle run stands, in plain words. */
-export function plainStatus(lifecycle: LifecycleState): string {
+/**
+ * Where a lifecycle run that has ended its turn stands, in plain words. It is paused only when it
+ * waits on a person (the run's own state says so: `waiting`); otherwise the lead stopped, the run
+ * is saved as stopped and cannot continue, and it says so rather than reading as a pause.
+ */
+export function plainStatus(lifecycle: LifecycleState, waiting: boolean): string {
   if (lifecycle.finished) return "The campaign has been through every phase.";
   const phase = pharmaPhase(lifecycle.phase);
   const where = phase ? `${phase.title} (${phase.familiar})` : lifecycle.phase;
   const step = currentStep(lifecycle);
-  if (!step) return `Paused in ${where}.`;
-  if (step.kind === "person")
-    return `Paused in ${where}. Waiting on the ${TEAM_GATES[step.gate].decider.toLowerCase()}: ${TEAM_GATES[step.gate].label.toLowerCase()}.`;
-  const role = LIFECYCLE_ROLES[step.agent];
-  return `Paused in ${where}. Next: the ${role.plain.toLowerCase()} hands in ${step.delivers.charAt(0).toLowerCase()}${step.delivers.slice(1)}.`;
+  const next = !step
+    ? null
+    : step.kind === "person"
+      ? `the ${TEAM_GATES[step.gate].decider.toLowerCase()}: ${TEAM_GATES[step.gate].label.toLowerCase()}`
+      : `the ${LIFECYCLE_ROLES[step.agent].plain.toLowerCase()} hands in ${step.delivers.charAt(0).toLowerCase()}${step.delivers.slice(1)}`;
+  if (!waiting)
+    return `Stopped in ${where}${next ? `, before ${next}` : ""}. This run can't continue; start a new run.`;
+  if (!step || step.kind !== "person") return `Paused in ${where}.`;
+  return `Paused in ${where}. Waiting on ${next}.`;
 }
-
-/** A run that ended on a hard limit or an error reads as a stop; a pause for the next step doesn't. */
-const isStop = (summary: string) => /hard limit|failed|error/i.test(summary);
 
 export function LifecycleStatus({
   lifecycle,
   summary,
+  waiting,
   technical,
 }: {
   lifecycle: LifecycleState;
   summary: string;
+  /** The run waits on a person's decision (it can go on); otherwise it has stopped. */
+  waiting: boolean;
   technical: boolean;
 }) {
+  const stopped = !waiting && !lifecycle.finished;
   return (
-    <div className={`team-done-inline${isStop(summary) ? " stopped" : " paused"}`} role="status">
-      {isStop(summary) ? summary : plainStatus(lifecycle)}
-      {!isStop(summary) &&
-        (technical ? (
-          <span className="team-raw-status">The lead's own note: {summary}</span>
-        ) : (
-          <details className="team-raw-status">
-            <summary>The lead's own note</summary>
-            {summary}
-          </details>
-        ))}
+    <div className={`team-done-inline${stopped ? " stopped" : " paused"}`} role="status">
+      {plainStatus(lifecycle, waiting)}
+      {stopped ? (
+        // Why it stopped is the point here, so it shows, not behind a disclosure.
+        <span className="team-raw-status">Why: {summary}</span>
+      ) : technical ? (
+        <span className="team-raw-status">The lead's own note: {summary}</span>
+      ) : (
+        <details className="team-raw-status">
+          <summary>The lead's own note</summary>
+          {summary}
+        </details>
+      )}
     </div>
   );
 }
