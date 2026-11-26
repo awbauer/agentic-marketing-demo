@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { GLOSSARY, LEARN_PARTS } from "./content";
 import { DIAGRAM_SPECS } from "./diagram-specs";
-import { forGoogleCloud, HOST_NEUTRAL_SECTIONS, learnFor } from "./host";
+import { detailsAsHtml, lessonParts, unclosedDetails } from "./details";
+import { diagramSpecsFor, HOST_NEUTRAL_SECTIONS, learnFor } from "./host";
+import { learnSetting, markersIn, parseMarker, resolveFor, resolveText } from "./variants";
 import { DIAGRAM_IDS } from "./diagrams";
 import { PART_LESSONS, SECTION_LESSONS } from "./lessons";
 import { LEARN_REFERENCE } from "./reference";
@@ -53,8 +55,21 @@ describe("learn page content", () => {
     }
   });
 
-  it("keeps the glossary sorted for scanning", () => {
-    const terms = GLOSSARY.map((entry) => entry.term);
+  it("closes every collapsible detail block and gives it a title", () => {
+    for (const section of sections) {
+      expect(unclosedDetails(section.body), section.id).toBe(0);
+      for (const part of lessonParts(section.body))
+        if (part.kind === "details") expect(part.title.length, section.id).toBeGreaterThan(3);
+    }
+    const body = "Lead.\n\n::: details More\nDeep.\n:::\n\nTail.";
+    expect(lessonParts(body).map((part) => part.kind)).toEqual(["text", "details", "text"]);
+    expect(detailsAsHtml(body)).toContain("<details>\n<summary>More</summary>\n\nDeep.");
+  });
+
+  it("keeps the glossary sorted for scanning, as written for Cloudflare", () => {
+    const terms = resolveFor(GLOSSARY, learnSetting("cloudflare", "workers-ai")).map(
+      (entry) => entry.term,
+    );
     expect(terms).toEqual([...terms].sort((a, b) => a.localeCompare(b)));
   });
 
@@ -84,7 +99,7 @@ describe("learn page content", () => {
   });
 });
 
-describe("the course on each host (ADR-018)", () => {
+describe("the course on each host and AI platform (ADR-018, ADR-021)", () => {
   const CLOUDFLARE_NAMES =
     /Cloudflare|Workers AI|AI Gateway|Durable Object|\bD1\b|\bR2\b|\bWorkers?\b|wrangler|\bAccess\b|FLUX|Clef|cf-access/;
   const strings = (value: unknown, key = ""): string[] => {
@@ -94,11 +109,34 @@ describe("the course on each host (ADR-018)", () => {
       return Object.entries(value).flatMap(([name, item]) => strings(item, name));
     return [];
   };
+  const settings = [
+    ["cloudflare", "workers-ai"],
+    ["cloudflare", "vertex"],
+    ["google-cloud", "vertex"],
+  ] as const;
 
-  it("serves the Cloudflare course exactly as written", () => {
-    const course = learnFor("cloudflare");
-    expect(course.parts).toBe(LEARN_PARTS);
-    expect(course.glossary).toBe(GLOSSARY);
+  it("writes every marker as hosts or as AI platforms, and leaves none unresolved", () => {
+    const markers = markersIn([LEARN_PARTS, GLOSSARY, DIAGRAM_SPECS]);
+    expect(markers.length).toBeGreaterThan(0);
+    expect(markers.filter((body) => typeof parseMarker(body) === "string")).toEqual([]);
+    for (const [host, platform] of settings) {
+      const course = learnFor(host, platform);
+      expect(
+        strings([course, diagramSpecsFor(host, platform)]).filter((text) => text.includes("{{")),
+      ).toEqual([]);
+    }
+  });
+
+  it("resolves a marker by host or by AI platform, and a missing option to nothing", () => {
+    const setting = learnSetting("cloudflare", "vertex");
+    expect(resolveText("{{cloudflare: D1 || google-cloud: Firestore}}", setting)).toBe("D1");
+    expect(resolveText("on {{workers-ai: Workers AI || vertex: Vertex AI}}", setting)).toBe(
+      "on Vertex AI",
+    );
+    expect(resolveText("a{{google-cloud: b}}c", setting)).toBe("ac");
+    // Google Cloud has only Vertex AI, whatever the browser remembered.
+    expect(learnSetting("google-cloud", "workers-ai").platform).toBe("vertex");
+    expect(typeof parseMarker("cloudflare: a || vertex: b")).toBe("string");
   });
 
   it("names no Cloudflare service on Google Cloud outside the lessons that compare hosts", () => {
@@ -118,14 +156,32 @@ describe("the course on each host (ADR-018)", () => {
     expect(leftovers).toEqual([]);
     expect(strings(course.glossary).filter((text) => CLOUDFLARE_NAMES.test(text))).toEqual([]);
     expect(
-      strings(forGoogleCloud(DIAGRAM_SPECS)).filter((text) => CLOUDFLARE_NAMES.test(text)),
+      strings(diagramSpecsFor("google-cloud")).filter((text) => CLOUDFLARE_NAMES.test(text)),
     ).toEqual([]);
   });
 
-  it("keeps every lesson, in order, on both hosts", () => {
-    const ids = (host: "cloudflare" | "google-cloud") =>
-      learnFor(host).parts.flatMap((part) => part.sections.map((section) => section.id));
-    expect(ids("google-cloud")).toEqual(ids("cloudflare"));
+  it("follows the AI platform chosen on Cloudflare: Vertex AI's models, no AI Gateway hop", () => {
+    const vertex = learnFor("cloudflare", "vertex");
+    const model = vertex.parts.flatMap((part) => part.sections).find((s) => s.id === "model");
+    expect(model?.title).toContain("Vertex AI");
+    expect(model?.body).toContain("gpt-oss-120b");
+    expect(model?.resources.map((item) => item.label)).not.toContain("Cloudflare AI Gateway");
+    const images = vertex.parts.flatMap((part) => part.sections).find((s) => s.id === "images");
+    expect(images?.body).toContain("Gemini");
+    // The host stays Cloudflare: sign-in and storage keep their Cloudflare names.
+    expect(strings(vertex).some((text) => text.includes("Cloudflare Access"))).toBe(true);
+    expect(strings(diagramSpecsFor("cloudflare", "vertex").architecture)).toContain("Vertex AI");
+    const workers = learnFor("cloudflare", "workers-ai");
+    expect(
+      workers.parts.flatMap((part) => part.sections).find((s) => s.id === "model")?.title,
+    ).toContain("Workers AI");
+  });
+
+  it("keeps every lesson, in order, in every edition", () => {
+    const ids = (host: "cloudflare" | "google-cloud", platform: "workers-ai" | "vertex") =>
+      learnFor(host, platform).parts.flatMap((part) => part.sections.map((section) => section.id));
+    for (const [host, platform] of settings)
+      expect(ids(host, platform)).toEqual(ids("cloudflare", "workers-ai"));
     const terms = learnFor("google-cloud").glossary.map((entry) => entry.term);
     expect(terms).toEqual([...terms].sort((a, b) => a.localeCompare(b)));
   });

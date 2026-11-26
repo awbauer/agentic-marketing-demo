@@ -1150,3 +1150,28 @@
     transform: none;
   }
 }
+
+/* Collapsible low-level detail inside a lesson (details.ts). */
+.learn-more {
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.learn-more > summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  font-weight: 600;
+  color: var(--forest);
+}
+.learn-more > summary::after {
+  content: " · detail";
+  font-weight: 400;
+  color: var(--muted);
+}
+.learn-more[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.learn-more > :not(summary) {
+  padding: 0 12px;
+}

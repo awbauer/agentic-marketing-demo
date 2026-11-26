@@ -33,6 +33,7 @@ import {
   type TeamEvent,
 } from "@northstar/architecture";
 import { type ReactNode, useState } from "react";
+import { Claim } from "./Claims";
 import { RichText, SourceChips } from "./RichText";
 import { ApprovedAssets } from "./TeamWork";
 
@@ -84,7 +85,7 @@ function ConceptBody({ concept }: { concept: Concept }) {
       <p className="team-rich-sources">
         <span>Claims</span>
         {concept.claimTopics.map((topic) => (
-          <code key={topic}>{topic}</code>
+          <Claim key={topic} id={topic} />
         ))}
       </p>
       <ApprovedAssets picks={concept.assets} />
@@ -123,12 +124,9 @@ function ModuleView({ module }: { module: PharmaModule }) {
             <sup>{claim.marker}</sup>
             {claim.context && <small className="team-module-context">{claim.context}</small>}
             {claim.claimId && (
-              <code
-                className="team-claim-id"
-                title={`Entered by ID from the claims library, ${claim.labelVersion ?? ""}`}
-              >
-                {claim.claimId}
-              </code>
+              <span className="team-claim-id">
+                <Claim id={claim.claimId} />
+              </span>
             )}
           </li>
         ))}
@@ -288,7 +286,9 @@ function DeploymentView({
                   <>
                     <code>{placementOf(line)?.placementId}</code>
                     <small className="team-claim-ids">
-                      {placementOf(line)?.claimIds.join(" · ")}
+                      {placementOf(line)?.claimIds.map((id) => (
+                        <Claim key={id} id={id} />
+                      ))}
                     </small>
                   </>
                 ) : (
@@ -386,7 +386,7 @@ function ClaimTraceView({ trace }: { trace: ClaimTrace }) {
             {trace.claims.map((claim) => (
               <tr key={claim.claimId}>
                 <th scope="row">
-                  <code>{claim.claimId}</code> <small>{claim.topic}</small>
+                  <Claim id={claim.claimId} /> <small>{claim.topic}</small>
                 </th>
                 <td>
                   {claim.placements.length
@@ -413,7 +413,10 @@ function ClaimTraceView({ trace }: { trace: ClaimTrace }) {
             {trace.withdrawal.map((item) => (
               <li key={item.placementId}>
                 <code>{item.placementId}</code> <code>{item.materialId}</code>{" "}
-                {PHARMA_CHANNELS[item.channel]?.label ?? item.channel} · {item.claimIds.join(", ")}{" "}
+                {PHARMA_CHANNELS[item.channel]?.label ?? item.channel} ·{" "}
+                {item.claimIds.map((id) => (
+                  <Claim key={id} id={id} />
+                ))}{" "}
                 · {item.status}
               </li>
             ))}
@@ -493,7 +496,7 @@ function ResultsView({
           <ul className="team-claim-usage">
             {data.byClaim.map((usage) => (
               <li key={usage.claimId}>
-                <code>{usage.claimId}</code> · {num(usage.delivered)} reached (email deliveries and
+                <Claim id={usage.claimId} /> · {num(usage.delivered)} reached (email deliveries and
                 display impressions) · {num(usage.clicks)} clicks · {usage.lines} result lines
               </li>
             ))}

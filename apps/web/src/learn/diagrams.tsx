@@ -2,7 +2,8 @@ import { pageHost } from "@northstar/contracts";
 import type { ReactNode } from "react";
 import { labelColor } from "../graph/graph-model";
 import { type Card, DIAGRAM_SPECS, type DiagramBlock, type Step } from "./diagram-specs";
-import { forGoogleCloud } from "./host";
+import { diagramSpecsFor } from "./host";
+import { useAiPlatform } from "../ai-platform";
 import type { DiagramId } from "./lessons";
 
 /**
@@ -281,10 +282,10 @@ function DiagramBlockView({ block }: { block: DiagramBlock }) {
 }
 
 /** The diagrams with the names of the host this page came from (ADR-018). */
-const SPECS = pageHost() === "google-cloud" ? forGoogleCloud(DIAGRAM_SPECS) : DIAGRAM_SPECS;
-
 export function Diagram({ id }: { id: DiagramId }) {
-  const spec = SPECS[id];
+  // Drawn for this page's host and the AI platform chosen in the top bar.
+  const { platform } = useAiPlatform();
+  const spec = diagramSpecsFor(pageHost(), platform)[id];
   return (
     <Figure label={spec.label} caption={spec.caption}>
       {spec.blocks.map((block, index) => (

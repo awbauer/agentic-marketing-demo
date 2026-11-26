@@ -1974,11 +1974,6 @@
 .team-claim-id {
   display: inline-block;
   margin-left: 6px;
-  padding: 0 5px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  font-size: 11px;
-  color: var(--muted);
   vertical-align: 1px;
 }
 .team-module-context {
@@ -2230,4 +2225,138 @@
 .team-guardrail-detail {
   overflow-wrap: anywhere;
   color: var(--ink);
+}
+
+/* A claim you can click for the library's details (Claims.tsx). */
+.team-claim {
+  position: relative;
+  display: inline-block;
+  margin-right: 4px;
+}
+.team-claim-chip {
+  padding: 0 5px;
+  border: 1px dashed var(--forest);
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--forest);
+  font:
+    11px / 1.6 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  cursor: pointer;
+}
+.team-claim-chip:hover,
+.team-claim-chip[aria-expanded="true"] {
+  border-style: solid;
+  background: #eef5df;
+}
+.team-claim-chip.unusable {
+  border-color: #b42318;
+  color: #8a1c12;
+}
+.team-claim-card {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  display: grid;
+  gap: 6px;
+  width: min(380px, 80vw);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(21 34 29 / 18%);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+}
+.team-claim-card q {
+  font-style: italic;
+}
+.team-claim-status {
+  color: var(--muted);
+}
+.team-claim-issues {
+  color: #8a1c12;
+}
+.team-claim-card dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 8px;
+  margin: 0;
+}
+.team-claim-card dt {
+  font-weight: 600;
+}
+.team-claim-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Reset session, at the top of the squad page. */
+.team-reset {
+  padding: 4px 10px;
+  border: 1px solid var(--forest);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--forest);
+  font-weight: 600;
+  cursor: pointer;
+}
+.team-reset:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The agents at a glance, under the hood. */
+.team-roster small {
+  color: var(--muted);
+}
+
+/* The tool library, under the hood: every tool, with this run's and this session's use. */
+.team-tool-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin: 8px 0;
+}
+.team-tool-filters input[type="search"] {
+  flex: 1 1 220px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.team-tool-table caption {
+  text-align: left;
+  font-weight: 700;
+  padding: 6px 0;
+}
+.team-tool-table tr.used-run {
+  background: #e6f2d0;
+}
+.team-tool-table tr.used-run th code {
+  font-weight: 700;
+}
+.team-tool-table tr.used-session {
+  background: #f4f8ec;
+}
+.team-tool-table td:last-child {
+  white-space: nowrap;
+}
+.team-claim-card,
+.team-claim-card * {
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: inherit;
+}
+.team-claim-card {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.team-claim-card code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }

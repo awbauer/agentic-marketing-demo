@@ -19,6 +19,8 @@ export type SessionRun = {
   /** The run ran on the scripted test model, not a real one. */
   scripted: boolean;
   status: "done" | "waiting" | "stopped";
+  /** Every tool the run's agents called, for the tool library's session highlights. */
+  tools?: string[];
   at: string;
   scorecard: TeamScorecard | null;
 };
@@ -101,3 +103,7 @@ function subscribe(listener: () => void) {
 
 /** The current session's metrics, updating as runs are recorded or the session is reset. */
 export const useSessionMetrics = () => useSyncExternalStore(subscribe, snapshot, snapshot);
+
+/** Every tool called by a run recorded in this session. */
+export const sessionTools = (metrics: SessionMetrics) =>
+  new Set(metrics.runs.flatMap((run) => run.tools ?? []));
