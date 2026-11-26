@@ -462,7 +462,7 @@ Feature code asks \`dataPlatform(env)\` for repositories (D1, or the Firestore t
 ::: details Credentials, tracing and narrowing the menu
 - The Worker needs no Google key: through **Workload Identity Federation** it signs its own short-lived token, which Google's Security Token Service exchanges for an hour's access as a service account that may only call Vertex AI.
 - The route map and trace name the platform each turn ran on. A Vertex turn has no AI Gateway hop, whichever host served it.
-- \`AI_PLATFORMS_ENABLED\` (in \`wrangler.jsonc\`, or a Cloud Run environment variable) narrows the menu: a comma-separated list; a platform left out is neither listed nor run, even if requested.
+- \`AI_PLATFORMS_ENABLED\` (a dashboard variable on the Worker, which deploys keep; a Cloud Run environment variable) narrows the menu: a comma-separated list; a platform left out is neither listed nor run, even if requested.
 :::
 
 ::: details Chats, models and sign-in on Google Cloud
