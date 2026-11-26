@@ -4,6 +4,7 @@
 // until the person at the browser decides, acting as the role the step needs. The MLR system
 // routes a submitted job to Medical, Legal and Regulatory in turn without waiting on the lead.
 import {
+  TEAM_STEP_CAPS,
   teamAgentsFor,
   applyDecision,
   approveJob,
@@ -69,6 +70,7 @@ import {
   addUsage,
 } from "./run";
 import { serverHost } from "../platform/models";
+import { leadTurnLimit, recordLimit, runLimit } from "./limits";
 
 /** Who each person step is, as a party on the message bus. */
 export const GATE_PARTY: Record<TeamGate, TeamParty> = {
@@ -279,8 +281,11 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       },
     }),
   };
-  const halted = () => Boolean(run.waiting) || run.finished || stopped;
-  for (let attempt = 0; attempt < 3 && !halted(); attempt += 1) {
+  // Hard limits (limits.ts): this turn's lead tool calls, and the whole run's model calls and tokens.
+  const turnStart = run.events.length;
+  const limited = () => leadTurnLimit(run, TEAM_DIRECTOR, turnStart) ?? runLimit(run);
+  const halted = () => Boolean(run.waiting) || run.finished || stopped || limited() !== null;
+  for (let attempt = 0; attempt < TEAM_STEP_CAPS.tries && !halted(); attempt += 1) {
     if (attempt > 0)
       messages.push({
         role: "user",
@@ -301,7 +306,7 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       // lifecycle_step is how the lead acts. It isn't forced on the lead's own turn (ADR-019); a turn
       // that ends without it gets a nudge, and the nudge's first step must call a tool, so a call
       // the model meant to make (and Vertex dropped) is recovered rather than lost.
-      stopWhen: [stepCountIs(16), halted],
+      stopWhen: [stepCountIs(TEAM_STEP_CAPS.lifecycleLeadStepsPerTry), halted],
       prepareStep: ({ stepNumber }) =>
         attempt > 0 && stepNumber === 0 ? { toolChoice: "required" as const } : {},
       ...AGENT_GENERATION,
@@ -319,10 +324,12 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
   }
   if (run.waiting) return;
   const state = lifecycleOf(run);
+  const hit = run.finished ? null : limited();
+  if (hit) recordLimit(run, TEAM_DIRECTOR, hit);
   // Asking a person is procedural: if the lead's loop ends with a person's step next, the system
   // routes it to them rather than leaving the run stuck one step from done.
   const next = currentStep(state);
-  if (!run.finished && !stopped && next?.kind === "person") {
+  if (!run.finished && !stopped && hit?.scope !== "run" && next?.kind === "person") {
     const why = `Ready for you: ${next.does}`;
     say(run, TEAM_DIRECTOR, GATE_PARTY[next.gate], "approval-request", why);
     pauseFor(run, next.gate, why);
@@ -333,7 +340,7 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
     type: "done",
     summary: run.finished
       ? `The campaign went from focus to analytics: ${PHARMA_PHASES.length} phases, MLR approved as ${(state.artifacts.mlr_approval?.data as ApprovedJob | undefined)?.documentNumber ?? "—"}, and the brand lead chose to ${state.choices["next-action"] ?? "decide later"}.`
-      : `The lead stopped in ${pharmaPhase(state.phase)?.title ?? state.phase}. ${describeNext(state)}`,
+      : `${hit ? `A hard limit stopped the run: ${hit.detail} ` : ""}The lead stopped in ${pharmaPhase(state.phase)?.title ?? state.phase}. ${describeNext(state)}`,
     tokens: run.tokens,
     latencyMs: Date.now() - run.started,
   });

@@ -1,10 +1,15 @@
 // Guardrails at work: every time a rule check, the policy gateway or a tool's input contract stopped
 // an agent, shown as it happens and explained. A refusal is the system doing its job, so the demo
 // puts it in view rather than burying it in the tool log.
-import { TEAM_AGENTS, type TeamAgentId } from "@northstar/architecture";
+import {
+  TEAM_AGENTS,
+  TEAM_LIMITS,
+  type TeamAgentId,
+  type TeamLimit,
+} from "@northstar/architecture";
 import type { GuardrailHit } from "./team-state";
 
-const KINDS: Record<GuardrailHit["kind"], { label: string; explain: string }> = {
+export const KINDS: Record<GuardrailHit["kind"], { label: string; explain: string }> = {
   rule: {
     label: "Rule check refused the save",
     explain:
@@ -15,6 +20,11 @@ const KINDS: Record<GuardrailHit["kind"], { label: string; explain: string }> = 
     explain:
       "Cedar policies decide which tools each agent may use, and at which step. This call wasn't permitted, so it never ran.",
   },
+  limit: {
+    label: "A hard limit stopped the work",
+    explain:
+      "Above the per-step checks, the squad has hard limits on tool calls per assignment, failed calls, calls per lead turn, and model calls and tokens per run. Hitting one stops that work and says why, so a model that keeps calling tools without finishing can't spin through the run.",
+  },
   contract: {
     label: "Tool contract rejected the call",
     explain:
@@ -23,7 +33,7 @@ const KINDS: Record<GuardrailHit["kind"], { label: string; explain: string }> = 
 };
 
 /** What each save's rule check protects, in a reviewer's words. */
-const PROTECTS: Record<string, string> = {
+export const PROTECTS: Record<string, string> = {
   report_research: "Findings must cite real data ids from the semantic layer: cite or refuse.",
   propose_creative:
     "The palette and imagery must come from the brand book, and nothing it forbids.",
@@ -37,6 +47,16 @@ const PROTECTS: Record<string, string> = {
     "Medical/Legal/Regulatory: modules use approved claims word for word, never next to a claim they must not appear with.",
   build_audience:
     "The audience must be built from real segments in the HCP universe, with their decile bands.",
+};
+
+/** Each hard limit in words. */
+export const LIMIT_NAMES: Record<TeamLimit, string> = {
+  assignmentToolCalls: "tool calls in one assignment",
+  assignmentFailures: "failed tool calls in one assignment",
+  sameRefusals: "the same refusal in a row",
+  leadToolCallsPerTurn: "the lead's tool calls in one turn",
+  runModelCalls: "model calls in the run",
+  runTokens: "tokens in the run",
 };
 
 const agentName = (id: TeamAgentId) => TEAM_AGENTS.find((agent) => agent.id === id)?.name ?? id;
@@ -64,11 +84,25 @@ export function GuardrailPanel({ hits }: { hits: readonly GuardrailHit[] }) {
               <strong>{KINDS[hit.kind].label}</strong>
               {hit.count > 1 ? <span className="team-guardrail-count"> ×{hit.count}</span> : null}
               <span className="team-guardrail-status">
-                {hit.fixed ? "✓ fixed on a later try" : "not fixed yet"}
+                {hit.kind === "limit"
+                  ? "stopped"
+                  : hit.fixed
+                    ? "✓ fixed on a later try"
+                    : "not fixed yet"}
               </span>
             </p>
             <p>
-              {agentName(hit.agent)} called <code>{hit.tool}</code>.{" "}
+              {hit.kind === "limit" ? (
+                <>
+                  {agentName(hit.agent)} reached the limit on{" "}
+                  {LIMIT_NAMES[hit.tool as TeamLimit] ?? hit.tool} (
+                  {TEAM_LIMITS[hit.tool as TeamLimit]?.toLocaleString("en-US")}).{" "}
+                </>
+              ) : (
+                <>
+                  {agentName(hit.agent)} called <code>{hit.tool}</code>.{" "}
+                </>
+              )}
               {PROTECTS[hit.tool] ? `${PROTECTS[hit.tool]} ` : ""}
               {KINDS[hit.kind].explain}
               {hit.count > 2 && !hit.fixed

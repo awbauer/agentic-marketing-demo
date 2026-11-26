@@ -3,6 +3,7 @@
 // reconciles the pieces where they disagree, and sends the client one proposal. It never does a
 // spoke's work itself.
 import {
+  TEAM_STEP_CAPS,
   teamAgentsFor,
   buildTeamPolicies,
   CLIENT_ROUNDS,
@@ -54,6 +55,7 @@ import { dataPlatform, storeLabel } from "../platform/data";
 import { continueLifecycleRun } from "./lifecycle";
 import { runSpecialist } from "./specialists";
 import { serverHost } from "../platform/models";
+import { leadTurnLimit, recordLimit, runLimit } from "./limits";
 
 /** How many times the lead may send one spoke's work back. */
 const REVISION_LIMIT = 2;
@@ -391,8 +393,11 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
     }),
   };
   // Each turn runs up to 24 steps; a turn that ends without a proposal gets a reminder, twice.
-  const halted = () => Boolean(run.waiting) || run.finished || stopped;
-  for (let attempt = 0; attempt < 3 && !halted(); attempt += 1) {
+  // Hard limits (limits.ts): this turn's lead tool calls, and the whole run's model calls and tokens.
+  const turnStart = run.events.length;
+  const limited = () => leadTurnLimit(run, TEAM_DIRECTOR, turnStart) ?? runLimit(run);
+  const halted = () => Boolean(run.waiting) || run.finished || stopped || limited() !== null;
+  for (let attempt = 0; attempt < TEAM_STEP_CAPS.tries && !halted(); attempt += 1) {
     if (attempt > 0)
       messages.push({
         role: "user",
@@ -413,7 +418,7 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       tools,
       // next_step is how the lead acts; it isn't forced, and a turn that ends in prose gets a
       // nudge (ADR-019).
-      stopWhen: [stepCountIs(24), halted],
+      stopWhen: [stepCountIs(TEAM_STEP_CAPS.squadLeadStepsPerTry), halted],
       ...AGENT_GENERATION,
     });
     // A model that won't make the required call ends this turn; the next one nudges it.
@@ -430,6 +435,8 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
     }
   }
   if (run.waiting) return announceWait(run);
+  const hit = run.finished ? null : limited();
+  if (hit) recordLimit(run, TEAM_DIRECTOR, hit);
   setStatus(run, TEAM_DIRECTOR, run.finished ? "done" : "blocked");
   const accepted = TEAM_SPECIALISTS.filter((id) => run.reviews[id] === "accepted").length;
   const conflicts = run.strategy?.resolutions.length ?? findConflicts(run.outputs).length;
@@ -437,9 +444,11 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
     type: "done",
     summary: run.finished
       ? `The client approved the proposal. The lead kept all ${accepted} spokes' work${conflicts ? `, resolved ${conflicts} clash${conflicts === 1 ? "" : "es"}` : ""}${run.clientRounds ? ` and revised it ${run.clientRounds} time${run.clientRounds === 1 ? "" : "s"} for the client` : ""}.`
-      : run.delivered
-        ? "The lead sent a proposal, but the run stopped before the client approved it."
-        : `The lead stopped before sending a proposal (${accepted} of 4 pieces kept).`,
+      : `${hit ? `A hard limit stopped the run: ${hit.detail} ` : ""}${
+          run.delivered
+            ? "The lead sent a proposal, but the run stopped before the client approved it."
+            : `The lead stopped before sending a proposal (${accepted} of 4 pieces kept).`
+        }`,
     tokens: run.tokens,
     latencyMs: Date.now() - run.started,
   });

@@ -64,4 +64,19 @@ describe("guardrails at work", () => {
       [1, true],
     ]);
   });
+
+  it("shows a hard limit as its own guardrail hit, never fixed", () => {
+    const state = foldTeam([
+      {
+        type: "limit",
+        scope: "assignment",
+        agent: "audience-analyst",
+        limit: "assignmentFailures",
+        detail: "6 of its tool calls on this assignment failed.",
+      } as TeamEvent,
+    ]);
+    expect(state.guardrails).toEqual([
+      expect.objectContaining({ kind: "limit", tool: "assignmentFailures", fixed: false }),
+    ]);
+  });
 });

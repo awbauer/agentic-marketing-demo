@@ -1,6 +1,8 @@
 // One agent, opened from the team map: who it is, the model and settings it runs on, the exact
 // system prompts it sent, what it used (calls, tokens, time, cost), every call it sent to or
-// received from another party, its tool calls with the gateway's decision, and the work it saved.
+// received from another party, its tool calls with the gateway's decision, the work it saved, and
+// the guardrails around it: its allowances and how much it has used, the rule checks on its saves,
+// its gateway grants, and every time a guardrail stopped it.
 // Everything comes from the run's event log, so a live run, a reloaded run and a replay show the
 // same thing.
 import {
@@ -18,6 +20,8 @@ import {
 } from "@northstar/architecture";
 import { hostTerms } from "@northstar/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { agentAllowances } from "./allowances";
+import { GuardrailPanel, PROTECTS } from "./Guardrails";
 import { ArtifactView } from "./TeamLifecycle";
 import { TeamWorkView } from "./TeamWork";
 import { KIND_LABELS, type TeamMessage, type TeamState } from "./team-state";
@@ -26,7 +30,7 @@ import { KIND_LABELS, type TeamMessage, type TeamState } from "./team-state";
 const HOST = hostTerms();
 
 type Prompt = Extract<TeamEvent, { type: "prompt" }>;
-type Tab = "overview" | "prompt" | "usage" | "calls" | "work";
+type Tab = "overview" | "prompt" | "usage" | "calls" | "work" | "guardrails";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "overview", label: "Overview" },
@@ -34,6 +38,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: "usage", label: "Usage" },
   { id: "calls", label: "Calls" },
   { id: "work", label: "Tools & work" },
+  { id: "guardrails", label: "Guardrails" },
 ];
 
 const PURPOSE_LABELS: Record<Prompt["purpose"], string> = {
@@ -138,6 +143,69 @@ function Overview({ state, id }: { state: TeamState; id: TeamAgentId }) {
             : ""}
         </p>
       )}
+    </div>
+  );
+}
+
+function Guardrails({ state, id }: { state: TeamState; id: TeamAgentId }) {
+  const manifest = TEAM_AGENTS.find((agent) => agent.id === id);
+  const allowances = agentAllowances(state, id);
+  const hits = state.guardrails.filter((hit) => hit.agent === id);
+  const checked = (manifest?.tools ?? []).filter((tool) => PROTECTS[tool]);
+  return (
+    <div className="team-modal-section">
+      <p className="arch-note">
+        What this agent may do before code stops it, and how much it has used. The model never sees
+        or sets these; the platform enforces them around every call.
+      </p>
+      <h5>Allowances</h5>
+      <div className="team-table-wrap">
+        <table className="team-table team-allowances">
+          <thead>
+            <tr>
+              <th scope="col">Allowance</th>
+              <th scope="col">Limit</th>
+              <th scope="col">Used</th>
+              <th scope="col">At the limit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allowances.map((item) => {
+              const share = item.used === null ? 0 : item.used / item.allowed;
+              return (
+                <tr
+                  key={item.label}
+                  className={share >= 1 ? "at-limit" : share >= 0.75 ? "near-limit" : undefined}
+                >
+                  <th scope="row">{item.label}</th>
+                  <td>{num(item.allowed)}</td>
+                  <td>
+                    {item.used === null ? "—" : num(item.used)}
+                    {item.usedNote ? <small> {item.usedNote}</small> : null}
+                  </td>
+                  <td>{item.atLimit}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {checked.length > 0 && (
+        <>
+          <h5>Rule checks on its saves</h5>
+          <ul className="team-modal-list">
+            {checked.map((tool) => (
+              <li key={tool}>
+                <code>{tool}</code>: {PROTECTS[tool]}
+              </li>
+            ))}
+          </ul>
+          <p className="arch-note">
+            Code checks each save, whatever the model wrote. A refused save changes nothing, and the
+            agent gets every problem back to fix.
+          </p>
+        </>
+      )}
       <h5>Gateway grants</h5>
       <p className="team-grants">
         {manifest?.tools.map((tool) => (
@@ -146,8 +214,14 @@ function Overview({ state, id }: { state: TeamState; id: TeamAgentId }) {
       </p>
       <p className="arch-note">
         A default-deny Cedar policy permits exactly these tools as <code>team:&lt;tool&gt;</code>{" "}
-        for this agent; every other call is denied and logged.
+        for this agent; every other call is denied and logged. Each tool's input schema rejects a
+        malformed call before it runs.
       </p>
+      {hits.length > 0 ? (
+        <GuardrailPanel hits={hits} />
+      ) : (
+        <p className="arch-note">No guardrail has stopped this agent in this run.</p>
+      )}
     </div>
   );
 }
@@ -511,6 +585,9 @@ export function AgentModal({
       ).length,
       tools: state.agents[agent].tools.length,
       model: state.modelCalls.filter((call) => call.agent === agent).length,
+      hits: state.guardrails
+        .filter((hit) => hit.agent === agent)
+        .reduce((sum, hit) => sum + hit.count, 0),
     }),
     [state, agent],
   );
@@ -562,6 +639,7 @@ export function AgentModal({
               {label}
               {id === "prompt" && counts.prompts ? ` (${counts.prompts})` : ""}
               {id === "calls" && counts.calls ? ` (${counts.calls})` : ""}
+              {id === "guardrails" && counts.hits ? ` (${counts.hits})` : ""}
             </button>
           ))}
         </div>
@@ -576,6 +654,7 @@ export function AgentModal({
           {tab === "usage" && <Usage state={state} id={agent} />}
           {tab === "calls" && <Calls state={state} id={agent} />}
           {tab === "work" && <Work state={state} id={agent} />}
+          {tab === "guardrails" && <Guardrails state={state} id={agent} />}
         </div>
       </div>
     </dialog>

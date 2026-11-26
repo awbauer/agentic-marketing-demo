@@ -5,6 +5,7 @@
 // unsupported claim, an unapproved image, a contact without consent or a module past its expiry is
 // refused with the reason, and the agent has to fix it.
 import {
+  TEAM_STEP_CAPS,
   type ApprovedJob,
   buildTeamPolicies,
   type GatewayContext,
@@ -56,6 +57,9 @@ import { AGENT_GENERATION } from "../architecture/agent-runtime";
 import { offerTools } from "../architecture/context";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import { emitArtifact, lifecycleFile, lifecycleWorld } from "./lifecycle";
+import { assignmentLimit, type LimitHit, recordLimit, runLimit } from "./limits";
+import { newSaveState, refusal, type SaveState, stuckOnRefusal, stuckReport } from "./repeat-guard";
+
 import {
   addUsage,
   explainModelError,
@@ -100,6 +104,41 @@ function namedClaimTopics(
         .map((claim) => claim.topic),
     ]),
   ];
+}
+
+/**
+ * The segments and decile bands an audience request names, however the model wrote them: a list of
+ * { segmentId, deciles }, or segments keyed by id; bands under deciles, decileBands, bands or
+ * decile_bands, as a list or a string, in any case. A run on Vertex sent decileBands keyed by
+ * segment and was refused thirty times for "no decile bands".
+ */
+export function audienceInclude(
+  value: unknown,
+): Array<{ segmentId: string; deciles: Array<(typeof DECILE_BANDS)[number]> }> {
+  const bandsOf = (item: Record<string, unknown>) => {
+    const raw = item.deciles ?? item.decileBands ?? item.decile_bands ?? item.bands ?? item.decile;
+    const words = list(raw as string[] | string)
+      .flatMap((band) =>
+        String(band)
+          .toLowerCase()
+          .split(/[^a-z]+/),
+      )
+      .filter(Boolean);
+    return DECILE_BANDS.filter((band) => words.includes(band));
+  };
+  const entries: Array<Record<string, unknown>> =
+    value && typeof value === "object" && !Array.isArray(value) && !("segmentId" in value)
+      ? Object.entries(value as Record<string, unknown>).map(([segmentId, item]) => ({
+          ...(item && typeof item === "object" && !Array.isArray(item)
+            ? (item as Record<string, unknown>)
+            : { deciles: item }),
+          segmentId,
+        }))
+      : list(value as Array<Record<string, unknown>> | Record<string, unknown>);
+  return entries.map((item) => ({
+    segmentId: String(item.segmentId ?? "").replace(/\u2011/g, "-"),
+    deciles: bandsOf(item),
+  }));
 }
 
 /** One content module as a worker drafts it, before the service checks it. */
@@ -314,7 +353,7 @@ function saveTool(
   run: TeamRun,
   agent: LifecycleWorker,
   step: AgentStep,
-  saved: { done: boolean },
+  saved: SaveState,
 ): ToolSet {
   const brief = run.brief;
   const save = (data: unknown, extra: Record<string, unknown> = {}) => {
@@ -322,9 +361,7 @@ function saveTool(
     saved.done = true;
     return { saved: true, version: item.version, ...extra };
   };
-  const refuse = (problems: string[]) => ({
-    error: `Refused. Fix every problem and save again: ${problems.join(" ")}`,
-  });
+  const refuse = (problems: string[]) => refusal(saved, problems);
   const definitions: Record<
     string,
     { description: string; schema: z.ZodType; run: (input: never) => unknown }
@@ -498,21 +535,23 @@ function saveTool(
     },
     build_audience: {
       description:
-        "Build the HCP list: the segments to include, each with its decile bands (high, mid, low), and why. The service applies email consent and the do-not-contact list.",
+        'Build the HCP list: the segments to include, each with its decile bands in `deciles` (one or more of "high", "mid", "low"), and why. Example: {"include": [{"segmentId": "lt-seg-hf-specialists", "deciles": ["high", "mid"]}], "rationale": "…"}. The service applies email consent and the do-not-contact list.',
       schema: z.object({
-        include: many(z.object({ segmentId: z.string(), deciles: words })),
+        include: z.union([
+          many(
+            z.looseObject({
+              segmentId: z.string(),
+              deciles: words.describe('One or more of "high", "mid", "low".'),
+            }),
+          ),
+          // gpt-oss sometimes keys the segments by id instead of listing them.
+          z.record(z.string(), z.unknown()),
+        ]),
         rationale: z.string(),
       }),
       run: (input: { include: unknown; rationale: string }) => {
         const request = {
-          include: list(input.include as Array<{ segmentId: string; deciles: unknown }>).map(
-            (item) => ({
-              segmentId: item.segmentId,
-              deciles: list(item.deciles as string[] | string).filter((band) =>
-                (DECILE_BANDS as readonly string[]).includes(band),
-              ) as Array<(typeof DECILE_BANDS)[number]>,
-            }),
-          ),
+          include: audienceInclude(input.include),
           rationale: input.rationale ?? "",
         };
         const result = buildAudience(brief, request);
@@ -655,7 +694,10 @@ export async function runLifecycleWorker(
   task: string,
 ): Promise<{ saved: boolean; report: string }> {
   const lifecycle = state(run);
-  const saved = { done: false };
+  const saved = newSaveState();
+  // Hard limits on this assignment and on the run (limits.ts), counted from here.
+  const since = run.events.length;
+  const limited = (): LimitHit | null => assignmentLimit(run, agent, since) ?? runLimit(run);
   const round = lifecycle.rounds[lifecycle.phase];
   const notes = round > 1 ? lifecycle.notes[lifecycle.phase] : undefined;
   const previous = lifecycle.artifacts[step.tool]?.data ?? null;
@@ -695,7 +737,11 @@ export async function runLifecycleWorker(
     .join("\n\n");
   const model = teamModel(run, agent);
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
-  for (let attempt = 0; attempt < 3 && !saved.done; attempt += 1) {
+  for (
+    let attempt = 0;
+    attempt < TEAM_STEP_CAPS.tries && !saved.done && !stuckOnRefusal(saved) && !limited();
+    attempt += 1
+  ) {
     if (attempt > 0)
       messages.push({
         role: "user",
@@ -713,7 +759,12 @@ export async function runLifecycleWorker(
       system: system(run, agent, step, "work"),
       messages,
       tools,
-      stopWhen: [stepCountIs(10), () => saved.done],
+      stopWhen: [
+        stepCountIs(TEAM_STEP_CAPS.workerStepsPerTry),
+        () => saved.done,
+        () => stuckOnRefusal(saved),
+        () => limited() !== null,
+      ],
       // This stage's tools only (its reads and its save, within the agent's grants), in the
       // worker's chosen order: the first step must use one, and from the fifth step (or on a
       // nudge) only saving is on offer (ADR-019).
@@ -792,11 +843,25 @@ export async function runLifecycleWorker(
     const failed = [...run.events]
       .reverse()
       .find((event) => event.type === "tool" && event.agent === agent && !event.step.ok);
-    report =
-      `I could not save my work with ${step.tool}.${failed?.type === "tool" ? ` The last failure: ${failed.step.error}` : ""}`.slice(
-        0,
-        700,
-      );
+    const hit = stuckOnRefusal(saved)
+      ? ({
+          scope: "assignment",
+          limit: "sameRefusals",
+          detail: `${step.tool} was refused ${saved.repeats} times in a row for the same reason.`,
+        } as const)
+      : limited();
+    if (hit) recordLimit(run, agent, hit);
+    report = stuckOnRefusal(saved)
+      ? stuckReport(step.tool, saved).slice(0, 700)
+      : hit
+        ? `I stopped without saving: ${hit.detail} The last failure: ${failed?.type === "tool" ? failed.step.error : "none"}`.slice(
+            0,
+            700,
+          )
+        : `I could not save my work with ${step.tool}.${failed?.type === "tool" ? ` The last failure: ${failed.step.error}` : ""}`.slice(
+            0,
+            700,
+          );
   }
   say(run, agent, "campaign-lead", "report", report);
   setStatus(run, agent, saved.done ? "done" : "blocked");

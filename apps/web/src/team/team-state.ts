@@ -80,7 +80,7 @@ export type TeamPhase = (typeof TEAM_PHASES)[number]["id"];
 export type GuardrailHit = {
   agent: TeamAgentId;
   tool: string;
-  kind: "rule" | "gateway" | "contract";
+  kind: "rule" | "gateway" | "contract" | "limit";
   /** What the guardrail said, as the agent received it. */
   detail: string;
   policyId?: string;
@@ -202,7 +202,7 @@ export type InfraLayer =
   | "state"
   | "people";
 
-const SAVE_TOOLS = new Set([
+export const SAVE_TOOLS = new Set([
   "report_research",
   "propose_creative",
   "write_copy",
@@ -512,6 +512,21 @@ export function reduceTeam(state: TeamState, event: TeamEvent): TeamState {
       next.saved = event.ok;
       next.layer = "state";
       return next;
+    case "limit": {
+      // A hard limit stopped work: shown with the guardrails, never merged with another hit.
+      next.guardrails = [
+        ...state.guardrails,
+        {
+          agent: event.agent,
+          tool: event.limit,
+          kind: "limit",
+          detail: event.detail,
+          count: 1,
+          fixed: false,
+        },
+      ];
+      return next;
+    }
     case "done":
       next.done = { summary: event.summary, tokens: event.tokens, latencyMs: event.latencyMs };
       next.latest = null;
