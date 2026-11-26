@@ -262,7 +262,7 @@ describe("pharma lifecycle rules", () => {
           budgetUsd: 32,
         },
       ]),
-    ).toEqual(["Line 1: $32 is under Approved email's $1,000 minimum."]);
+    ).toEqual(["Line 1: $32 is under the $1,000 minimum for Brand email to consented HCPs."]);
     const lines = [
       {
         moduleId: "EM1",

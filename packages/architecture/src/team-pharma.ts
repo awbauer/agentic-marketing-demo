@@ -39,8 +39,10 @@ export type PhaseStep =
       does: string;
       /** What the step hands in, in a content team's words (the page's step card). */
       delivers: string;
+      /** The stage of a phase the page shows as its own step on the path, when a phase has two. */
+      stage?: string;
     }
-  | { kind: "person"; gate: TeamGate; does: string };
+  | { kind: "person"; gate: TeamGate; does: string; stage?: string };
 
 /**
  * The lifecycle, phase by phase, as the ordered steps the server enforces: each agent step ends
@@ -100,6 +102,7 @@ export const PHARMA_PHASES = [
         kind: "agent",
         agent: "copy-lead",
         tool: "draft_modules",
+        stage: "Copy & creative",
         delivers: "An email and a display module, claims word for word from the library",
         does: "Assembles an email and a display module from the claims library: each claim enters by its ID, word for word, with its reference marker and the context it requires; the service attaches the ISI, boxed warning and PI link beside the claims. A claim out of scope for the channel, audience or label, or one that must not appear with another, is refused.",
       },
@@ -107,22 +110,26 @@ export const PHARMA_PHASES = [
         kind: "agent",
         agent: "mlr-coordinator",
         tool: "submit_mlr_job",
+        stage: "MLR review & approval",
         delivers: "A pre-checked, referenced job submitted for MLR review",
         does: "Runs the quality check before review: anchors every claim to its reference passage, checks label version, scope, required context, reference validity, fair balance and the net impression of each module as a whole, sets the review tier, writes notes for the reviewers and submits the job. A job that fails a check is not submitted.",
       },
       {
         kind: "person",
         gate: "medical",
+        stage: "MLR review & approval",
         does: "Medical checks the science: each claim against its reference, and fair balance.",
       },
       {
         kind: "person",
         gate: "legal",
+        stage: "MLR review & approval",
         does: "Legal checks the risk: wording, comparisons, trademarks and the images' rights.",
       },
       {
         kind: "person",
         gate: "regulatory",
+        stage: "MLR review & approval",
         does: "Regulatory checks against the label and FDA rules, and approves the job for distribution. The system issues a document number, a material ID per module and an expiry, then checks every built variant against the approved version.",
       },
     ],
@@ -156,7 +163,7 @@ export const PHARMA_PHASES = [
         agent: "channel-planner",
         tool: "schedule_deployment",
         delivers: "A deployment schedule of approved materials, by material ID",
-        does: "Schedules only the approved modules, by material ID, to approved email and endemic HCP display, inside the brief's window and before the job expires, within budget. Each placement carries its material ID and claim IDs into the channel.",
+        does: "Schedules only the approved modules, by material ID, to brand email (consented HCPs) and endemic HCP display, inside the brief's window and before the job expires, within budget. Each placement carries its material ID and claim IDs into the channel.",
       },
       {
         kind: "person",
@@ -312,7 +319,13 @@ export const HCP_UNIVERSE: readonly HcpSegment[] = [
 
 /** The channels a pharma campaign deploys an approved module to. */
 export const PHARMA_CHANNELS = {
-  "approved-email": { label: "Approved email", moduleChannel: "email", benchmark: "email" },
+  // Brand-sent (home office) email to HCPs who consented to the brand's email. The id predates the
+  // label: this is not rep-triggered Veeva Approved Email, which needs the HCP's opt-in to a rep.
+  "approved-email": {
+    label: "Brand email to consented HCPs",
+    moduleChannel: "email",
+    benchmark: "email",
+  },
   "hcp-display": { label: "Endemic HCP display", moduleChannel: "display", benchmark: "display" },
 } as const;
 export type PharmaChannel = keyof typeof PHARMA_CHANNELS;
@@ -1019,10 +1032,17 @@ export function preReviewChecks(
 }
 
 /**
- * How much review the job needs. A: an approved module reused unchanged. B: approved modules under
- * approved assembly rules. C: anything that adds meaning, which goes to the full committee.
+ * How much review the job needs. B: approved claims and disclosures only, assembled under approved
+ * rules, to one reviewer. C: anything that adds meaning, which goes to the full committee. (A
+ * third tier, an approved module reused unchanged, never arises here: every module is newly
+ * assembled for the campaign.)
  */
-export type ReviewTier = { tier: "A" | "B" | "C"; path: string; reason: string };
+export type ReviewTier = { tier: "B" | "C"; path: string; reason: string };
+/** Each tier in a reviewer's words. */
+export const REVIEW_TIER_LABELS: Record<ReviewTier["tier"], string> = {
+  B: "Tier B · single reviewer, pre-approved content only",
+  C: "Tier C · full MLR (new copy)",
+};
 
 export function reviewTier(modules: readonly PharmaModule[]): ReviewTier {
   const ownWords = modules.some((module) =>
@@ -1270,7 +1290,7 @@ export function deploymentProblems(
       : undefined;
     if (minimum && line.budgetUsd < minimum)
       problems.push(
-        `${at}: $${line.budgetUsd.toLocaleString("en-US")} is under ${channel?.label}'s $${minimum.toLocaleString("en-US")} minimum.`,
+        `${at}: $${line.budgetUsd.toLocaleString("en-US")} is under the $${minimum.toLocaleString("en-US")} minimum for ${channel?.label}.`,
       );
     if (module && channel && module.channel !== channel.moduleChannel)
       problems.push(
@@ -1547,7 +1567,7 @@ export function traceClaims(
             status: "Pull requested; the channel owner confirms.",
           }))
         : null,
-    coverage: `${placements.length} of ${placements.length} placements carry claim IDs (approved email and endemic HCP display). No placement is outside this list.`,
+    coverage: `${placements.length} of ${placements.length} placements carry claim IDs (brand email to consented HCPs and endemic HCP display). No placement is outside this list.`,
   };
 }
 

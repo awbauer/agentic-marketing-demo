@@ -7,6 +7,7 @@ import {
 } from "@northstar/architecture";
 import { describe, expect, it } from "vitest";
 import { plainStatus } from "./LifecycleSummary";
+import { provenanceOf, stagesOf } from "./TeamLifecycle";
 import { foldTeam } from "./team-state";
 
 describe("the lifecycle in a content team's words", () => {
@@ -59,6 +60,60 @@ describe("the lifecycle in a content team's words", () => {
     expect(state.decisions[0]).toMatchObject({
       at,
       signedOff: { name: "propose_focus_areas", version: 2 },
+    });
+  });
+});
+
+describe("the content phase as two stages, and where module copy comes from", () => {
+  it("splits content into copy and creative, then MLR review and approval", () => {
+    const content = PHARMA_PHASES.find((phase) => phase.id === "content");
+    if (!content) throw new Error("no content phase");
+    const stages = stagesOf(content);
+    expect(stages.map((stage) => [stage.letter, stage.title, stage.steps.length])).toEqual([
+      ["a", "Copy & creative", 1],
+      ["b", "MLR review & approval", 4],
+    ]);
+    // A phase without stages stays one step on the path.
+    expect(stagesOf(PHARMA_PHASES[0])).toHaveLength(1);
+  });
+
+  it("counts verbatim claims, AI-written lines and system-attached text", () => {
+    const module = {
+      id: "email-1",
+      channel: "email",
+      headline: "After the congress",
+      opening: "Dear Doctor,",
+      closing: "",
+      cta: "Read the data",
+      claims: [
+        {
+          topic: "a",
+          claimId: "CLM-1",
+          text: "x",
+          marker: 1,
+          references: [],
+          context: "In CARDIO-HF.",
+          labelVersion: null,
+        },
+        {
+          topic: "b",
+          claimId: null,
+          text: "y",
+          marker: 2,
+          references: [],
+          context: null,
+          labelVersion: null,
+        },
+      ],
+      disclosures: [{ id: "isi", title: "ISI", text: "…" }],
+      safetyPlacement: "beside-claims",
+      assets: [],
+    } as const;
+    expect(provenanceOf(module as never)).toEqual({
+      verbatim: 1,
+      written: 3,
+      required: 2,
+      unmatched: 1,
     });
   });
 });

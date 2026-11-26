@@ -1146,6 +1146,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                         waiting={live ? state.waiting : null}
                         decision={lifecycleDecision}
                         onOpenTurn={(id) => setPhasePick(id)}
+                        guardrails={state.guardrails}
                       />
                       <aside className="team-rail" aria-label="Live activity">
                         {diagram}
