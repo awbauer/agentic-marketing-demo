@@ -2372,3 +2372,117 @@
   color: #a3261b;
   font-weight: 700;
 }
+
+/* Two audiences on one page: plain language first, the machinery one click away (detail.tsx). */
+.team-technical {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.team-term {
+  border-bottom: 1px dotted currentColor;
+  cursor: help;
+}
+.team-lede-points {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.team-lede-points li {
+  margin: 2px 0;
+}
+.team-done-inline.paused {
+  color: var(--ink);
+  font-weight: 600;
+}
+.team-raw-status {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.team-raw-status summary {
+  cursor: pointer;
+}
+.team-run-metrics {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.team-run-metrics summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.team-stepper-familiar {
+  display: block;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+.team-workspace-familiar {
+  color: var(--muted);
+  font-size: 0.7em;
+  font-weight: 500;
+}
+.team-step-card .team-step-handoff {
+  color: var(--ink);
+}
+.team-step-assists {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.team-signoffs {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 12px;
+}
+.team-signoffs > summary {
+  cursor: pointer;
+}
+.team-signoffs > summary span {
+  color: var(--muted);
+}
+.team-signoff-subject {
+  color: var(--muted);
+}
+.team-decision-log q {
+  display: block;
+  color: var(--muted);
+  font-style: italic;
+}
+.team-hood-explainer {
+  margin: 4px 0 10px;
+}
+.team-modal-role {
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #eef3f9;
+}
+.team-modal-bounds {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.team-modal-bounds h5 {
+  margin-top: 4px;
+}
+.team-modal-bounds ul {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.team-modal-profile {
+  margin-top: 14px;
+}
+.team-modal-profile summary {
+  cursor: pointer;
+  font-weight: 600;
+}

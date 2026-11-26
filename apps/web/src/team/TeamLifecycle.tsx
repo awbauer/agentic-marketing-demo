@@ -16,6 +16,7 @@ import {
   type FocusArea,
   type Form2253,
   isChoiceGate,
+  LIFECYCLE_ROLES,
   type LifecycleState,
   type MlrJob,
   PERSONA_LABELS,
@@ -36,6 +37,7 @@ import { type ReactNode, useState } from "react";
 import { Claim } from "./Claims";
 import { RichText, SourceChips } from "./RichText";
 import { ApprovedAssets } from "./TeamWork";
+import { useTechnical } from "./detail";
 
 type Artifact = Extract<TeamEvent, { type: "artifact" }>;
 type Waiting = Extract<TeamEvent, { type: "await-person" }>;
@@ -533,7 +535,7 @@ function PerformanceView({ report }: { report: PerformanceReport }) {
   );
 }
 
-const ARTIFACT_TITLES: Record<string, string> = {
+export const ARTIFACT_TITLES: Record<string, string> = {
   propose_focus_areas: "Focus areas",
   propose_concepts: "Concepts",
   draft_modules: "Content modules",
@@ -807,7 +809,7 @@ export function LifecycleDecisionCard({
             : waiting.gate === "regulatory"
               ? "Approve for distribution"
               : waiting.gate === "fda-2253"
-                ? "Submit and go live"
+                ? "File 2253 with OPDP (publishing then releases)"
                 : "Approve"}
         </button>
         <button
@@ -886,6 +888,7 @@ export function PhaseStepper({
                   </span>
                   <span className="team-stepper-title">{phase.title}</span>
                 </span>
+                <span className="team-stepper-familiar">{phase.familiar}</span>
                 <span className="team-stepper-dots" aria-hidden="true">
                   {(phase.steps as readonly PhaseStep[]).map((step) => (
                     <i
@@ -912,10 +915,10 @@ export function PhaseStepper({
       </ol>
       <p className="team-stepper-legend">
         <span>
-          <i className="agent" /> agent step
+          <i className="agent" /> AI agent prepares
         </span>
         <span>
-          <i className="person" /> your decision
+          <i className="person" /> a person signs off (you play them)
         </span>
         {!following && lifecycle && !lifecycle.finished && (
           <button
@@ -982,19 +985,24 @@ function StepCard({
   step,
   state,
   waitingHere,
+  next,
 }: {
   step: PhaseStep;
   state: "done" | "now" | "todo";
   /** The run is waiting on this person now (not just stopped before them). */
   waitingHere: boolean;
+  /** The step after this one, so an agent's card can say who takes its work. */
+  next?: PhaseStep;
 }) {
   const [open, setOpen] = useState(false);
+  const technical = useTechnical();
   const who = step.kind === "agent" ? TEAM_PARTY_LABELS[step.agent] : TEAM_GATES[step.gate].decider;
+  const role = step.kind === "agent" ? LIFECYCLE_ROLES[step.agent] : null;
   return (
     <li className={`team-step-card ${step.kind} is-${state}`}>
       <header>
         <span className={`team-step-key ${step.kind}`}>
-          {step.kind === "agent" ? "Agent" : "You"}
+          {step.kind === "agent" ? "AI agent" : "Person · you play"}
         </span>
         <strong>{who}</strong>
         <span className="team-step-state">
@@ -1009,15 +1017,36 @@ function StepCard({
               : ""}
         </span>
       </header>
-      {step.kind === "agent" && <code>{step.tool}</code>}
-      <p className={open ? "" : "clamped"}>{step.does}</p>
+      {step.kind === "agent" ? (
+        <p className="team-step-handoff">
+          <strong>Hands in:</strong> {step.delivers}
+          {next?.kind === "person" ? ` → ${TEAM_GATES[next.gate].decider} decides.` : "."}
+        </p>
+      ) : (
+        <p className="team-step-handoff">
+          <strong>Signs off:</strong> {TEAM_GATES[step.gate].label}.
+        </p>
+      )}
+      {role && <small className="team-step-assists">Assists {role.assists}</small>}
+      {technical && step.kind === "agent" && <code>{step.tool}</code>}
+      {open && (
+        <>
+          <p>{step.does}</p>
+          {step.kind === "agent" && !technical && (
+            <small className="arch-note">
+              Hands in with the tool <code>{step.tool}</code>; code pre-checks it before anyone sees
+              it.
+            </small>
+          )}
+        </>
+      )}
       <button
         type="button"
         className="text-button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        {open ? "Less" : "More"}
+        {open ? "Less" : "How it works"}
       </button>
     </li>
   );
@@ -1059,7 +1088,16 @@ export function PhaseWorkspace({
           {status === "done" ? "done" : status === "active" ? "in progress" : "to come"}
           {round > 1 ? ` · round ${round}` : ""}
         </p>
-        <h3 id="team-workspace-title">{spec.title}</h3>
+        <h3 id="team-workspace-title">
+          {spec.title} <span className="team-workspace-familiar">{spec.familiar}</span>
+        </h3>
+        <p className="arch-note">
+          In most brand teams this stage is run by agency and brand people. Here AI agents prepare
+          the work and the same people still decide.
+          {spec.id === "content"
+            ? " Medical, Legal and Regulatory are shown one after another for clarity; in practice they often review in parallel, with Regulatory giving the final approval."
+            : ""}
+        </p>
       </header>
       {turn && turn !== phase && (
         <button
@@ -1072,10 +1110,11 @@ export function PhaseWorkspace({
         </button>
       )}
       <ol className="team-step-track" aria-label={`${spec.title}: steps`}>
-        {(spec.steps as readonly PhaseStep[]).map((step) => (
+        {(spec.steps as readonly PhaseStep[]).map((step, stepIndex, steps) => (
           <StepCard
             key={step.kind === "agent" ? step.tool : step.gate}
             step={step}
+            next={steps[stepIndex + 1]}
             state={stepState(lifecycle, index, step)}
             waitingHere={step.kind === "person" && waiting?.gate === step.gate}
           />

@@ -8,6 +8,7 @@ import {
   type CampaignBrief,
   type LifecycleState,
   newLifecycle,
+  phaseOfGate,
   recordArtifact,
   TEAM_AGENTS,
   type TeamMode,
@@ -17,6 +18,7 @@ import {
   type TeamAgentId,
   type TeamAgentState,
   type TeamEvent,
+  type TeamGate,
   type TeamMessageKind,
   type TeamParty,
   type TeamPlan,
@@ -49,16 +51,16 @@ export const KIND_LABELS: Record<TeamMessageKind, string> = {
   brief: "Brief",
   plan: "Work plan",
   directive: "Assignment",
-  report: "Hand-back",
+  report: "Work returned",
   question: "Side question",
   answer: "Reply",
   review: "Kept",
   revision: "Sent back",
-  proposal: "Reconciled",
+  proposal: "Combined",
   delivery: "Proposal",
   "approval-request": "Review request",
   decision: "Decision",
-  handoff: "Routed",
+  handoff: "Sent on",
 };
 
 /** The phases a run moves through, shown as a progress strip. */
@@ -183,7 +185,13 @@ export type TeamState = {
   /** The person the run is waiting for, if any. */
   waiting: Extract<TeamEvent, { type: "await-person" }> | null;
   /** Decisions people have taken on this run, in order. */
-  decisions: Array<Extract<TeamEvent, { type: "decided" }> & { choiceLabel?: string }>;
+  decisions: Array<
+    Extract<TeamEvent, { type: "decided" }> & {
+      choiceLabel?: string;
+      /** The latest version of the work in the decision's phase, when the person decided. */
+      signedOff?: { name: string; version: number };
+    }
+  >;
   /** The run's scorecard, once it has ended. */
   scorecard: TeamScorecard | null;
   events: number;
@@ -307,6 +315,15 @@ export function emptyTeamState(): TeamState {
     events: 0,
     layer: null,
   };
+}
+
+/** The work a lifecycle decision signed off: the latest artifact in that gate's phase. */
+function signedOff(state: TeamState, gate: TeamGate) {
+  const phase = phaseOfGate(gate)?.id;
+  const latest = phase
+    ? state.artifacts.filter((artifact) => artifact.phase === phase).at(-1)
+    : undefined;
+  return latest ? { signedOff: { name: latest.name, version: latest.version } } : {};
 }
 
 /** Applies one event. Returns a new state; the old one is left as it was. */
@@ -468,6 +485,7 @@ export function reduceTeam(state: TeamState, event: TeamEvent): TeamState {
         ...state.decisions,
         {
           ...event,
+          ...signedOff(state, event.gate),
           // The option's name, from the card the person chose on.
           ...(event.choice
             ? {

@@ -611,6 +611,7 @@ export async function continueTeamRun(
       decision: input.decision,
       note,
       persona: ctx.user.persona,
+      at: new Date().toISOString(),
     });
     const from = input.gate === "compliance" ? "compliance" : "client";
     say(

@@ -8,6 +8,7 @@
 import {
   isLifecycleWorker,
   isTeamSpecialist,
+  LIFECYCLE_ROLES,
   PHARMA_PHASES,
   type PhaseStep,
   TEAM_AGENTS,
@@ -21,6 +22,7 @@ import {
 import { hostTerms } from "@northstar/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { agentAllowances } from "./allowances";
+import { Term, useTechnical } from "./detail";
 import { GuardrailPanel, PROTECTS } from "./Guardrails";
 import { ArtifactView } from "./TeamLifecycle";
 import { TeamWorkView } from "./TeamWork";
@@ -82,25 +84,47 @@ function Overview({ state, id }: { state: TeamState; id: TeamAgentId }) {
   );
   const provider = state.infra?.provider;
   const effort = state.prompts.find((prompt) => prompt.agent === id)?.settings.effort;
+  const role = lifecycle ? LIFECYCLE_ROLES[id as keyof typeof LIFECYCLE_ROLES] : undefined;
+  const technical = useTechnical();
+  const profile = (
+    <dl className="team-modal-facts">
+      <dt>Role</dt>
+      <dd>
+        {manifest?.role === "hub"
+          ? "Hub: coordinates the others"
+          : lifecycle
+            ? "Spoke: works one step; a named person owns the result"
+            : "Spoke: does one piece"}{" "}
+        · {manifest?.tier} tier · task class <code>{manifest?.taskClass}</code>
+      </dd>
+      <dt>Model</dt>
+      <dd>
+        <code>{state.models[id] ?? "—"}</code>
+        {provider ? ` on ${teamRunProviderLabel(provider, state.infra?.aiPlatform, HOST.id)}` : ""}
+        {state.infra?.aiGateway ? ` through AI Gateway ${state.infra.aiGateway}` : ""}
+        {state.infra?.scripted ? " (scripted test model)" : ""}
+        {effort ? ` · effort ${effort}` : ""}
+      </dd>
+      {!lifecycle && manifest?.deliverable && (
+        <>
+          <dt>Deliverable</dt>
+          <dd>
+            <code>{manifest.deliverable}</code>
+          </dd>
+        </>
+      )}
+    </dl>
+  );
   return (
     <div className="team-modal-section">
-      <p>{manifest?.summary}</p>
+      {role && (
+        <p className="team-modal-role">
+          <strong>{role.plain}</strong> · assists {role.assists}. It prepares the work; the person
+          who signs off after it owns the result.
+        </p>
+      )}
+      <p>{role?.summary ?? manifest?.summary}</p>
       <dl className="team-modal-facts">
-        <dt>Role</dt>
-        <dd>
-          {manifest?.role === "hub" ? "Hub: coordinates the others" : "Spoke: does one piece"} ·{" "}
-          {manifest?.tier} tier · task class <code>{manifest?.taskClass}</code>
-        </dd>
-        <dt>Model</dt>
-        <dd>
-          <code>{state.models[id] ?? "—"}</code>
-          {provider
-            ? ` on ${teamRunProviderLabel(provider, state.infra?.aiPlatform, HOST.id)}`
-            : ""}
-          {state.infra?.aiGateway ? ` through AI Gateway ${state.infra.aiGateway}` : ""}
-          {state.infra?.scripted ? " (scripted test model)" : ""}
-          {effort ? ` · effort ${effort}` : ""}
-        </dd>
         <dt>Status</dt>
         <dd>
           <strong>{view.state}</strong>
@@ -113,14 +137,6 @@ function Overview({ state, id }: { state: TeamState; id: TeamAgentId }) {
             <dd>{manifest.use}</dd>
           </>
         )}
-        {!lifecycle && manifest?.deliverable && (
-          <>
-            <dt>Deliverable</dt>
-            <dd>
-              <code>{manifest.deliverable}</code>
-            </dd>
-          </>
-        )}
       </dl>
       {lifecycle && steps.length > 0 && (
         <>
@@ -128,7 +144,14 @@ function Overview({ state, id }: { state: TeamState; id: TeamAgentId }) {
           <ol className="team-modal-steps">
             {steps.map(({ phase, step }) => (
               <li key={`${phase}-${step.kind === "agent" ? step.tool : ""}`}>
-                <strong>{phase}</strong> · <code>{step.kind === "agent" ? step.tool : ""}</code>
+                <strong>{phase}</strong>
+                {step.kind === "agent" ? ` · hands in: ${step.delivers}` : ""}
+                {technical && step.kind === "agent" ? (
+                  <>
+                    {" "}
+                    · <code>{step.tool}</code>
+                  </>
+                ) : null}
                 <p>{step.does}</p>
               </li>
             ))}
@@ -143,6 +166,17 @@ function Overview({ state, id }: { state: TeamState; id: TeamAgentId }) {
             : ""}
         </p>
       )}
+      {technical ? (
+        <>
+          <h5>Technical profile</h5>
+          {profile}
+        </>
+      ) : (
+        <details className="team-modal-profile">
+          <summary>Technical profile: role, model and settings</summary>
+          {profile}
+        </details>
+      )}
     </div>
   );
 }
@@ -154,11 +188,29 @@ function Guardrails({ state, id }: { state: TeamState; id: TeamAgentId }) {
   const checked = (manifest?.tools ?? []).filter((tool) => PROTECTS[tool]);
   return (
     <div className="team-modal-section">
-      <p className="arch-note">
-        What this agent may do before code stops it, and how much it has used. The model never sees
-        or sets these; the platform enforces them around every call.
-      </p>
-      <h5>Allowances</h5>
+      <div className="team-modal-bounds">
+        <h5>What keeps this agent in bounds</h5>
+        <ul>
+          <li>
+            It can use only the {manifest?.tools.length ?? 0} actions it was granted; anything else
+            is blocked and logged.
+          </li>
+          {checked.length > 0 && (
+            <li>
+              Everything it hands in is pre-checked in code before a person sees it; a refused draft
+              changes nothing and comes back with every problem named.
+            </li>
+          )}
+          <li>
+            It has a work budget. If it gets stuck it stops and hands back to the project lead, who
+            can reassign the work or ask a person.
+          </li>
+        </ul>
+        <p className="arch-note">
+          The model never sees or sets these; the platform enforces them around every call.
+        </p>
+      </div>
+      <h5>Exact limits and how much it has used</h5>
       <div className="team-table-wrap">
         <table className="team-table team-allowances">
           <thead>
@@ -192,7 +244,7 @@ function Guardrails({ state, id }: { state: TeamState; id: TeamAgentId }) {
       </div>
       {checked.length > 0 && (
         <>
-          <h5>Rule checks on its saves</h5>
+          <h5>Pre-checks before anything reaches a reviewer</h5>
           <ul className="team-modal-list">
             {checked.map((tool) => (
               <li key={tool}>
@@ -201,12 +253,15 @@ function Guardrails({ state, id }: { state: TeamState; id: TeamAgentId }) {
             ))}
           </ul>
           <p className="arch-note">
-            Code checks each save, whatever the model wrote. A refused save changes nothing, and the
-            agent gets every problem back to fix.
+            Code checks each hand-in, whatever the model wrote. These are not MLR review; they run
+            before it. A refused draft changes nothing, and the agent gets every problem back to
+            fix.
           </p>
         </>
       )}
-      <h5>Gateway grants</h5>
+      <h5>
+        Actions it may take (<Term term="gateway">gateway</Term> grants)
+      </h5>
       <p className="team-grants">
         {manifest?.tools.map((tool) => (
           <code key={tool}>{tool}</code>
@@ -592,6 +647,7 @@ export function AgentModal({
     [state, agent],
   );
   const view = state.agents[agent];
+  const technical = useTechnical();
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: a backdrop click is a mouse shortcut; Escape and the Close button close it from the keyboard.
     <dialog
@@ -611,9 +667,18 @@ export function AgentModal({
               <i className={`team-dot is-${view.state}`} aria-hidden="true" /> {manifest?.name}
             </h3>
             <p className="arch-note">
-              {manifest?.role === "hub" ? "Hub" : "Spoke"} ·{" "}
-              <code>{state.models[agent] ?? "—"}</code> · {counts.model} model calls ·{" "}
-              {counts.tools} tool calls · {counts.calls} messages
+              {state.mode === "lifecycle"
+                ? (LIFECYCLE_ROLES[agent as keyof typeof LIFECYCLE_ROLES]?.plain ?? "Agent")
+                : manifest?.role === "hub"
+                  ? "Hub"
+                  : "Spoke"}{" "}
+              · {counts.model} AI requests · {counts.tools} actions · {counts.calls} messages
+              {technical ? (
+                <>
+                  {" "}
+                  · <code>{state.models[agent] ?? "—"}</code>
+                </>
+              ) : null}
             </p>
           </div>
           <button

@@ -37,6 +37,8 @@ export type PhaseStep =
       /** The save tool the step ends with. */
       tool: TeamTool;
       does: string;
+      /** What the step hands in, in a content team's words (the page's step card). */
+      delivers: string;
     }
   | { kind: "person"; gate: TeamGate; does: string };
 
@@ -48,12 +50,14 @@ export type PhaseStep =
 export const PHARMA_PHASES = [
   {
     id: "focus",
+    familiar: "Brief & strategy",
     title: "Business focus",
     steps: [
       {
         kind: "agent",
         agent: "audience-analyst",
         tool: "propose_focus_areas",
+        delivers: "Two or three focus areas, each citing its data",
         does: "Reads the segments, competitors, market signals and last year's results, and proposes two or three focus areas, each citing its evidence and how success would be measured.",
       },
       {
@@ -65,13 +69,15 @@ export const PHARMA_PHASES = [
   },
   {
     id: "ideation",
+    familiar: "Concept",
     title: "Campaign ideation",
     steps: [
       {
         kind: "agent",
         agent: "art-director",
         tool: "propose_concepts",
-        does: "Starts from what is already approved: proposes two or three concepts for the chosen focus, each carried by claims from the claims library that are in scope for US HCP email and display under the current label, and shown with approved, in-rights images from the asset library. Nothing is generated.",
+        delivers: "Two or three concepts on approved claims and in-rights images",
+        does: "Starts from what is already approved: proposes two or three concepts for the chosen focus, each carried by claims from the claims library that are in scope for US HCP email and display under the current label, and shown with approved, in-rights images from the asset library. No claim is written and no image is generated; any words joining them are written later and reviewed in full.",
       },
       {
         kind: "person",
@@ -87,18 +93,21 @@ export const PHARMA_PHASES = [
   },
   {
     id: "content",
+    familiar: "Copy & creative · MLR review · approval",
     title: "Content and MLR review",
     steps: [
       {
         kind: "agent",
         agent: "copy-lead",
         tool: "draft_modules",
+        delivers: "An email and a display module, claims word for word from the library",
         does: "Assembles an email and a display module from the claims library: each claim enters by its ID, word for word, with its reference marker and the context it requires; the service attaches the ISI, boxed warning and PI link beside the claims. A claim out of scope for the channel, audience or label, or one that must not appear with another, is refused.",
       },
       {
         kind: "agent",
         agent: "mlr-coordinator",
         tool: "submit_mlr_job",
+        delivers: "A pre-checked, referenced job submitted for MLR review",
         does: "Runs the quality check before review: anchors every claim to its reference passage, checks label version, scope, required context, reference validity, fair balance and the net impression of each module as a whole, sets the review tier, writes notes for the reviewers and submits the job. A job that fails a check is not submitted.",
       },
       {
@@ -120,12 +129,14 @@ export const PHARMA_PHASES = [
   },
   {
     id: "audience",
+    familiar: "HCP targeting & list approval",
     title: "Audience selection",
     steps: [
       {
         kind: "agent",
         agent: "audience-analyst",
         tool: "build_audience",
+        delivers: "An HCP target list with consent and do-not-contact applied",
         does: "Builds the HCP list by segment and decile. Email goes only to HCPs with documented consent; the do-not-contact list is removed from every channel; rep coverage is shown so field and digital line up.",
       },
       {
@@ -137,12 +148,14 @@ export const PHARMA_PHASES = [
   },
   {
     id: "publish",
+    familiar: "Deployment & 2253 filing",
     title: "Market publishing",
     steps: [
       {
         kind: "agent",
         agent: "channel-planner",
         tool: "schedule_deployment",
+        delivers: "A deployment schedule of approved materials, by material ID",
         does: "Schedules only the approved modules, by material ID, to approved email and endemic HCP display, inside the brief's window and before the job expires, within budget. Each placement carries its material ID and claim IDs into the channel.",
       },
       {
@@ -154,6 +167,7 @@ export const PHARMA_PHASES = [
         kind: "agent",
         agent: "mlr-coordinator",
         tool: "prepare_form_2253",
+        delivers: "A Form FDA 2253 package, ready for Regulatory to file",
         does: "Prepares Form FDA 2253 with the scheduled materials, their material IDs and the current PI version, dated to first use. Publishing is held until it is filed.",
       },
       {
@@ -165,12 +179,14 @@ export const PHARMA_PHASES = [
   },
   {
     id: "analytics",
+    familiar: "Measurement",
     title: "Analytics",
     steps: [
       {
         kind: "agent",
         agent: "performance-analyst",
         tool: "report_performance",
+        delivers: "A performance read with a continue, optimize or retire recommendation",
         does: "After 30 days in market (simulated here), reads the results by segment, decile, channel and claim ID against past results, and recommends continue, optimize or retire, citing the result lines.",
       },
       {
@@ -180,7 +196,13 @@ export const PHARMA_PHASES = [
       },
     ],
   },
-] as const satisfies ReadonlyArray<{ id: string; title: string; steps: readonly PhaseStep[] }>;
+] as const satisfies ReadonlyArray<{
+  id: string;
+  /** The phase in the content lifecycle a brand or agency team already knows. */
+  familiar: string;
+  title: string;
+  steps: readonly PhaseStep[];
+}>;
 export type PharmaPhaseId = (typeof PHARMA_PHASES)[number]["id"];
 export const PHARMA_PHASE_IDS = PHARMA_PHASES.map((phase) => phase.id) as PharmaPhaseId[];
 export const pharmaPhase = (id: string) => PHARMA_PHASES.find((phase) => phase.id === id);
@@ -191,6 +213,37 @@ export const phaseOfGate = (gate: TeamGate) =>
       (step) => step.kind === "person" && step.gate === gate,
     ),
   );
+/**
+ * Each lifecycle agent in a content team's words: what it is, and the people whose work it
+ * assists. The agent never owns the result; the person at the gate after it does.
+ */
+export const LIFECYCLE_ROLES: Record<
+  "campaign-lead" | LifecycleWorker,
+  { plain: string; assists: string; summary?: string }
+> = {
+  "campaign-lead": {
+    plain: "Project lead agent",
+    assists: "the agency project manager or PromoMats job owner",
+    summary:
+      "Routes each step to the right agent or person, in order, and passes people's requests for changes back to the agent that does the work. It cannot approve anything: every decision is a person's.",
+  },
+  "audience-analyst": {
+    plain: "Insights and targeting agent",
+    assists: "brand analytics and marketing operations",
+  },
+  "art-director": { plain: "Concept agent", assists: "the agency creative team" },
+  "copy-lead": {
+    plain: "Modular content agent",
+    assists: "the copywriter and the modular content producer",
+  },
+  "mlr-coordinator": {
+    plain: "MLR submission agent",
+    assists: "the MLR (PRC) coordinator and regulatory operations",
+  },
+  "channel-planner": { plain: "Deployment agent", assists: "media and omnichannel operations" },
+  "performance-analyst": { plain: "Performance agent", assists: "analytics and customer insights" },
+};
+
 /** Gates the MLR system routes to on its own, one after another, once the job is submitted. */
 export const MLR_GATES = ["medical", "legal", "regulatory"] as const satisfies readonly TeamGate[];
 /** Gates where the person picks one of the agents' options. */
