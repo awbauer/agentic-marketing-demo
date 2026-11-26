@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-26T16:39:04.822Z",
+  "generatedAt": "2026-11-26T16:56:01.471Z",
   "status": "passed",
   "baseRef": "origin/main",
-  "mergeBase": "309cf3422c6a50e093fe69a2847504d7342a0f01",
+  "mergeBase": "22582b6c9829809f0ec5490f0ff01052b0c42887",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,10 +13,59 @@
   },
   "drift": [
     {
+      "section": "orchestrator",
+      "status": "reviewed",
+      "paths": [
+        "apps/edge/src/index.ts"
+      ]
+    },
+    {
       "section": "two-hosts",
       "status": "updated",
       "paths": [
-        "docs/decisions/ADR-021-ai-platform-apart-from-host.md"
+        "apps/edge/src/platform/azure.ts",
+        "apps/edge/src/platform/bedrock.ts",
+        "apps/edge/src/platform/models.ts",
+        "apps/edge/src/platform/vertex.ts",
+        "packages/contracts/src/host.ts"
+      ]
+    },
+    {
+      "section": "campaign-squad",
+      "status": "reviewed",
+      "paths": [
+        "apps/edge/src/team/run.ts",
+        "apps/web/src/team/TeamPlatform.tsx",
+        "apps/web/src/team/session-metrics.ts",
+        "packages/architecture/src/team.ts"
+      ]
+    },
+    {
+      "section": "reliability",
+      "status": "reviewed",
+      "paths": [
+        "apps/edge/src/turn-trace.ts"
+      ]
+    },
+    {
+      "section": "ui",
+      "status": "reviewed",
+      "paths": [
+        "apps/web/src/ScopeBar.tsx"
+      ]
+    },
+    {
+      "section": "observability",
+      "status": "reviewed",
+      "paths": [
+        "apps/web/src/turn-route.ts"
+      ]
+    },
+    {
+      "section": "governance",
+      "status": "reviewed",
+      "paths": [
+        "packages/contracts/src/index.ts"
       ]
     }
   ],

@@ -471,12 +471,13 @@ Feature code asks `dataPlatform(env)` for repositories (D1, or the Firestore the
 
 **The AI platform is chosen apart from the host (ADR-021).** Workers AI and Vertex AI are AI SDK providers in one registry, so code asks for `workers-ai:@cf/openai/gpt-oss-120b` or `vertex:@cf/openai/gpt-oss-120b` the same way.
 - The top bar's **AI platform** menu (beside Brand and Run as) lists what this server can reach and sends the choice with every chat message and workspace request. Cloudflare offers Workers AI, plus Vertex AI once it holds Google credentials; Google Cloud offers Vertex AI.
+- **Azure AI Foundry and Amazon Bedrock (ADR-023)** join the menu once the server holds their credentials, while the page and the database stay where they are. Each is called directly: gpt-oss-120b as a Foundry deployment through its OpenAI-compatible API, and gpt-oss-120b and 20b through Bedrock's. Images come from GPT Image on Azure and Nova Canvas on Bedrock. They use a resource key or Entra service principal, and a Bedrock API key: stored secrets, unlike Vertex's federation, because both clouds' keyless routes need a public token issuer the Worker doesn't publish yet.
 
 <details>
 <summary>Credentials, tracing and narrowing the menu</summary>
 
 - The Worker needs no Google key: through **Workload Identity Federation** it signs its own short-lived token, which Google's Security Token Service exchanges for an hour's access as a service account that may only call Vertex AI.
-- The route map and trace name the platform each turn ran on. A Vertex turn has no AI Gateway hop, whichever host served it.
+- The route map and trace name the platform each turn ran on. A Vertex, Azure or Bedrock turn has no AI Gateway hop, whichever host served it.
 - `AI_PLATFORMS_ENABLED` (a dashboard variable on the Worker, which deploys keep; a Cloud Run environment variable) narrows the menu: a comma-separated list; a platform left out is neither listed nor run, even if requested.
 
 </details>
@@ -636,7 +637,7 @@ flowchart TB
 The orchestrator runs **gpt-oss-120b**, OpenAI's open-weight reasoning model, as a managed model on **Vertex AI**. Every model call is logged to Cloud Logging. Its ID is set in one place: `PROOF_DEFAULTS.orchestratorModel`.
 
 - **Why the catalog names 20b:** after the routing and reliability fixes, 20b matched or beat gpt-oss-120b through the pipeline at about 60% of the latency and lower cost (see *Evaluations*). Vertex AI serves no 20b, so the orchestrator runs the 120b it was compared with, and the trace names the model served.
-- **Where it runs.** The top bar's **AI platform** menu shows where the models run: Vertex AI on Google Cloud (ADR-021).
+- **Where it runs.** The top bar's **AI platform** menu shows where the models run: Vertex AI on Google Cloud, plus Azure AI Foundry and Amazon Bedrock where they are set up (ADR-021, ADR-023).
 
 <details>
 <summary>The model's tool-calling quirks</summary>

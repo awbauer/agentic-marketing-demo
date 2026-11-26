@@ -6,6 +6,8 @@
 // - Workers AI runs through the Worker's AI binding (and its AI Gateway); only Cloudflare has it.
 // - Vertex AI runs with Google credentials: Cloud Run's own service account on Google Cloud, or a
 //   service-account key (GOOGLE_SERVICE_ACCOUNT_KEY) from a Cloudflare Worker.
+// - Azure AI Foundry and Amazon Bedrock run from either host with their own credentials (ADR-023):
+//   the resource's key or an Entra service principal, and a Bedrock API key.
 //
 // Feature code asks for a model by its catalog id (`@cf/openai/gpt-oss-120b`) either way; a
 // platform that doesn't host an id maps it to the nearest model it does.
@@ -21,6 +23,8 @@ import {
 } from "@northstar/contracts";
 import { createProviderRegistry, type LanguageModel } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
+import { azureModels, entraToken } from "./azure";
+import { bedrockModels } from "./bedrock";
 import {
   parseServiceAccountKey,
   parseWorkloadIdentity,
@@ -98,6 +102,21 @@ export type ModelBindings = {
   GOOGLE_SERVICE_ACCOUNT_KEY?: string;
   /** Or a workload-identity credential (JSON), for where service-account keys are banned. */
   GOOGLE_WORKLOAD_IDENTITY?: string;
+  /** Azure AI Foundry: the resource's endpoint, and its key or an Entra service principal. */
+  AZURE_AI_ENDPOINT?: string;
+  AZURE_AI_API_KEY?: string;
+  AZURE_TENANT_ID?: string;
+  AZURE_CLIENT_ID?: string;
+  AZURE_CLIENT_SECRET?: string;
+  /** JSON object of catalog id → deployment name; and the GPT Image deployment. */
+  AZURE_AI_DEPLOYMENTS?: string;
+  AZURE_AI_IMAGE_DEPLOYMENT?: string;
+  /** Amazon Bedrock: the regions, the API key, and optional model overrides. */
+  BEDROCK_REGION?: string;
+  BEDROCK_IMAGE_REGION?: string;
+  BEDROCK_API_KEY?: string;
+  BEDROCK_MODEL_MAP?: string;
+  BEDROCK_IMAGE_MODEL?: string;
 };
 
 /** Which host this server is: the GCP host sets HOST; the Worker leaves it unset. */
@@ -138,6 +157,18 @@ export function modelPlatform(env: ModelBindings, choice?: unknown): ModelPlatfo
   return platforms.default ? (platforms.available[platforms.default] ?? null) : null;
 }
 
+/**
+ * The platform the squad's Anthropic and OpenAI vendors route through. That is the default
+ * platform's own route, or, when the default has none (Azure AI Foundry, Amazon Bedrock), the
+ * host's: Vertex AI on Google Cloud, or null for the AI Gateway on Cloudflare. Changing the default
+ * never takes away a vendor the host could otherwise reach (ADR-023).
+ */
+export function vendorPlatform(env: ModelBindings & { HOST?: string }): ModelPlatform | null {
+  const platform = modelPlatform(env);
+  if (!platform || platform.vendor || platform.kind === "workers-ai") return platform;
+  return serverHost(env) === "google-cloud" ? (aiPlatforms(env).available.vertex ?? null) : null;
+}
+
 /** What the top bar's AI platform menu lists. */
 export function aiPlatformOptions(env: ModelBindings): AiPlatformOptions {
   const platforms = aiPlatforms(env);
@@ -145,10 +176,16 @@ export function aiPlatformOptions(env: ModelBindings): AiPlatformOptions {
     default: platforms.default,
     platforms: AI_PLATFORMS.filter(
       // A host lists only what it could ever run (Google Cloud has no Workers AI binding), and
-      // only what AI_PLATFORMS_ENABLED allows.
+      // only what AI_PLATFORMS_ENABLED allows. Azure and Bedrock are listed once some of their
+      // settings are present, so a server that never meant to use them doesn't offer them.
       (id) =>
         platforms.available[id] ||
-        (enabledAiPlatforms(env).has(id) && (id === "vertex" ? true : Boolean(env.AI))),
+        (enabledAiPlatforms(env).has(id) &&
+          (id === "vertex"
+            ? true
+            : id === "workers-ai"
+              ? Boolean(env.AI)
+              : Boolean(platforms.missing[id]))),
     ).map((id) => ({
       id,
       label: AI_PLATFORM_TERMS[id].label,
@@ -200,12 +237,24 @@ function buildPlatforms(env: ModelBindings): AiPlatforms {
       if ("platform" in vertex) available.vertex = vertex.platform;
       else missing.vertex = vertex.reason;
     }
+    if (enabled.has("azure")) {
+      const azure = azureFromEnv(env);
+      if (azure && "platform" in azure) available.azure = azure.platform;
+      else if (azure) missing.azure = azure.reason;
+    }
+    if (enabled.has("bedrock")) {
+      const bedrock = bedrockFromEnv(env);
+      if (bedrock && "platform" in bedrock) available.bedrock = bedrock.platform;
+      else if (bedrock) missing.bedrock = bedrock.reason;
+    }
   }
   if (enabled.size === 0)
     console.warn("[models] AI_PLATFORMS_ENABLED allows no platform; no models will run.");
   const requested = isAiPlatformId(env.AI_PLATFORM) ? env.AI_PLATFORM : null;
   if (env.AI_PLATFORM && !requested)
-    console.warn(`[models] AI_PLATFORM must be workers-ai or vertex, not ${env.AI_PLATFORM}.`);
+    console.warn(
+      `[models] AI_PLATFORM must be one of ${AI_PLATFORMS.join(", ")}, not ${env.AI_PLATFORM}.`,
+    );
   const ids = AI_PLATFORMS.filter((id) => available[id]);
   const fallback = ids[0] ?? null;
   const preferred = requested && available[requested] ? requested : fallback;
@@ -261,6 +310,71 @@ function vertexFromEnv(env: ModelBindings): { platform: ModelPlatform } | { reas
         ? { anthropicLocation: env.VERTEX_ANTHROPIC_LOCATION }
         : {}),
       ...(env.VERTEX_IMAGE_MODEL ? { imageModel: env.VERTEX_IMAGE_MODEL } : {}),
+    }),
+  };
+}
+
+/** A JSON object of strings from a setting, or {} (with a warning) when it isn't one. */
+function jsonMap(value: string | undefined, name: string): Record<string, string> {
+  try {
+    return JSON.parse(value ?? "{}") as Record<string, string>;
+  } catch {
+    console.warn(`[models] ${name} is not valid JSON; using the default models.`);
+    return {};
+  }
+}
+
+/**
+ * Azure AI Foundry from the environment: null when nothing for it is set, a reason when it is
+ * half set up.
+ */
+function azureFromEnv(env: ModelBindings): { platform: ModelPlatform } | { reason: string } | null {
+  const principal = env.AZURE_TENANT_ID || env.AZURE_CLIENT_ID || env.AZURE_CLIENT_SECRET;
+  if (!env.AZURE_AI_ENDPOINT && !env.AZURE_AI_API_KEY && !principal) return null;
+  if (!env.AZURE_AI_ENDPOINT)
+    return { reason: "Set AZURE_AI_ENDPOINT to the Azure AI Foundry resource's endpoint." };
+  let auth: Parameters<typeof azureModels>[0]["auth"] | null = null;
+  if (env.AZURE_AI_API_KEY) auth = { apiKey: env.AZURE_AI_API_KEY };
+  else if (env.AZURE_TENANT_ID && env.AZURE_CLIENT_ID && env.AZURE_CLIENT_SECRET)
+    auth = {
+      token: entraToken({
+        tenantId: env.AZURE_TENANT_ID,
+        clientId: env.AZURE_CLIENT_ID,
+        clientSecret: env.AZURE_CLIENT_SECRET,
+      }),
+    };
+  if (!auth)
+    return {
+      reason:
+        "Set AZURE_AI_API_KEY, or AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET for a service principal with the Cognitive Services OpenAI User role.",
+    };
+  return {
+    platform: azureModels({
+      endpoint: env.AZURE_AI_ENDPOINT,
+      auth,
+      deployments: jsonMap(env.AZURE_AI_DEPLOYMENTS, "AZURE_AI_DEPLOYMENTS"),
+      ...(env.AZURE_AI_IMAGE_DEPLOYMENT ? { imageDeployment: env.AZURE_AI_IMAGE_DEPLOYMENT } : {}),
+    }),
+  };
+}
+
+/** Amazon Bedrock from the environment: null when nothing for it is set. */
+function bedrockFromEnv(
+  env: ModelBindings,
+): { platform: ModelPlatform } | { reason: string } | null {
+  if (!env.BEDROCK_REGION && !env.BEDROCK_API_KEY) return null;
+  if (!env.BEDROCK_API_KEY)
+    return {
+      reason:
+        "Set BEDROCK_API_KEY to a Bedrock API key for an IAM identity that may invoke the models.",
+    };
+  return {
+    platform: bedrockModels({
+      region: env.BEDROCK_REGION ?? "us-west-2",
+      apiKey: env.BEDROCK_API_KEY,
+      modelMap: jsonMap(env.BEDROCK_MODEL_MAP, "BEDROCK_MODEL_MAP"),
+      ...(env.BEDROCK_IMAGE_REGION ? { imageRegion: env.BEDROCK_IMAGE_REGION } : {}),
+      ...(env.BEDROCK_IMAGE_MODEL ? { imageModel: env.BEDROCK_IMAGE_MODEL } : {}),
     }),
   };
 }

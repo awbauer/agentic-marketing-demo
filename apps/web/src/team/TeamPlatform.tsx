@@ -194,9 +194,16 @@ export function InfrastructurePanel({ state }: { state: TeamState }) {
               ? "Claude on the Anthropic API, through the official SDK and the AI Gateway, which supplies the key stored on it: adaptive thinking replayed turn to turn, effort set per agent, server-side refusal fallback and prompt caching"
               : infra?.provider === "openai"
                 ? "OpenAI's Responses API through the AI Gateway, which supplies the key stored on it, with reasoning effort set per agent"
-                : teamOpenModels(infra?.aiPlatform, HOST.id) === "vertex"
-                  ? "Vertex AI on Google Cloud (gpt-oss-120b); a router binds each agent's task class to a champion model, which Vertex serves"
-                  : "Cloudflare Workers AI; a router binds each agent's task class to a champion model"
+                : {
+                    "workers-ai":
+                      "Cloudflare Workers AI; a router binds each agent's task class to a champion model",
+                    vertex:
+                      "Vertex AI on Google Cloud (gpt-oss-120b); a router binds each agent's task class to a champion model, which Vertex serves",
+                    azure:
+                      "Azure AI Foundry (gpt-oss-120b); a router binds each agent's task class to a champion model, which the Foundry deployment serves",
+                    bedrock:
+                      "Amazon Bedrock (gpt-oss-120b and 20b); a router binds each agent's task class to a champion model, which Bedrock serves",
+                  }[teamOpenModels(infra?.aiPlatform, HOST.id)]
           }${infra?.aiGateway ? `, through AI Gateway (${infra.aiGateway}) for caching, rate limits and logs` : ""}. Every call is metered. The switch above changes only this layer.`,
       stats: [
         ["Model calls", calls.length],
@@ -582,7 +589,7 @@ function RunsCompared() {
         </p>
       </>
     );
-  // Grouped by what ran: the open-model tier on Workers AI and on Vertex AI are separate rows.
+  // Grouped by what ran: the open-model tier on each AI platform is its own row.
   const label = (run: SessionRun) => teamRunProviderLabel(run.provider, run.aiPlatform, HOST.id);
   const providers = [...new Set(scored.map(label))];
   return (

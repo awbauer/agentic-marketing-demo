@@ -84,15 +84,16 @@ export function pageHost(
 export const hostTerms = (host: HostId = pageHost()) => HOST_TERMS[host];
 
 // The AI platform, chosen apart from the host (ADR-021): where a turn's models run. A Cloudflare
-// deployment offers Workers AI and, with a Google service-account key, Vertex AI; a Google Cloud
-// deployment offers Vertex AI. The browser sends its choice with each message, like the brand.
+// deployment offers Workers AI and, with a Google credential, Vertex AI; a Google Cloud deployment
+// offers Vertex AI. Either host also offers Azure AI Foundry and Amazon Bedrock once it holds their
+// credentials (ADR-023). The browser sends its choice with each message, like the brand.
 
-export const AI_PLATFORMS = ["workers-ai", "vertex"] as const;
+export const AI_PLATFORMS = ["workers-ai", "vertex", "azure", "bedrock"] as const;
 export type AiPlatformId = (typeof AI_PLATFORMS)[number];
 
 export type AiPlatformTerms = {
   id: AiPlatformId;
-  /** "Workers AI" or "Vertex AI". */
+  /** "Workers AI", "Vertex AI", "Azure AI Foundry" or "Amazon Bedrock". */
   label: string;
   /** The cloud that runs it. */
   cloud: string;
@@ -116,6 +117,20 @@ export const AI_PLATFORM_TERMS: Record<AiPlatformId, AiPlatformTerms> = {
     cloud: "Google Cloud",
     gateway: null,
     imageModel: "Gemini image on Vertex AI",
+  },
+  azure: {
+    id: "azure",
+    label: "Azure AI Foundry",
+    cloud: "Microsoft Azure",
+    gateway: null,
+    imageModel: "GPT Image on Azure AI Foundry",
+  },
+  bedrock: {
+    id: "bedrock",
+    label: "Amazon Bedrock",
+    cloud: "AWS",
+    gateway: null,
+    imageModel: "Nova Canvas on Amazon Bedrock",
   },
 };
 

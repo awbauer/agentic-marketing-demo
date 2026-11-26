@@ -52,7 +52,7 @@ The runtime secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `CONFIRMATION_SIGNING_KE
 
 Set these in the dashboard (Workers & Pages → `northstar-marketing-workbench-pot` → Settings → Variables and Secrets, type Text) and select Deploy. They take effect at once, survive every Workers Builds deploy, and must never be added to `wrangler.jsonc`, whose value would overwrite the dashboard's on the next merge.
 
-- `AI_PLATFORMS_ENABLED`: which AI platforms the top bar's menu offers, comma-separated (`workers-ai`, `vertex`). A platform left out is neither listed nor run, even if a request asks for it. Unset or blank offers every platform the Worker can reach. `AI_PLATFORM` (optional, also here) names the default among them.
+- `AI_PLATFORMS_ENABLED`: which AI platforms the top bar's menu offers, comma-separated (`workers-ai`, `vertex`, `azure`, `bedrock`). A platform left out is neither listed nor run, even if a request asks for it. Unset or blank offers every platform the Worker can reach. `AI_PLATFORM` (optional, also here) names the default among them.
 
 ## Operator kill switches
 
@@ -102,6 +102,24 @@ gcloud secrets versions access latest --secret northstar-vertex-worker-identity 
 `wrangler secret put` publishes a new version of the deployed Worker. Deploy a build containing ADR-021 for the menu to use it.
 
 To revoke access, run `gcloud iam workload-identity-pools providers delete cloudflare-worker --workload-identity-pool northstar-workers --location global --project burner-andbauer-7311` (or disable the pool), then `npx wrangler secret delete GOOGLE_WORKLOAD_IDENTITY`. To rotate the key, generate a new pair, add its public key to the provider (`--jwk-json-path`), store a new credential version, put it on the Worker, then remove the old public key.
+
+## Azure AI Foundry and Amazon Bedrock from the Worker (ADR-023)
+
+The menu lists each of these once any of its settings is on the Worker, and runs it once the credentials are complete. Put every value below on the Worker as a secret (`wrangler secret put NAME --config wrangler.jsonc`), not in `wrangler.jsonc`. Pipe each value in from your secret store, never through a file or the terminal.
+
+**Azure AI Foundry.**
+- In the Foundry resource, deploy gpt-oss-120b under the name `gpt-oss-120b`. For campaign images, also deploy `gpt-image-1`.
+- Set `AZURE_AI_ENDPOINT` (for example `https://<resource>.openai.azure.com`) and `AZURE_AI_API_KEY`.
+- Where key access is turned off on the resource, set `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` instead. They belong to a service principal holding **Cognitive Services OpenAI User** on that resource only.
+- Optional: `AZURE_AI_DEPLOYMENTS` (JSON, catalog id → deployment name) and `AZURE_AI_IMAGE_DEPLOYMENT`.
+- To revoke: regenerate the resource key, or delete the client secret, then `wrangler secret delete` the values.
+
+**Amazon Bedrock.**
+- In the Bedrock console, grant model access to OpenAI gpt-oss-120b and gpt-oss-20b in `BEDROCK_REGION` (default `us-west-2`), and to Amazon Nova Canvas in `BEDROCK_IMAGE_REGION` (default `us-east-1`).
+- Create a Bedrock API key for an IAM identity whose policy allows only `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on those models.
+- Set `BEDROCK_API_KEY` and, if not the default, `BEDROCK_REGION`.
+- Optional: `BEDROCK_MODEL_MAP` (JSON, catalog id → Bedrock model id), `BEDROCK_IMAGE_REGION` and `BEDROCK_IMAGE_MODEL`.
+- To revoke: delete the API key in IAM, then `wrangler secret delete BEDROCK_API_KEY`.
 
 ## Rollback and teardown
 

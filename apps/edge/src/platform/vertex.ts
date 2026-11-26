@@ -229,7 +229,12 @@ export function vertexCompatibleParams(params: CallParams): CallParams {
   };
 }
 
-function reasoningFromWorkersAi(model: Exclude<LanguageModel, string>) {
+/**
+ * gpt-oss behind an OpenAI-compatible endpoint (Vertex AI, Azure AI Foundry, Amazon Bedrock): the
+ * Workers AI options the shared code sets are translated, a forced tool choice becomes an
+ * instruction, and a must-call step that comes back without a call gets one recovered.
+ */
+export function openModelCompat(model: Exclude<LanguageModel, string>) {
   return wrapLanguageModel({
     model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
     middleware: {
@@ -364,6 +369,46 @@ function decodeBase64(value: string) {
   return bytes;
 }
 
+/**
+ * The answer-quality judge where Clef isn't available: gpt-oss answers Clef's rubric as JSON, and
+ * the reply comes back in Clef's shape so architecture/judge.ts scores it the same way.
+ */
+export function rubricJudge(chat: (modelId: string) => Exclude<LanguageModel, string>) {
+  return async (_model: string, input: Record<string, unknown>): Promise<JudgeVerdict> => {
+    const questions = (input.questions ?? {}) as Record<
+      string,
+      { instructions: string; criteria: readonly string[] }
+    >;
+    const ids = Object.keys(questions);
+    const rubric = ids
+      .map(
+        (id) =>
+          `${id}: ${questions[id]?.instructions} Answer with the index of one of: ${questions[
+            id
+          ]?.criteria
+            .map((label, index) => `${index}=${label}`)
+            .join(", ")}.`,
+      )
+      .join("\n");
+    const { text } = await generateText({
+      model: chat("@cf/openai/gpt-oss-120b"),
+      system:
+        "You grade an AI agent's run. Reply with one JSON object mapping each question id to an integer index, nothing else.",
+      prompt: `Run:\n${JSON.stringify(input.state)}\n\nQuestions:\n${rubric}`,
+      providerOptions: { openai: { reasoningEffort: "low" } },
+    });
+    const parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as Record<
+      string,
+      unknown
+    >;
+    return {
+      answers: Object.fromEntries(
+        ids.map((id) => [id, { type: "score", score: Number(parsed[id]) }]),
+      ),
+    };
+  };
+}
+
 export function vertexModels(options: VertexOptions): ModelPlatform {
   const baseFetch = options.fetch ?? fetch;
   const token = options.accessToken;
@@ -375,10 +420,7 @@ export function vertexModels(options: VertexOptions): ModelPlatform {
     fetch: authed,
   });
   const chat = (modelId: string) =>
-    reasoningFromWorkersAi(openai.chat(vertexModelId(modelId, map))) as Exclude<
-      LanguageModel,
-      string
-    >;
+    openModelCompat(openai.chat(vertexModelId(modelId, map))) as Exclude<LanguageModel, string>;
   const imageModel = options.imageModel ?? "gemini-3.1-flash-image";
   return {
     kind: "vertex",
@@ -416,39 +458,7 @@ export function vertexModels(options: VertexOptions): ModelPlatform {
      * Clef is Workers AI-only; on Vertex the judge is gpt-oss answering the same rubric as JSON,
      * returned in Clef's shape so architecture/judge.ts scores it the same way.
      */
-    async judge(_model: string, input: Record<string, unknown>): Promise<JudgeVerdict> {
-      const questions = (input.questions ?? {}) as Record<
-        string,
-        { instructions: string; criteria: readonly string[] }
-      >;
-      const ids = Object.keys(questions);
-      const rubric = ids
-        .map(
-          (id) =>
-            `${id}: ${questions[id]?.instructions} Answer with the index of one of: ${questions[
-              id
-            ]?.criteria
-              .map((label, index) => `${index}=${label}`)
-              .join(", ")}.`,
-        )
-        .join("\n");
-      const { text } = await generateText({
-        model: chat("@cf/openai/gpt-oss-120b"),
-        system:
-          "You grade an AI agent's run. Reply with one JSON object mapping each question id to an integer index, nothing else.",
-        prompt: `Run:\n${JSON.stringify(input.state)}\n\nQuestions:\n${rubric}`,
-        providerOptions: { openai: { reasoningEffort: "low" } },
-      });
-      const parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as Record<
-        string,
-        unknown
-      >;
-      return {
-        answers: Object.fromEntries(
-          ids.map((id) => [id, { type: "score", score: Number(parsed[id]) }]),
-        ),
-      };
-    },
+    judge: rubricJudge(chat),
     vendor(provider) {
       if (provider === "openai")
         return {
