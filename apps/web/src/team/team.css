@@ -2372,3 +2372,355 @@
   color: #a3261b;
   font-weight: 700;
 }
+
+/* Two audiences on one page: plain language first, the machinery one click away (detail.tsx). */
+.team-technical {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.team-term {
+  border-bottom: 1px dotted currentColor;
+  cursor: help;
+}
+.team-lede-points {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.team-lede-points li {
+  margin: 2px 0;
+}
+.team-done-inline.paused {
+  color: var(--ink);
+  font-weight: 600;
+}
+.team-raw-status {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.team-raw-status summary {
+  cursor: pointer;
+}
+.team-run-metrics {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.team-run-metrics summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.team-stepper-familiar {
+  display: block;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+.team-workspace-familiar {
+  color: var(--muted);
+  font-size: 0.7em;
+  font-weight: 500;
+}
+.team-step-card .team-step-handoff {
+  color: var(--ink);
+}
+.team-step-assists {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.team-signoffs {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 12px;
+}
+.team-signoffs > summary {
+  cursor: pointer;
+}
+.team-signoffs > summary span {
+  color: var(--muted);
+}
+.team-signoff-subject {
+  color: var(--muted);
+}
+.team-decision-log q {
+  display: block;
+  color: var(--muted);
+  font-style: italic;
+}
+.team-hood-explainer {
+  margin: 4px 0 10px;
+}
+.team-modal-role {
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #eef3f9;
+}
+.team-modal-bounds {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.team-modal-bounds h5 {
+  margin-top: 4px;
+}
+.team-modal-bounds ul {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.team-modal-profile {
+  margin-top: 14px;
+}
+.team-modal-profile summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Where each part of a module came from (ModuleView). */
+.team-provenance {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  font-style: normal;
+  line-height: 1.6;
+  vertical-align: middle;
+  white-space: nowrap;
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: help;
+}
+.team-provenance.claim {
+  background: #e3f1d6;
+  color: #2f5a14;
+}
+.team-provenance.written {
+  background: #fdf0d8;
+  color: #7a4d12;
+}
+.team-provenance.required {
+  background: #e6eef7;
+  color: #24486e;
+}
+.team-provenance.unmatched {
+  background: #fbe1dc;
+  color: #8a2a17;
+}
+.team-provenance-summary {
+  margin: 4px 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* The MLR job's header, as a review system lays it out. */
+.team-job-header {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 6px 14px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.team-job-header dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.team-job-header dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* A phase shown as two stages (content: copy and creative, then MLR review and approval). */
+.team-stepper ol {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(104px, 1fr);
+}
+.team-stage + .team-stage {
+  margin-top: 10px;
+}
+.team-stage-title {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Pre-check refusals on the output their drafts failed. */
+.team-refusals {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border-left: 3px solid #b5651d;
+  border-radius: 6px;
+  background: #fdf6ec;
+  font-size: 12px;
+}
+.team-refusals.fixed {
+  border-left-color: var(--forest);
+  background: #f3f8ec;
+}
+.team-refusals summary {
+  cursor: pointer;
+}
+.team-refusals ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+/* The quality checks, closed to one line while all pass (MlrJobView). */
+.team-checks {
+  margin: 8px 0;
+}
+.team-checks > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* The decision's buttons stay in reach while the reader reads the evidence above them. */
+.team-decision-card .team-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  margin: 0 -4px;
+  padding: 10px 4px;
+  border-top: 1px solid var(--line);
+  background: inherit;
+}
+
+/* Where the page scrolls as a whole (the view's own scrolling is off below 1000px), let sticky
+   parts such as the decision's buttons and the phone's page links follow the window. */
+@media (max-width: 1000px) {
+  .team-view {
+    overflow: visible;
+  }
+}
+
+/* The map's agents as tappable buttons; shown only where the map is too small to tap. */
+.team-agent-chips {
+  display: none;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .team-view .section-header h2 {
+    font-size: 22px;
+    line-height: 1.2;
+  }
+  .team-view .arch-header-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  /* The path: compact tiles in one sideways row, not pinned over the page on a small screen. */
+  .team-stepper {
+    position: static;
+    padding: 6px;
+  }
+  .team-stepper ol {
+    grid-auto-columns: minmax(96px, 42vw);
+    scroll-snap-type: x proximity;
+  }
+  .team-stepper li {
+    scroll-snap-align: start;
+  }
+  .team-stepper button {
+    padding: 6px 8px;
+  }
+  .team-stepper-legend {
+    flex-wrap: wrap;
+  }
+  .team-agent-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0;
+  }
+  .team-agent-chips button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 36px;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+  }
+  .team-decision-card {
+    background: #fffaf0;
+  }
+  .team-decision-card .team-actions .arch-primary,
+  .team-decision-card .team-actions .arch-secondary {
+    min-height: 40px;
+  }
+  .team-turn-pill {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    text-align: center;
+  }
+  /* The agent's details fill the screen, with its tabs in one sideways row. */
+  .team-modal {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .team-modal-inner {
+    height: 100%;
+    max-height: 100dvh;
+  }
+  .team-modal-header {
+    padding: 12px 14px 8px;
+  }
+  .team-modal .arch-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 8px 14px 4px;
+    scrollbar-width: none;
+  }
+  .team-modal .arch-tabs button {
+    flex: none;
+    white-space: nowrap;
+  }
+  .team-modal-body {
+    padding: 10px 14px 24px;
+  }
+  .team-modal-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .team-hood .arch-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .team-hood .arch-tabs button {
+    flex: none;
+    white-space: nowrap;
+  }
+}

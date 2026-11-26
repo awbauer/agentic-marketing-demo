@@ -256,7 +256,7 @@ function readTools(run: TeamRun, agent: LifecycleWorker, step: AgentStep): ToolS
       async () => ({
         product: "Cardivance",
         currentLabel: CURRENT_LABEL,
-        campaignScope: "US HCPs, approved email and endemic HCP display",
+        campaignScope: "US HCPs, brand email to consented HCPs and endemic HCP display",
         claims: claimsLibrary(await lifecycleWorld(run), brand, run.brief.end),
       }),
     ),

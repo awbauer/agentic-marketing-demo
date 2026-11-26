@@ -11,14 +11,14 @@ import type { GuardrailHit } from "./team-state";
 
 export const KINDS: Record<GuardrailHit["kind"], { label: string; explain: string }> = {
   rule: {
-    label: "Rule check refused the save",
+    label: "Automated pre-check refused the draft",
     explain:
-      "Code checks every piece of work against the rules, whatever the model wrote. The save was refused, nothing reached the campaign file, and the agent got every problem back to fix.",
+      "Code checks every piece of work against the rules before any person reviews it, whatever the model wrote. The draft was refused, nothing reached the campaign file, and the agent got every problem back to fix. A pre-check never replaces Medical, Legal or Regulatory review.",
   },
   gateway: {
-    label: "Policy gateway denied the call",
+    label: "Access control blocked the action",
     explain:
-      "Cedar policies decide which tools each agent may use, and at which step. This call wasn't permitted, so it never ran.",
+      "Each agent may use only the actions it was granted, at the right step (written as Cedar policies the gateway enforces). This action wasn't permitted, so it never ran, and it was logged.",
   },
   limit: {
     label: "A hard limit stopped the work",
@@ -26,7 +26,7 @@ export const KINDS: Record<GuardrailHit["kind"], { label: string; explain: strin
       "Above the per-step checks, the squad has hard limits on tool calls per assignment, failed calls, calls per lead turn, and model calls and tokens per run. Hitting one stops that work and says why, so a model that keeps calling tools without finishing can't spin through the run.",
   },
   contract: {
-    label: "Tool contract rejected the call",
+    label: "Malformed action rejected",
     explain:
       "The input didn't match the tool's schema, so it was rejected before it ran. The model has to send what the tool defines.",
   },
@@ -42,11 +42,11 @@ export const PROTECTS: Record<string, string> = {
   plan_media: "The channel plan must respect minimum spends, the budget and the brief's window.",
   propose_focus_areas: "Each focus area must rest on real data and say how success is measured.",
   propose_concepts:
-    "Medical/Legal/Regulatory: a concept may rest only on claims approved for this campaign and on images that are approved and still in rights.",
+    "Claims library rule: a concept may rest only on claims approved for this campaign and on images that are approved and still in rights.",
   draft_modules:
-    "Medical/Legal/Regulatory: modules use approved claims word for word, never next to a claim they must not appear with.",
+    "Claims library rule: modules use approved claims word for word, never next to a claim they must not appear with.",
   build_audience:
-    "The audience must be built from real segments in the HCP universe, with their decile bands.",
+    "List compliance: built from real segments in the HCP universe, with their decile bands; email only to consented HCPs, do-not-contact removed.",
 };
 
 /** Each hard limit in words. */

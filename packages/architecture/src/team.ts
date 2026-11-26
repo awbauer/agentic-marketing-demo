@@ -878,6 +878,8 @@ export type TeamEvent =
       persona: Persona;
       /** The option the person chose, for a choice. */
       choice?: string;
+      /** When the person decided (ISO time); runs saved before it was recorded have none. */
+      at?: string;
     }
   /** The lifecycle moved into a phase, or finished one. */
   | { type: "phase"; phase: string; state: "active" | "done"; round: number }

@@ -127,10 +127,17 @@ export function TeamHierarchy({
     if ((view.state === "working" || view.state === "revising") && view.activity)
       return view.activity;
     if (view.note) return view.note;
-    if (view.state === "done") return id === TEAM_DIRECTOR ? "Proposal sent" : "Kept";
-    if (view.state === "waiting") return "With the lead";
-    if (view.state === "blocked") return "Stuck";
-    return view.state === "idle" ? "Idle" : "";
+    if (view.state === "done")
+      return id === TEAM_DIRECTOR
+        ? lifecycle
+          ? "Done"
+          : "Proposal sent"
+        : lifecycle
+          ? "Work accepted"
+          : "Kept";
+    if (view.state === "waiting") return lifecycle ? "Handed back to the lead" : "With the lead";
+    if (view.state === "blocked") return lifecycle ? "Paused" : "Stuck";
+    return view.state === "idle" ? (lifecycle ? "Not started" : "Idle") : "";
   };
   const chords = spokes
     .flatMap((a, i) => spokes.slice(i + 1).map((b) => [a, b] as const))

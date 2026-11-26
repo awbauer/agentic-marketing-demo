@@ -12,9 +12,10 @@ import {
 } from "@northstar/architecture";
 import { useRef, useState } from "react";
 import { RichText } from "./RichText";
+import type { TeamState } from "./team-state";
 
 type Waiting = Extract<TeamEvent, { type: "await-person" }>;
-type Decided = Extract<TeamEvent, { type: "decided" }> & { choiceLabel?: string };
+type Decided = TeamState["decisions"][number];
 
 /** What the reviewer checks: every placement's copy and its disclosure. */
 function CopyUnderReview({ strategy }: { strategy: CampaignStrategy }) {
@@ -133,22 +134,82 @@ export function DecisionCard({
   );
 }
 
-/** Every decision people took on this run, in order. */
-export function DecisionLog({ decisions }: { decisions: readonly Decided[] }) {
+const when = (at?: string) =>
+  at
+    ? new Date(at).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+
+/** What a person did, in a sign-off's words. */
+const verb = (decision: Decided) =>
+  decision.decision === "changes"
+    ? "asked for changes"
+    : decision.choiceLabel
+      ? `chose “${decision.choiceLabel}”`
+      : decision.gate === "regulatory"
+        ? "approved for distribution"
+        : decision.gate === "fda-2253"
+          ? "filed Form FDA 2253"
+          : "approved";
+
+/**
+ * Every decision people took on this run, in order: who, what they signed off (the version of the
+ * work in front of them), when, and their words. The run's audit trail.
+ */
+export function DecisionLog({
+  decisions,
+  titles = {},
+}: {
+  decisions: readonly Decided[];
+  /** Plain names for the work a decision signed off, by artifact name. */
+  titles?: Record<string, string>;
+}) {
   if (decisions.length === 0) return null;
   return (
-    <ol className="team-decision-log" aria-label="Decisions by people">
+    <ol className="team-decision-log" aria-label="Sign-off record">
       {decisions.map((decision, index) => (
         <li key={`${decision.gate}-${index}`} className={`decision-${decision.decision}`}>
-          <strong>{TEAM_GATES[decision.gate].decider}</strong>{" "}
-          {decision.decision === "changes"
-            ? "asked for changes"
-            : decision.choiceLabel
-              ? `chose “${decision.choiceLabel}”`
-              : "approved"}
-          {decision.note ? `: “${decision.note}”` : "."}
+          <strong>{TEAM_GATES[decision.gate].decider}</strong> {verb(decision)}
+          {decision.signedOff ? (
+            <span className="team-signoff-subject">
+              {" "}
+              · {titles[decision.signedOff.name] ?? decision.signedOff.name} v
+              {decision.signedOff.version}
+            </span>
+          ) : null}
+          {when(decision.at) ? <small> · {when(decision.at)}</small> : null}
+          {decision.note ? <q>{decision.note}</q> : null}
         </li>
       ))}
     </ol>
+  );
+}
+
+/** The sign-off record beside the lifecycle: open while it is short, always one click away. */
+export function SignOffRecord({
+  decisions,
+  titles,
+}: {
+  decisions: readonly Decided[];
+  titles: Record<string, string>;
+}) {
+  return (
+    <details className="team-signoffs" open={decisions.length > 0 && decisions.length <= 6}>
+      <summary>
+        <strong>Sign-off record</strong>{" "}
+        <span>
+          {decisions.length} {decisions.length === 1 ? "decision" : "decisions"} by people
+        </span>
+      </summary>
+      {decisions.length === 0 ? (
+        <p className="arch-note">No one has signed anything off on this run yet.</p>
+      ) : (
+        <DecisionLog decisions={decisions} titles={titles} />
+      )}
+    </details>
   );
 }

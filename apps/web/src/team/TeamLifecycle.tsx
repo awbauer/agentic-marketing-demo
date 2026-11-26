@@ -16,11 +16,13 @@ import {
   type FocusArea,
   type Form2253,
   isChoiceGate,
+  LIFECYCLE_ROLES,
   type LifecycleState,
   type MlrJob,
   PERSONA_LABELS,
   PHARMA_CHANNELS,
   PHARMA_PHASES,
+  REVIEW_TIER_LABELS,
   type PerformanceReport,
   type PharmaModule,
   type PhaseStep,
@@ -32,10 +34,12 @@ import {
   TEAM_PARTY_LABELS,
   type TeamEvent,
 } from "@northstar/architecture";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Claim } from "./Claims";
 import { RichText, SourceChips } from "./RichText";
 import { ApprovedAssets } from "./TeamWork";
+import { useTechnical } from "./detail";
+import type { GuardrailHit } from "./team-state";
 
 type Artifact = Extract<TeamEvent, { type: "artifact" }>;
 type Waiting = Extract<TeamEvent, { type: "await-person" }>;
@@ -107,35 +111,104 @@ function Concepts({ concepts, chosen }: { concepts: Concept[]; chosen?: string }
   );
 }
 
-/** A module as MLR reads it: copy with reference markers, images, references and fair balance. */
+type Source = "claim" | "written" | "required" | "unmatched";
+
+/** Where each part of a module came from, in a reviewer's words. */
+const SOURCES: Record<Source, { label: string; title: string }> = {
+  claim: {
+    label: "Approved claim · verbatim",
+    title: "Entered from the claims library by its ID, word for word. Already MLR-approved.",
+  },
+  written: {
+    label: "AI-written · full MLR",
+    title:
+      "Written for this campaign by the agent. New words are new meaning: Medical, Legal and Regulatory review them in full.",
+  },
+  required: {
+    label: "Required text · system-attached",
+    title:
+      "Attached by the system, not the agent: the claim's required context, or the ISI, boxed warning and PI link.",
+  },
+  unmatched: {
+    label: "Not from the library",
+    title:
+      "This line has no claim ID, so it is not approved content. A pre-check refuses it before review.",
+  },
+};
+
+function SourceTag({ source }: { source: Source }) {
+  return (
+    <span className={`team-provenance ${source}`} title={SOURCES[source].title}>
+      {SOURCES[source].label}
+    </span>
+  );
+}
+
+/** How much of a module is approved content, AI-written, or attached by the system. */
+export function provenanceOf(module: PharmaModule) {
+  const written = [module.headline, module.opening, module.closing, module.cta].filter((text) =>
+    text.trim(),
+  ).length;
+  const verbatim = module.claims.filter((claim) => claim.claimId).length;
+  const required =
+    module.claims.filter((claim) => claim.context).length + module.disclosures.length;
+  return { verbatim, written, required, unmatched: module.claims.length - verbatim };
+}
+
+/**
+ * A module as MLR reads it: copy with reference markers, images, references and fair balance. Each
+ * part says where it came from: an approved claim entered word for word, words the agent wrote
+ * (which MLR reviews in full), or required text the system attached.
+ */
 function ModuleView({ module }: { module: PharmaModule }) {
+  const count = provenanceOf(module);
   return (
     <article className={`team-module channel-${module.channel}`}>
       <header>
         <code>{module.id}</code>{" "}
-        {module.channel === "email" ? "Approved email" : "HCP display banner"}
+        {module.channel === "email" ? "Brand email to consented HCPs" : "HCP display banner"}
       </header>
-      <h5>{module.headline}</h5>
-      <p>{module.opening}</p>
+      <p className="team-provenance-summary">
+        {count.verbatim} approved {count.verbatim === 1 ? "claim" : "claims"} word for word ·{" "}
+        {count.written} AI-written {count.written === 1 ? "line" : "lines"} for full MLR ·{" "}
+        {count.required} required {count.required === 1 ? "text" : "texts"} attached by the system
+        {count.unmatched ? ` · ${count.unmatched} not from the library` : ""}
+      </p>
+      <h5>
+        {module.headline} <SourceTag source="written" />
+      </h5>
+      <p>
+        {module.opening} <SourceTag source="written" />
+      </p>
       <ul className="team-module-claims">
         {module.claims.map((claim) => (
           <li key={claim.topic}>
             {claim.text}
-            <sup>{claim.marker}</sup>
-            {claim.context && <small className="team-module-context">{claim.context}</small>}
+            <sup>{claim.marker}</sup> <SourceTag source={claim.claimId ? "claim" : "unmatched"} />
             {claim.claimId && (
               <span className="team-claim-id">
                 <Claim id={claim.claimId} />
               </span>
             )}
+            {claim.context && (
+              <small className="team-module-context">
+                {claim.context} <SourceTag source="required" />
+              </small>
+            )}
           </li>
         ))}
       </ul>
-      <p>{module.closing}</p>
-      <p className="team-module-cta">{module.cta} →</p>
+      <p>
+        {module.closing} <SourceTag source="written" />
+      </p>
+      <p className="team-module-cta">
+        {module.cta} → <SourceTag source="written" />
+      </p>
       {module.assets.length > 0 && <ApprovedAssets picks={module.assets} />}
       <details>
-        <summary>References and fair balance</summary>
+        <summary>
+          References and fair balance <SourceTag source="required" />
+        </summary>
         <ol className="team-module-refs">
           {module.claims.flatMap((claim) =>
             claim.references.map((reference) => (
@@ -157,15 +230,63 @@ function ModuleView({ module }: { module: PharmaModule }) {
   );
 }
 
+/**
+ * The MLR job as a review system lays it out: the job's header (code, version, review path, who
+ * owns the content, who submitted it, who reviews, the label it was checked against), then the
+ * coordinator's notes, the quality checks and the modules.
+ */
 function MlrJobView({ job }: { job: MlrJob }) {
+  const labels = [
+    ...new Set(
+      job.modules.flatMap((module) =>
+        module.claims.flatMap((claim) => (claim.labelVersion ? [claim.labelVersion] : [])),
+      ),
+    ),
+  ];
+  const full = job.tier?.tier !== "B";
   return (
     <div className="team-work">
-      <p>
-        <strong>Job {job.jobCode}</strong> · round {job.round} · {job.modules.length} modules
-      </p>
+      <dl className="team-job-header">
+        <div>
+          <dt>Job code</dt>
+          <dd>
+            <code>{job.jobCode}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>Version</dt>
+          <dd>
+            Round {job.round} · {job.modules.length} modules
+          </dd>
+        </div>
+        <div>
+          <dt>Review path</dt>
+          <dd>{job.tier ? REVIEW_TIER_LABELS[job.tier.tier] : "Not set"}</dd>
+        </div>
+        <div>
+          <dt>Content owner</dt>
+          <dd>Brand lead</dd>
+        </div>
+        <div>
+          <dt>Submitted by</dt>
+          <dd>MLR submission agent, for the MLR coordinator</dd>
+        </div>
+        <div>
+          <dt>Reviewers</dt>
+          <dd>
+            {full ? "Medical, Legal, Regulatory (final approval)" : "One reviewer, sampled audit"}
+          </dd>
+        </div>
+        {labels.length > 0 && (
+          <div>
+            <dt>Checked against</dt>
+            <dd>{labels.join(", ")}</dd>
+          </div>
+        )}
+      </dl>
       {job.tier && (
         <p className="team-tier">
-          Review tier <strong>{job.tier.tier}</strong> · {job.tier.path}.{" "}
+          <strong>{REVIEW_TIER_LABELS[job.tier.tier]}</strong>: {job.tier.path}.{" "}
           <span className="arch-note">{job.tier.reason}</span>
         </p>
       )}
@@ -176,30 +297,38 @@ function MlrJobView({ job }: { job: MlrJob }) {
           </li>
         ))}
       </ul>
-      <div className="team-table-wrap">
-        <table className="team-table">
-          <thead>
-            <tr>
-              <th scope="col">Module</th>
-              <th scope="col">Quality check</th>
-              <th scope="col">Result</th>
-            </tr>
-          </thead>
-          <tbody>
-            {job.checks.map((check) => (
-              <tr key={`${check.module}-${check.check}`}>
-                <td>
-                  <code>{check.module}</code>
-                </td>
-                <td>{check.check}</td>
-                <td className={check.ok ? "ok" : "failed"}>
-                  {check.ok ? "✓" : "✗"} {check.detail}
-                </td>
+      {/* Closed while every check passes, so a long table doesn't push the modules and the
+      reviewer's buttons screens away; a failed check opens it. */}
+      <details className="team-checks" open={job.checks.some((check) => !check.ok)}>
+        <summary>
+          Quality checks before review: {job.checks.filter((check) => check.ok).length} of{" "}
+          {job.checks.length} passed
+        </summary>
+        <div className="team-table-wrap">
+          <table className="team-table">
+            <thead>
+              <tr>
+                <th scope="col">Module</th>
+                <th scope="col">Quality check</th>
+                <th scope="col">Result</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {job.checks.map((check) => (
+                <tr key={`${check.module}-${check.check}`}>
+                  <td>
+                    <code>{check.module}</code>
+                  </td>
+                  <td>{check.check}</td>
+                  <td className={check.ok ? "ok" : "failed"}>
+                    {check.ok ? "✓" : "✗"} {check.detail}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
       <div className="team-modules">
         {job.modules.map((module) => (
           <ModuleView key={module.id} module={module} />
@@ -533,7 +662,7 @@ function PerformanceView({ report }: { report: PerformanceReport }) {
   );
 }
 
-const ARTIFACT_TITLES: Record<string, string> = {
+export const ARTIFACT_TITLES: Record<string, string> = {
   propose_focus_areas: "Focus areas",
   propose_concepts: "Concepts",
   draft_modules: "Content modules",
@@ -807,7 +936,7 @@ export function LifecycleDecisionCard({
             : waiting.gate === "regulatory"
               ? "Approve for distribution"
               : waiting.gate === "fda-2253"
-                ? "Submit and go live"
+                ? "File 2253 with OPDP (publishing then releases)"
                 : "Approve"}
         </button>
         <button
@@ -851,6 +980,34 @@ function stepState(
   return currentStep(lifecycle) === step ? "now" : "todo";
 }
 
+type Stage = { title: string; familiar: string; steps: readonly PhaseStep[]; letter: string };
+
+/**
+ * A phase as the path shows it: one stage, or, where its steps name stages (content: copy and
+ * creative, then MLR review and approval), one per stage, in order. The server still runs it as
+ * one phase; the split is how a content team reads it.
+ */
+export function stagesOf(phase: (typeof PHARMA_PHASES)[number]): Stage[] {
+  const steps = phase.steps as readonly PhaseStep[];
+  if (!steps.some((step) => step.stage))
+    return [{ title: phase.title, familiar: phase.familiar, steps, letter: "" }];
+  const stages: Stage[] = [];
+  for (const step of steps) {
+    const title = step.stage ?? phase.title;
+    const last = stages.at(-1);
+    if (last?.title === title) last.steps = [...last.steps, step];
+    else stages.push({ title, familiar: phase.title, steps: [step], letter: "" });
+  }
+  return stages.map((stage, index) => ({ ...stage, letter: String.fromCharCode(97 + index) }));
+}
+
+function stageStatus(lifecycle: LifecycleState | null, index: number, stage: Stage) {
+  const states = stage.steps.map((step) => stepState(lifecycle, index, step));
+  if (states.every((state) => state === "done")) return "done" as const;
+  if (states.some((state) => state === "now")) return "active" as const;
+  return "todo" as const;
+}
+
 /** The whole path in one row; a phase opens in the workspace when the reader picks it. */
 export function PhaseStepper({
   lifecycle,
@@ -866,56 +1023,78 @@ export function PhaseStepper({
   onSelect: (phase: PhaseId) => void;
 }) {
   const turn = waiting ? phaseOfGate(waiting.gate)?.id : undefined;
+  const list = useRef<HTMLOListElement>(null);
+  // On a narrow screen the path scrolls sideways: keep the stage that needs the reader (or the
+  // active one) in view. Only the row scrolls, never the page.
+  useEffect(() => {
+    const row = list.current;
+    const item = row?.querySelector<HTMLElement>("li.is-turn, li.is-active");
+    if (!row || !item || row.scrollWidth <= row.clientWidth) return;
+    row.scrollTo({ left: Math.max(0, item.offsetLeft - row.offsetLeft - 12), behavior: "smooth" });
+  }, [lifecycle?.phase, waiting?.gate, lifecycle?.passed.length]);
   return (
     <nav className="team-stepper" aria-label="Lifecycle phases">
-      <ol>
-        {PHARMA_PHASES.map((phase, index) => {
-          const status = phaseStatus(lifecycle, index);
+      <ol ref={list}>
+        {PHARMA_PHASES.flatMap((phase, index) => {
           const round = lifecycle?.rounds[phase.id] ?? 1;
-          return (
-            <li key={phase.id} className={`is-${status}${turn === phase.id ? " is-turn" : ""}`}>
-              <button
-                type="button"
-                aria-pressed={selected === phase.id}
-                aria-current={status === "active" ? "step" : undefined}
-                onClick={() => onSelect(phase.id)}
+          const stages = stagesOf(phase);
+          return stages.map((stage) => {
+            const status =
+              stages.length > 1
+                ? stageStatus(lifecycle, index, stage)
+                : phaseStatus(lifecycle, index);
+            const isTurn =
+              turn === phase.id &&
+              stage.steps.some((step) => step.kind === "person" && step.gate === waiting?.gate);
+            return (
+              <li
+                key={`${phase.id}-${stage.letter}`}
+                className={`is-${status}${isTurn ? " is-turn" : ""}`}
               >
-                <span className="team-stepper-head">
-                  <span className="team-phase-number" aria-hidden="true">
-                    {status === "done" ? "✓" : index + 1}
+                <button
+                  type="button"
+                  aria-pressed={selected === phase.id}
+                  aria-current={status === "active" ? "step" : undefined}
+                  onClick={() => onSelect(phase.id)}
+                >
+                  <span className="team-stepper-head">
+                    <span className="team-phase-number" aria-hidden="true">
+                      {status === "done" ? "✓" : `${index + 1}${stage.letter}`}
+                    </span>
+                    <span className="team-stepper-title">{stage.title}</span>
                   </span>
-                  <span className="team-stepper-title">{phase.title}</span>
-                </span>
-                <span className="team-stepper-dots" aria-hidden="true">
-                  {(phase.steps as readonly PhaseStep[]).map((step) => (
-                    <i
-                      key={step.kind === "agent" ? step.tool : step.gate}
-                      className={`${step.kind} is-${stepState(lifecycle, index, step)}`}
-                    />
-                  ))}
-                </span>
-                <span className="team-stepper-note">
-                  {turn === phase.id
-                    ? "Your turn"
-                    : status === "done"
-                      ? "Done"
-                      : status === "active"
-                        ? round > 1
-                          ? `Round ${round}`
-                          : "In progress"
-                        : `${phase.steps.length} steps`}
-                </span>
-              </button>
-            </li>
-          );
+                  <span className="team-stepper-familiar">{stage.familiar}</span>
+                  <span className="team-stepper-dots" aria-hidden="true">
+                    {stage.steps.map((step) => (
+                      <i
+                        key={step.kind === "agent" ? step.tool : step.gate}
+                        className={`${step.kind} is-${stepState(lifecycle, index, step)}`}
+                      />
+                    ))}
+                  </span>
+                  <span className="team-stepper-note">
+                    {isTurn
+                      ? "Your turn"
+                      : status === "done"
+                        ? "Done"
+                        : status === "active"
+                          ? round > 1
+                            ? `Round ${round}`
+                            : "In progress"
+                          : `${stage.steps.length} steps`}
+                  </span>
+                </button>
+              </li>
+            );
+          });
         })}
       </ol>
       <p className="team-stepper-legend">
         <span>
-          <i className="agent" /> agent step
+          <i className="agent" /> AI agent prepares
         </span>
         <span>
-          <i className="person" /> your decision
+          <i className="person" /> a person signs off (you play them)
         </span>
         {!following && lifecycle && !lifecycle.finished && (
           <button
@@ -982,19 +1161,24 @@ function StepCard({
   step,
   state,
   waitingHere,
+  next,
 }: {
   step: PhaseStep;
   state: "done" | "now" | "todo";
   /** The run is waiting on this person now (not just stopped before them). */
   waitingHere: boolean;
+  /** The step after this one, so an agent's card can say who takes its work. */
+  next?: PhaseStep;
 }) {
   const [open, setOpen] = useState(false);
+  const technical = useTechnical();
   const who = step.kind === "agent" ? TEAM_PARTY_LABELS[step.agent] : TEAM_GATES[step.gate].decider;
+  const role = step.kind === "agent" ? LIFECYCLE_ROLES[step.agent] : null;
   return (
     <li className={`team-step-card ${step.kind} is-${state}`}>
       <header>
         <span className={`team-step-key ${step.kind}`}>
-          {step.kind === "agent" ? "Agent" : "You"}
+          {step.kind === "agent" ? "AI agent" : "Person · you play"}
         </span>
         <strong>{who}</strong>
         <span className="team-step-state">
@@ -1009,17 +1193,109 @@ function StepCard({
               : ""}
         </span>
       </header>
-      {step.kind === "agent" && <code>{step.tool}</code>}
-      <p className={open ? "" : "clamped"}>{step.does}</p>
+      {step.kind === "agent" ? (
+        <p className="team-step-handoff">
+          <strong>Hands in:</strong> {step.delivers}
+          {next?.kind === "person" ? ` → ${TEAM_GATES[next.gate].decider} decides.` : "."}
+        </p>
+      ) : (
+        <p className="team-step-handoff">
+          <strong>Signs off:</strong> {TEAM_GATES[step.gate].label}.
+        </p>
+      )}
+      {role && <small className="team-step-assists">Assists {role.assists}</small>}
+      {technical && step.kind === "agent" && <code>{step.tool}</code>}
+      {open && (
+        <>
+          <p>{step.does}</p>
+          {step.kind === "agent" && !technical && (
+            <small className="arch-note">
+              Hands in with the tool <code>{step.tool}</code>; code pre-checks it before anyone sees
+              it.
+            </small>
+          )}
+        </>
+      )}
       <button
         type="button"
         className="text-button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        {open ? "Less" : "More"}
+        {open ? "Less" : "How it works"}
       </button>
     </li>
+  );
+}
+
+/**
+ * The pre-check refusals and blocked actions an output's drafts ran into, on the output itself:
+ * what was refused and why, before any person saw it.
+ */
+function Refusals({ hits }: { hits: readonly GuardrailHit[] }) {
+  if (hits.length === 0) return null;
+  const total = hits.reduce((sum, hit) => sum + hit.count, 0);
+  const fixed = hits.every((hit) => hit.fixed);
+  return (
+    <details className={`team-refusals${fixed ? " fixed" : ""}`}>
+      <summary>
+        <strong>
+          {total} {total === 1 ? "draft was" : "drafts were"} refused by an automated pre-check
+        </strong>{" "}
+        {fixed ? "· fixed before this version" : "· not fixed yet"}
+      </summary>
+      <p className="arch-note">
+        These checks run in code before any person reviews the work. They are not MLR review, and
+        nothing refused reached the campaign file.
+      </p>
+      <ul>
+        {hits.map((hit, index) => (
+          <li key={`${hit.kind}-${index}`}>
+            {hit.count > 1 ? <strong>×{hit.count} </strong> : null}
+            {hit.detail}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/** One stage's steps, in order, with its name when the phase has two. */
+function StageTrack({
+  stage,
+  split,
+  index,
+  lifecycle,
+  waiting,
+  allSteps,
+}: {
+  stage: Stage;
+  split: boolean;
+  index: number;
+  lifecycle: LifecycleState | null;
+  waiting: Waiting | null;
+  allSteps: readonly PhaseStep[];
+}) {
+  return (
+    <div className="team-stage">
+      {split && (
+        <h4 className="team-stage-title">
+          {index + 1}
+          {stage.letter} · {stage.title}
+        </h4>
+      )}
+      <ol className="team-step-track" aria-label={`${stage.title}: steps`}>
+        {stage.steps.map((step) => (
+          <StepCard
+            key={step.kind === "agent" ? step.tool : step.gate}
+            step={step}
+            next={allSteps[allSteps.indexOf(step) + 1]}
+            state={stepState(lifecycle, index, step)}
+            waitingHere={step.kind === "person" && waiting?.gate === step.gate}
+          />
+        ))}
+      </ol>
+    </div>
   );
 }
 
@@ -1035,6 +1311,7 @@ export function PhaseWorkspace({
   waiting,
   decision,
   onOpenTurn,
+  guardrails = [],
 }: {
   phase: PhaseId;
   lifecycle: LifecycleState | null;
@@ -1042,6 +1319,8 @@ export function PhaseWorkspace({
   waiting: Waiting | null;
   decision: ReactNode;
   onOpenTurn: (phase: PhaseId) => void;
+  /** What the guardrails caught, so each output shows the pre-checks its drafts failed. */
+  guardrails?: readonly GuardrailHit[];
 }) {
   const index = PHARMA_PHASES.findIndex((item) => item.id === phase);
   const spec = PHARMA_PHASES[index];
@@ -1059,7 +1338,16 @@ export function PhaseWorkspace({
           {status === "done" ? "done" : status === "active" ? "in progress" : "to come"}
           {round > 1 ? ` · round ${round}` : ""}
         </p>
-        <h3 id="team-workspace-title">{spec.title}</h3>
+        <h3 id="team-workspace-title">
+          {spec.title} <span className="team-workspace-familiar">{spec.familiar}</span>
+        </h3>
+        <p className="arch-note">
+          In most brand teams this stage is run by agency and brand people. Here AI agents prepare
+          the work and the same people still decide.
+          {spec.id === "content"
+            ? " Medical, Legal and Regulatory are shown one after another for clarity; in practice they often review in parallel, with Regulatory giving the final approval."
+            : ""}
+        </p>
       </header>
       {turn && turn !== phase && (
         <button
@@ -1071,16 +1359,17 @@ export function PhaseWorkspace({
           {waiting?.title} →
         </button>
       )}
-      <ol className="team-step-track" aria-label={`${spec.title}: steps`}>
-        {(spec.steps as readonly PhaseStep[]).map((step) => (
-          <StepCard
-            key={step.kind === "agent" ? step.tool : step.gate}
-            step={step}
-            state={stepState(lifecycle, index, step)}
-            waitingHere={step.kind === "person" && waiting?.gate === step.gate}
-          />
-        ))}
-      </ol>
+      {stagesOf(spec).map((stage) => (
+        <StageTrack
+          key={stage.letter || "all"}
+          stage={stage}
+          split={stagesOf(spec).length > 1}
+          index={index}
+          lifecycle={lifecycle}
+          waiting={waiting}
+          allSteps={spec.steps as readonly PhaseStep[]}
+        />
+      ))}
       {turn === phase && decision}
       <div className="team-outputs">
         <h4>What this phase produced</h4>
@@ -1105,6 +1394,7 @@ export function PhaseWorkspace({
                     v{latest.version} · by {by(latest)}
                   </small>
                 </summary>
+                <Refusals hits={guardrails.filter((hit) => hit.tool === name)} />
                 <ArtifactView artifact={latest} choices={lifecycle?.choices} />
                 {versions.length > 1 && (
                   <details className="team-output-history">

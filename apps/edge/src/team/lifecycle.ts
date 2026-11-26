@@ -467,6 +467,7 @@ export async function continueLifecycleRun(
       decision: input.decision,
       note,
       persona: ctx.user.persona,
+      at: new Date().toISOString(),
       ...(choice ? { choice } : {}),
     });
     const chose = choice
