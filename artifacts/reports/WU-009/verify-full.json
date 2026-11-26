@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-26T16:46:32.657Z",
-  "status": "failed",
+  "generatedAt": "2026-11-26T16:48:27.862Z",
+  "status": "passed",
   "results": [
     {
       "command": "pnpm types:worker",
@@ -60,7 +60,15 @@
     },
     {
       "command": "pnpm learn:check",
-      "exitCode": 1
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm build",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm build:gcp",
+      "exitCode": 0
     }
   ]
 }
