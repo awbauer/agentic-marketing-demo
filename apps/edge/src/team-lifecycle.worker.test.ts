@@ -1,5 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
+import { namedClaimTopics } from "./team/lifecycle-workers";
 import { createArchitectureTables } from "./worker.test-helpers";
 
 // biome-ignore lint/suspicious/noExplicitAny: parsed responses are untyped JSON in these tests
@@ -202,5 +203,25 @@ describe("pharma campaign lifecycle", () => {
     const mlr = scorecard.checks.find((check: Json) => check.id === "mlr-rounds");
     expect(mlr.score).toBe(1);
     expect(mlr.detail).toContain("1 request for changes; 1 approved on the next review");
+  });
+});
+
+describe("claim topics a model names", () => {
+  const library = [
+    { topic: "cardivance-mortality", claimId: "CLM-CRD-0042" },
+    { topic: "cardivance-safety", claimId: "CLM-CRD-0043" },
+  ];
+
+  it("maps an ID written with non-breaking hyphens to its topic", () => {
+    const topics = namedClaimTopics({ claimTopics: ["CLM\u2011CRD\u20110042"] }, library);
+    expect(topics).toEqual(["cardivance-mortality"]);
+  });
+
+  it("keeps plain IDs and topics as they are", () => {
+    const topics = namedClaimTopics(
+      { claimTopics: ["CLM-CRD-0043", "cardivance-mortality"] },
+      library,
+    );
+    expect(topics.sort()).toEqual(["cardivance-mortality", "cardivance-safety"]);
   });
 });

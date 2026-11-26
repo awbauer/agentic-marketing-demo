@@ -477,6 +477,8 @@ Feature code asks \`dataPlatform(env)\` for repositories (D1, or the Firestore t
 **The page names its host.** \`packages/contracts/src/host.ts\` says what each host calls its sign-in, models, database, storage and scheduler. The Google Cloud server tags its page with \`<meta name="northstar-host" content="google-cloud">\`; the Worker leaves it untouched. The browser reads the tag once, so one build names the right services in the route map, image workflow, squad providers, identity chain, and this course. The course is written once, with inline host and AI-platform markers that \`apps/web/src/learn/variants.ts\` resolves: host from the meta tag, platform from the **AI platform** menu. \`docs/learn.md\` is the Cloudflare/Workers AI edition; \`docs/learn-google-cloud.md\` the Google Cloud edition.
 
 **Maintenance.** The hourly job (audit pruning, drift sweeps, memory expiry) runs from the Worker's cron, or from Cloud Scheduler calling the service with a Google-signed token only its service account can get. Firestore's time-to-live policies also delete expired rows as a backstop.
+
+**The image allowance outlives the drafts.** The proof's fixed cap on generated images counts every image a workspace has ever made, not the drafts still stored. Drafts expire after seven days (Cloud Storage's lifecycle rule deletes the files, Firestore's time-to-live the rows), so counting them would hand the allowance back as they expire. On Google Cloud a per-workspace counter in Firestore, which never expires, holds the count; deleting an expired draft doesn't change it. A workspace with drafts from before the counter existed starts it from those drafts. On Cloudflare the D1 rows outlive their R2 files (only the file expires), so the cap counts those rows.
 :::
 `,
         inDemo: [
@@ -1405,7 +1407,7 @@ export const GLOSSARY: Array<{ term: string; definition: string }> = [
   {
     term: "Forced tool call",
     definition:
-      "A step where the host makes the model call one specific tool. The demo avoids them (ADR-019): context limits which tools are offered, and the model chooses. The exceptions are nudges: a lifecycle worker whose save is the only tool left must call it, and the lifecycle lead's nudge must call \`lifecycle_step\`.",
+      "A step where the host makes the model call one specific tool. The demo avoids them (ADR-019): context limits which tools are offered, and the model chooses. The exceptions are nudges: a lifecycle worker whose save is the only tool left must call it, and the lifecycle lead's nudge must call `lifecycle_step`.",
   },
   {
     term: "GraphRAG",

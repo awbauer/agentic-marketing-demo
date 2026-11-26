@@ -17,8 +17,13 @@ import { createPortal } from "react-dom";
 const CARD_WIDTH = 380;
 const MARGIN = 8;
 
-/** Just under the chip, or above it when there's no room below; always on screen. */
-function cardPlacement(chip: DOMRect, card: { height: number }): CSSProperties {
+/**
+ * Just under the chip, or above it when there's no room below; always on screen. A card taller
+ * than the window (a short landscape screen, a zoomed page) is capped to it and scrolls inside.
+ */
+export function cardPlacement(chip: DOMRect, measured: { height: number }): CSSProperties {
+  const maxHeight = Math.max(0, window.innerHeight - MARGIN * 2);
+  const card = { height: Math.min(measured.height, maxHeight) };
   const width = Math.min(CARD_WIDTH, window.innerWidth - MARGIN * 2);
   const left = Math.max(MARGIN, Math.min(chip.left, window.innerWidth - width - MARGIN));
   const below = chip.bottom + 4;
@@ -27,7 +32,7 @@ function cardPlacement(chip: DOMRect, card: { height: number }): CSSProperties {
     below + card.height <= window.innerHeight - MARGIN || above < MARGIN
       ? Math.min(below, Math.max(MARGIN, window.innerHeight - card.height - MARGIN))
       : above;
-  return { position: "fixed", top, left, width };
+  return { position: "fixed", top, left, width, maxHeight, overflowY: "auto" };
 }
 
 /** Off screen at its final width, so its height can be measured before it's placed. */
@@ -65,8 +70,9 @@ export function IdCard({
     if (!open) return;
     const place = () => {
       const anchor = chip.current?.getBoundingClientRect();
-      const box = card.current?.getBoundingClientRect();
-      if (anchor && box) setStyle(cardPlacement(anchor, box));
+      // The content's full height, even when an earlier placement capped the card.
+      const height = card.current ? card.current.scrollHeight + 2 : null;
+      if (anchor && height !== null) setStyle(cardPlacement(anchor, { height }));
     };
     place();
     window.addEventListener("resize", place);

@@ -104,6 +104,22 @@ describe("AIChatAgent over the real agents client protocol", () => {
     expect(agent?.isChatTurnActive()).toBe(false);
   });
 
+  it("answers a message queued behind a running turn, not the running turn's answer", async () => {
+    const { port } = await open();
+    const a = await client(port);
+    const b = await client(port);
+    const slow = await a.send([userMessage("slow")]);
+    const reader = slow.getReader();
+    while (TestAgent.releaseSlow === null) await reader.read();
+    // A second tab asks while the first turn is still streaming; its turn waits in the queue.
+    const queued = b.send([userMessage("second question")]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    TestAgent.releaseSlow?.();
+    while (!(await reader.read()).done) {}
+    const answer = deltas(await collect(await queued));
+    expect(answer).toBe("echo: second question");
+  });
+
   it("clears the transcript for every connection", async () => {
     const { port, api } = await open();
     const a = await client(port);
