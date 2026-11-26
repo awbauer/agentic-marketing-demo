@@ -1,8 +1,8 @@
 // The shared library of recent squad runs: the last ten, any brand, mode or provider, kept on the
 // server for everyone who opens the page. Picking one loads its event log and the time each event
 // was sent, so the page can replay it at the pace it ran instead of starting a new run.
-import type { TeamEvent } from "@northstar/architecture";
-import { hostTerms } from "@northstar/contracts";
+import { type TeamEvent, teamOpenModels } from "@northstar/architecture";
+import { AI_PLATFORM_TERMS, hostTerms } from "@northstar/contracts";
 import { useEffect, useState } from "react";
 import { type ArchApiError, archFetch, type Scope, useArch } from "../architecture/api";
 import { ErrorNote } from "../architecture/Shared";
@@ -17,6 +17,8 @@ export type LibraryRunSummary = {
   brand: string;
   mode: string;
   provider: string;
+  /** Where the open-model tier ran; absent on runs from before it was recorded. */
+  aiPlatform?: string;
   scripted: boolean;
   status: string;
   tokens: number;
@@ -34,7 +36,6 @@ export type LibraryRun = {
 };
 
 const PROVIDERS: Record<string, string> = {
-  cloudflare: HOST.id === "google-cloud" ? "Vertex AI" : "Workers AI",
   anthropic: "Claude",
   openai: "OpenAI",
 };
@@ -192,7 +193,9 @@ export function RunLibrary({
                     <strong>{run.title}</strong>
                     <span>
                       {run.brand} · {run.mode === "lifecycle" ? "Pharma lifecycle" : "Squad"} ·{" "}
-                      {PROVIDERS[run.provider] ?? run.provider}
+                      {run.provider === "cloudflare"
+                        ? AI_PLATFORM_TERMS[teamOpenModels(run.aiPlatform, HOST.id)].label
+                        : (PROVIDERS[run.provider] ?? run.provider)}
                       {run.scripted ? " (scripted)" : ""}
                     </span>
                     <small>

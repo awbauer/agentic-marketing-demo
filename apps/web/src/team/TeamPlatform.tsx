@@ -11,7 +11,8 @@ import {
   TEAM_PARTY_LABELS,
   type TeamAgentId,
   type TeamScorecard,
-  teamProviderLabel,
+  teamOpenModels,
+  teamRunProviderLabel,
 } from "@northstar/architecture";
 import { hostTerms } from "@northstar/contracts";
 import { resetSessionMetrics, type SessionRun, useSessionMetrics } from "./session-metrics";
@@ -186,7 +187,7 @@ export function InfrastructurePanel({ state }: { state: TeamState }) {
               ? "Claude on the Anthropic API, through the official SDK and the AI Gateway, which supplies the key stored on it: adaptive thinking replayed turn to turn, effort set per agent, server-side refusal fallback and prompt caching"
               : infra?.provider === "openai"
                 ? "OpenAI's Responses API through the AI Gateway, which supplies the key stored on it, with reasoning effort set per agent"
-                : HOST.id === "google-cloud"
+                : teamOpenModels(infra?.aiPlatform, HOST.id) === "vertex"
                   ? "Vertex AI on Google Cloud (gpt-oss-120b); a router binds each agent's task class to a champion model, which Vertex serves"
                   : "Cloudflare Workers AI; a router binds each agent's task class to a champion model"
           }${infra?.aiGateway ? `, through AI Gateway (${infra.aiGateway}) for caching, rate limits and logs` : ""}. Every call is metered. The switch above changes only this layer.`,
@@ -303,7 +304,13 @@ const GROUP_LABELS: Record<string, string> = {
 };
 
 /** One run's scorecard: the overall score, every check with its evidence, and the judge's view. */
-function Scorecard({ scorecard }: { scorecard: TeamScorecard }) {
+function Scorecard({
+  scorecard,
+  aiPlatform,
+}: {
+  scorecard: TeamScorecard;
+  aiPlatform: string | undefined;
+}) {
   return (
     <div className="team-scorecard">
       <div className="team-score-head">
@@ -313,7 +320,7 @@ function Scorecard({ scorecard }: { scorecard: TeamScorecard }) {
           <small>/100</small>
         </p>
         <p className="arch-note">
-          {teamProviderLabel(scorecard.provider, HOST.id)} ·{" "}
+          {teamRunProviderLabel(scorecard.provider, aiPlatform, HOST.id)} ·{" "}
           {scorecard.tokens.toLocaleString("en-US")} tokens
           {scorecard.costUsd === null
             ? " · cost not priced"
@@ -421,7 +428,9 @@ function RunsCompared() {
         </p>
       </>
     );
-  const providers = [...new Set(scored.map((run) => run.provider))];
+  // Grouped by what ran: the open-model tier on Workers AI and on Vertex AI are separate rows.
+  const label = (run: SessionRun) => teamRunProviderLabel(run.provider, run.aiPlatform, HOST.id);
+  const providers = [...new Set(scored.map(label))];
   return (
     <>
       {header}
@@ -442,7 +451,7 @@ function RunsCompared() {
             <tbody>
               {providers.map((provider) => {
                 const cards = scored
-                  .filter((run) => run.provider === provider)
+                  .filter((run) => label(run) === provider)
                   .map((run) => run.scorecard as TeamScorecard);
                 const judge = average(
                   cards.flatMap((card) =>
@@ -459,7 +468,7 @@ function RunsCompared() {
                 );
                 return (
                   <tr key={provider}>
-                    <th scope="row">{teamProviderLabel(provider, HOST.id)}</th>
+                    <th scope="row">{provider}</th>
                     <td>{cards.length}</td>
                     <td>{Math.round(average(cards.map((card) => card.overall)) ?? 0)}</td>
                     <td>{judge === null ? "—" : `${judge.toFixed(1)}/5`}</td>
@@ -494,7 +503,7 @@ function RunsCompared() {
                   {run.source === "replay" ? "Replay" : "Live"}
                   {run.scripted ? " · scripted" : ""}
                 </td>
-                <td>{teamProviderLabel(run.provider, HOST.id)}</td>
+                <td>{label(run)}</td>
                 <td>{STATUS_LABELS[run.status]}</td>
                 <td>{run.scorecard ? run.scorecard.overall : "—"}</td>
               </tr>
@@ -517,7 +526,7 @@ export function EvalsPanel({ state }: { state: TeamState }) {
         providers can be compared fairly.
       </p>
       {state.scorecard ? (
-        <Scorecard scorecard={state.scorecard} />
+        <Scorecard scorecard={state.scorecard} aiPlatform={state.infra?.aiPlatform} />
       ) : (
         <p className="arch-note">
           {state.waiting

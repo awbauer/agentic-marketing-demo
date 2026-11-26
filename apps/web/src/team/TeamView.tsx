@@ -1,4 +1,4 @@
-import { hostTerms } from "@northstar/contracts";
+import { AI_PLATFORM_TERMS, AI_PLATFORMS, hostTerms } from "@northstar/contracts";
 // The campaign squad page: hand over a brief, then follow a campaign lead and four spokes as
 // they work it one agent at a time — each assignment, hand-back, side question, send-back and
 // tool call — until the proposal goes to the client.
@@ -23,10 +23,12 @@ import {
   type TeamAgentId,
   type TeamProvider,
   type TeamEvent,
+  teamOpenModels,
 } from "@northstar/architecture";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArchApiError, archFetch, archStream, useArch } from "../architecture/api";
 import { ErrorNote } from "../architecture/Shared";
+import { useAiPlatform } from "../ai-platform";
 import { useScope } from "../scope";
 import { RichText } from "./RichText";
 import { type LibraryRun, RunLibrary } from "./RunLibrary";
@@ -62,10 +64,18 @@ type ProviderOption = {
   keys: string;
 };
 
-const PROVIDER_SHORT: Record<TeamProvider, { name: string; api: string }> = {
-  cloudflare: { name: HOST.platform, api: HOST.models },
-  anthropic: { name: "Anthropic", api: "Claude API" },
-  openai: { name: "OpenAI", api: "Responses API" },
+/** The switch's names. The open-model tier is named for the AI platform chosen in the top bar. */
+const providerShort = (
+  id: TeamProvider,
+  aiPlatform: string | null,
+): { name: string; api: string } => {
+  if (id === "cloudflare") {
+    const terms = AI_PLATFORM_TERMS[teamOpenModels(aiPlatform, HOST.id)];
+    return { name: terms.cloud, api: terms.label };
+  }
+  return id === "anthropic"
+    ? { name: "Anthropic", api: "Claude API" }
+    : { name: "OpenAI", api: "Responses API" };
 };
 
 /** The three-way switch: which provider's models run the squad. Everything else stays the same. */
@@ -82,6 +92,7 @@ function ProviderSwitch({
 }) {
   const current = providers?.find((item) => item.id === value);
   const models = current ? [...new Set(Object.values(current.models))] : [];
+  const { platform } = useAiPlatform();
   return (
     <fieldset className="team-provider">
       <legend>Run the agents on</legend>
@@ -98,9 +109,9 @@ function ProviderSwitch({
                 disabled={disabled}
                 onChange={() => onChange(id)}
               />
-              <strong>{PROVIDER_SHORT[id].name}</strong>
+              <strong>{providerShort(id, platform).name}</strong>
               <small>
-                {PROVIDER_SHORT[id].api}
+                {providerShort(id, platform).api}
                 {option && !option.available ? " · unavailable" : ""}
               </small>
             </label>
@@ -564,10 +575,13 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   /** Only the reader moves the page: the pill brings the decision into view when clicked. */
   const openDecision = () =>
     decisionSlot.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-  const roster = useArch<{ providers: ProviderOption[] }>("/team", {
-    persona: scope.persona,
-    brand: "all",
-  });
+  // Reloaded when the top bar's AI platform changes: the open-model tier's label and models follow it.
+  const { platform: aiPlatform } = useAiPlatform();
+  const roster = useArch<{ providers: ProviderOption[] }>(
+    "/team",
+    { persona: scope.persona, brand: "all" },
+    aiPlatform ? AI_PLATFORMS.indexOf(aiPlatform) + 1 : 0,
+  );
   const [provider, setProvider] = useState<TeamProvider>(() => {
     try {
       const saved = localStorage.getItem(PROVIDER_KEY);
@@ -658,6 +672,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
       brand: state.brief.brand,
       mode: state.mode,
       provider: state.infra?.provider ?? "cloudflare",
+      ...(state.infra?.aiPlatform ? { aiPlatform: state.infra.aiPlatform } : {}),
       source: before === "replaying" ? "replay" : "live",
       scripted: Boolean(state.infra?.scripted),
       status: state.waiting
@@ -861,7 +876,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
         />
       </div>
     ) : null;
-  const providerName = PROVIDER_SHORT[provider].name;
+  const providerName = providerShort(provider, aiPlatform).name;
   const chooser = (
     <>
       <fieldset className="arch-flow-picker">
@@ -999,7 +1014,12 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                     {state.brief?.brand ?? brief.brand} · $
                     {(state.brief?.budgetUsd ?? brief.budgetUsd).toLocaleString("en-US")} ·{" "}
                     {state.brief?.start ?? brief.start} → {state.brief?.end ?? brief.end} · on{" "}
-                    {PROVIDER_SHORT[state.infra?.provider ?? provider].name}
+                    {
+                      // A run names where it ran; before one starts, the current choice.
+                      state.infra
+                        ? providerShort(state.infra.provider, state.infra.aiPlatform ?? null).name
+                        : providerName
+                    }
                   </span>
                   <span className="team-setup-open">Change brief or provider</span>
                 </summary>

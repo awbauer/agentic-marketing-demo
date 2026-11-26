@@ -30,7 +30,7 @@ A marketer asks a question in plain language. The orchestrator agent reads campa
 - 💬 **Chat with your campaigns.** Ask *"Is the fall campaign ready?"* and get an answer drawn from real records, as readable cards with links back to Salesforce.
 - 🛡️ **Nothing changes without you.** The agent can only propose a write. You confirm it, it's saved once, logged, and checked against Salesforce afterwards.
 - 🔍 **See the whole route.** Every answer shows which systems it touched (sign-in, router, classifier, model, Salesforce, graph) and a step-by-step trace of what the model did.
-- 🔀 **Pick the AI platform.** A menu in the top bar, beside Brand and Run as, runs the models on Workers AI or Vertex AI, whichever cloud hosts the app.
+- 🔀 **Pick the AI platform.** A menu in the top bar, beside Brand and Run as, runs the models on Workers AI or Vertex AI, whichever cloud hosts the app. Chat, campaign images and the squad's open models all follow it, and the server's config decides which platforms it offers.
 - 🕸️ **A knowledge graph you can explore.** Brands, campaigns, audiences, approvals and disclosures in one connected graph. The agent uses it to ground answers (GraphRAG) and to remember things across chats.
 - 🤝 **A squad of agents.** A campaign lead hands a brief to four specialists. You play the compliance reviewer and the client, and pick a concept made from an approved image library.
 - 🧭 **Watch an asset get made.** Journeys run real agents from goal to approved asset, pausing only where a person must decide.
@@ -115,7 +115,7 @@ The Architecture and Campaign squad views take this further, with many narrow ag
 
 **Two hosts, one codebase.** The same commit also deploys to Cloudflare, where the pieces are a Worker, Cloudflare Access, Durable Objects, D1, R2, Workers AI through AI Gateway and a cron trigger. Only a thin platform layer differs ([ADR-018](docs/decisions/ADR-018-google-cloud-target.md)), and the page names whichever services it is running on.
 
-**The AI platform is chosen apart from the host** ([ADR-021](docs/decisions/ADR-021-ai-platform-apart-from-host.md)). Workers AI and Vertex AI are providers in one [AI SDK](https://ai-sdk.dev) registry, and the top bar's **AI platform** menu picks one per request. Cloudflare offers Workers AI, plus Vertex AI once the Worker holds a Google credential; Google Cloud offers Vertex AI. The trace and route map name the platform each turn ran on.
+**The AI platform is chosen apart from the host** ([ADR-021](docs/decisions/ADR-021-ai-platform-apart-from-host.md)). Workers AI and Vertex AI are providers in one [AI SDK](https://ai-sdk.dev) registry, and the top bar's **AI platform** menu picks one per request. Cloudflare offers Workers AI, plus Vertex AI once the Worker holds a Google credential; Google Cloud offers Vertex AI. `AI_PLATFORMS_ENABLED` (in `wrangler.jsonc`, or an environment variable on Cloud Run) narrows the menu: a platform left out is neither offered nor run. The chat, campaign images and the Campaign squad's open-model tier follow the choice. The trace, route map and each squad run name the platform they ran on.
 
 | | Google Cloud | Cloudflare |
 | --- | --- | --- |
@@ -164,7 +164,7 @@ For a fast edit loop with hot reload, `pnpm dev` runs the same code in the Cloud
 **Google Cloud.** After `gcloud auth login`:
 
 ```sh
-GCP_PROJECT=<project> scripts/gcp/bootstrap.sh                       # once: APIs, Firestore, bucket, accounts, secrets
+GCP_PROJECT=<project> scripts/gcp/bootstrap.sh                       # once: APIs, Firestore, bucket (7-day image expiry), accounts, secrets
 GCP_PROJECT=<project> IAP_MEMBERS=<you@example.com> pnpm deploy:gcp   # build, deploy, load balancer, IAP, scheduler
 ```
 

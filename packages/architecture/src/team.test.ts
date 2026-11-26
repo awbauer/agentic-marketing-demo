@@ -11,7 +11,10 @@ import {
   TEAM_AGENTS,
   TEAM_BRIEFS,
   TEAM_TOOL_NAMES,
+  runAiPlatform,
   teamBriefById,
+  teamOpenModels,
+  teamRunProviderLabel,
 } from "./team.ts";
 import { TEAM_MARKETS } from "./team-data.ts";
 import { scoreChecks, scoreRun } from "./team-evals.ts";
@@ -481,5 +484,32 @@ describe("squad evals", () => {
     expect(judged.modelMs).toBe(2000);
     expect(judged.overall).toBeGreaterThan(withoutJudge.overall);
     expect(judged.checks.at(-1)?.detail).toContain("$0.42");
+  });
+});
+
+describe("the open-model tier's platform (ADR-021)", () => {
+  it("names the platform a run recorded, else the host's own", () => {
+    expect(teamOpenModels("vertex", "cloudflare")).toBe("vertex");
+    expect(teamOpenModels("workers-ai", "google-cloud")).toBe("workers-ai");
+    expect(teamOpenModels(undefined, "cloudflare")).toBe("workers-ai");
+    expect(teamOpenModels(undefined, "google-cloud")).toBe("vertex");
+    expect(teamRunProviderLabel("cloudflare", "vertex", "cloudflare")).toBe(
+      "Vertex AI (open models)",
+    );
+    expect(teamRunProviderLabel("cloudflare", "workers-ai", "cloudflare")).toBe(
+      "Cloudflare Workers AI",
+    );
+    // The vendors keep the host's route whichever platform the open models ran on.
+    expect(teamRunProviderLabel("anthropic", "vertex", "cloudflare")).toBe("Anthropic Claude API");
+  });
+
+  it("reads the platform from a run's start event", () => {
+    const start = {
+      type: "start",
+      id: "r",
+      infra: { provider: "cloudflare", aiPlatform: "vertex" },
+    } as unknown as TeamEvent;
+    expect(runAiPlatform([start])).toBe("vertex");
+    expect(runAiPlatform([])).toBeUndefined();
   });
 });

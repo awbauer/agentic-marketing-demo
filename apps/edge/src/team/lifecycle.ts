@@ -60,6 +60,7 @@ import {
   metered,
   newTeamRun,
   providerStatus,
+  runAiPlatformFor,
   say,
   setStatus,
   type TeamRun,
@@ -375,6 +376,7 @@ export async function startLifecycleRun(
       models: teamModels(ctx, provider),
       infra: {
         provider,
+        ...runAiPlatformFor(ctx, provider),
         aiGateway:
           ctx.env.AGENT_MODEL !== "scripted" &&
           providerStatus(ctx).find((item) => item.id === provider)?.gateway

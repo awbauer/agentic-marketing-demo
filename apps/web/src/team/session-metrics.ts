@@ -13,6 +13,8 @@ export type SessionRun = {
   brand: string;
   mode: TeamMode;
   provider: TeamProvider;
+  /** Where the open-model tier ran (ADR-021); absent on entries recorded before it was kept. */
+  aiPlatform?: "workers-ai" | "vertex";
   source: "live" | "replay";
   /** The run ran on the scripted test model, not a real one. */
   scripted: boolean;

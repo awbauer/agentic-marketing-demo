@@ -13,7 +13,7 @@ import {
   type TeamAgentId,
   type TeamEvent,
   type TeamParty,
-  teamProviderLabel,
+  teamRunProviderLabel,
 } from "@northstar/architecture";
 import { hostTerms } from "@northstar/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -88,7 +88,9 @@ function Overview({ state, id }: { state: TeamState; id: TeamAgentId }) {
         <dt>Model</dt>
         <dd>
           <code>{state.models[id] ?? "—"}</code>
-          {provider ? ` on ${teamProviderLabel(provider, HOST.id)}` : ""}
+          {provider
+            ? ` on ${teamRunProviderLabel(provider, state.infra?.aiPlatform, HOST.id)}`
+            : ""}
           {state.infra?.aiGateway ? ` through AI Gateway ${state.infra.aiGateway}` : ""}
           {state.infra?.scripted ? " (scripted test model)" : ""}
           {effort ? ` · effort ${effort}` : ""}
@@ -172,7 +174,7 @@ function PromptConfig({ state, id }: { state: TeamState; id: TeamAgentId }) {
           </summary>
           <dl className="team-modal-facts">
             <dt>Provider</dt>
-            <dd>{teamProviderLabel(prompt.provider, HOST.id)}</dd>
+            <dd>{teamRunProviderLabel(prompt.provider, state.infra?.aiPlatform, HOST.id)}</dd>
             <dt>Settings</dt>
             <dd>
               {Object.entries(prompt.settings).length

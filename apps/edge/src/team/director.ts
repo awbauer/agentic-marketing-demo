@@ -45,6 +45,7 @@ import {
   type TeamRun,
   assertProvider,
   providerStatus,
+  runAiPlatformFor,
   teamModel,
   teamModels,
 } from "./run";
@@ -510,6 +511,7 @@ export async function startTeamRun(
       models: teamModels(ctx, provider),
       infra: {
         provider,
+        ...runAiPlatformFor(ctx, provider),
         aiGateway:
           ctx.env.AGENT_MODEL !== "scripted" &&
           providerStatus(ctx).find((item) => item.id === provider)?.gateway
