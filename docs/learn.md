@@ -2151,7 +2151,22 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 
 **Rules are code, not prompts.** Each spoke saves through one tool, and a service checks the work whatever the model wrote: findings must cite real data ids (cite or refuse); the palette must come from the brand book, and no image may show what it forbids; copy must fit each placement's character limits, avoid banned phrases and carry any required disclosure; the channel plan must respect minimum spends, the budget and the brief's window. A refused save comes back with every problem for the model to fix. A refusal for a missing field names the field and the values it accepts, because a model told only that its call was wrong tends to repeat it. Once the pieces are in, reconciliation finds clashes (a channel bought with no copy, copy for a channel not bought, an audience the analyst didn't recommend), and the lead resolves each or sends the piece back. The client gets a **proposal** and decides.
 
-**Guardrails at work.** Hitting a guardrail is the system working, so the page shows it: the **Guardrails** tab under the hood (its label counts what was caught) lists each rule refusal, gateway denial and rejected tool call as it happens, with the agent and tool, what the rule protects, and what the guardrail told the agent. A repeated mistake is counted (×3), and a hit is marked fixed once a later call to the same tool goes through. A worker that gets the same refusal three times in a row stops there: the second refusal tells it to change what it sends, and the third ends its assignment and gives the lead the exact problem, instead of retrying up to thirty times.
+**Guardrails at work.** Hitting a guardrail is the system working, so the page shows it: the **Guardrails** tab under the hood (its label counts what was caught) lists each rule refusal, gateway denial and rejected tool call as it happens, with the agent and tool, what the rule protects, and what the guardrail told the agent. A repeated mistake is counted (×3), and a hit is marked fixed once a later call to the same tool goes through. A worker that gets the same refusal three times in a row stops there: the second refusal tells it to change what it sends, and the third ends its assignment and gives the lead the exact problem, instead of retrying up to thirty times. Above that, **hard limits** stop work that spins without finishing: an agent's assignment, the lead's turn, or the whole run. A stop is recorded, shown in the Guardrails tab with the limit it hit, and reported to the lead (or, for the run, in its summary), so nobody has to notice a loop to end it.
+
+<details>
+<summary>The hard limits and what each stops</summary>
+
+| Limit | Stops |
+|---|---|
+| 16 tool calls on one assignment without saving | that agent's assignment; the lead hears why |
+| 6 failed tool calls (refused, denied or rejected) on one assignment | that agent's assignment |
+| The same refusal 3 times in a row | that agent's assignment |
+| 40 lead tool calls in one turn (between people's decisions) | the lead's turn; a person's next step is still routed to them |
+| 300 model calls or 1.5M tokens across the run, every resume included | the whole run |
+
+The limits live in `TEAM_LIMITS` (`packages/architecture/src/team.ts`) and are checked from the run's own event log (`apps/edge/src/team/limits.ts`), so they hold across people's decisions. A Lumera run on Vertex had one save refused 30 times; under these limits it stops after 3.
+
+</details>
 
 **People in the loop.** The person at the browser takes the people's decisions.
 - For a regulated brand (one with a required disclosure), a **compliance reviewer** must approve the copy first: the lead asks with `request_compliance_review`, and the server won't send a proposal until a person has approved the current version, so changed copy needs a new review.

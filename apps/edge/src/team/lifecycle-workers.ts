@@ -56,6 +56,7 @@ import { AGENT_GENERATION } from "../architecture/agent-runtime";
 import { offerTools } from "../architecture/context";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
 import { emitArtifact, lifecycleFile, lifecycleWorld } from "./lifecycle";
+import { assignmentLimit, type LimitHit, recordLimit, runLimit } from "./limits";
 import { newSaveState, refusal, type SaveState, stuckOnRefusal, stuckReport } from "./repeat-guard";
 
 import {
@@ -693,6 +694,9 @@ export async function runLifecycleWorker(
 ): Promise<{ saved: boolean; report: string }> {
   const lifecycle = state(run);
   const saved = newSaveState();
+  // Hard limits on this assignment and on the run (limits.ts), counted from here.
+  const since = run.events.length;
+  const limited = (): LimitHit | null => assignmentLimit(run, agent, since) ?? runLimit(run);
   const round = lifecycle.rounds[lifecycle.phase];
   const notes = round > 1 ? lifecycle.notes[lifecycle.phase] : undefined;
   const previous = lifecycle.artifacts[step.tool]?.data ?? null;
@@ -732,7 +736,11 @@ export async function runLifecycleWorker(
     .join("\n\n");
   const model = teamModel(run, agent);
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
-  for (let attempt = 0; attempt < 3 && !saved.done && !stuckOnRefusal(saved); attempt += 1) {
+  for (
+    let attempt = 0;
+    attempt < 3 && !saved.done && !stuckOnRefusal(saved) && !limited();
+    attempt += 1
+  ) {
     if (attempt > 0)
       messages.push({
         role: "user",
@@ -750,7 +758,12 @@ export async function runLifecycleWorker(
       system: system(run, agent, step, "work"),
       messages,
       tools,
-      stopWhen: [stepCountIs(10), () => saved.done, () => stuckOnRefusal(saved)],
+      stopWhen: [
+        stepCountIs(10),
+        () => saved.done,
+        () => stuckOnRefusal(saved),
+        () => limited() !== null,
+      ],
       // This stage's tools only (its reads and its save, within the agent's grants), in the
       // worker's chosen order: the first step must use one, and from the fifth step (or on a
       // nudge) only saving is on offer (ADR-019).
@@ -829,12 +842,25 @@ export async function runLifecycleWorker(
     const failed = [...run.events]
       .reverse()
       .find((event) => event.type === "tool" && event.agent === agent && !event.step.ok);
+    const hit = stuckOnRefusal(saved)
+      ? ({
+          scope: "assignment",
+          limit: "sameRefusals",
+          detail: `${step.tool} was refused ${saved.repeats} times in a row for the same reason.`,
+        } as const)
+      : limited();
+    if (hit) recordLimit(run, agent, hit);
     report = stuckOnRefusal(saved)
       ? stuckReport(step.tool, saved).slice(0, 700)
-      : `I could not save my work with ${step.tool}.${failed?.type === "tool" ? ` The last failure: ${failed.step.error}` : ""}`.slice(
-          0,
-          700,
-        );
+      : hit
+        ? `I stopped without saving: ${hit.detail} The last failure: ${failed?.type === "tool" ? failed.step.error : "none"}`.slice(
+            0,
+            700,
+          )
+        : `I could not save my work with ${step.tool}.${failed?.type === "tool" ? ` The last failure: ${failed.step.error}` : ""}`.slice(
+            0,
+            700,
+          );
   }
   say(run, agent, "campaign-lead", "report", report);
   setStatus(run, agent, saved.done ? "done" : "blocked");

@@ -748,6 +748,30 @@ export type TeamToolStep = {
 };
 
 /** What a team run streams while it works, in order. */
+/**
+ * Hard limits on how much work the squad does before it stops and says why (team/limits.ts).
+ * They sit above the per-step caps, so a model that keeps calling tools without finishing can't
+ * spin through a run's budget.
+ */
+export const TEAM_LIMITS = {
+  /** Tool calls one agent may make on one assignment without saving its work. */
+  assignmentToolCalls: 16,
+  /** Failed tool calls (refused, denied or rejected) one agent may make on one assignment. */
+  assignmentFailures: 6,
+  /** The same refusal this many times in a row ends an assignment. */
+  sameRefusals: 3,
+  /**
+   * Tool calls the lead may make in one turn (between people's decisions). A squad turn with every
+   * spoke sent back twice needs about 30; the old ceiling was 3 tries of 24 steps.
+   */
+  leadToolCallsPerTurn: 40,
+  /** Model calls across a whole run, every resume included. */
+  runModelCalls: 300,
+  /** Tokens across a whole run, every resume included. */
+  runTokens: 1_500_000,
+} as const;
+export type TeamLimit = keyof typeof TEAM_LIMITS;
+
 export type TeamEvent =
   | {
       type: "start";
@@ -858,6 +882,14 @@ export type TeamEvent =
     }
   | { type: "delivered"; strategy: CampaignStrategy }
   | { type: "evaluation"; scorecard: TeamScorecard }
+  | {
+      /** A hard limit stopped work: one agent's assignment, the lead's turn, or the whole run. */
+      type: "limit";
+      scope: "assignment" | "turn" | "run";
+      agent: TeamAgentId;
+      limit: TeamLimit;
+      detail: string;
+    }
   | { type: "done"; summary: string; tokens: number; latencyMs: number }
   | { type: "error"; message: string };
 

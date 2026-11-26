@@ -1,6 +1,8 @@
 // What the squad's save tools accept from a model, beyond the exact shape asked for.
 import { describe, expect, it } from "vitest";
+import { TEAM_LIMITS, type TeamEvent } from "@northstar/architecture";
 import { audienceInclude, modulesList } from "../../edge/src/team/lifecycle-workers";
+import { assignmentLimit, leadTurnLimit, runLimit } from "../../edge/src/team/limits";
 import {
   newSaveState,
   refusal,
@@ -58,5 +60,46 @@ describe("the same-refusal guardrail", () => {
     // A different problem starts the count again.
     refusal(saved, ["Something else."]);
     expect(stuckOnRefusal(saved)).toBe(false);
+  });
+});
+
+describe("hard limits on the squad's work", () => {
+  const tool = (agent: string, ok = true) =>
+    ({ type: "tool", agent, step: { tool: "x", input: {}, ok } }) as TeamEvent;
+  const model = (tokens: number) =>
+    ({ type: "model", agent: "campaign-lead", tokens, ok: true }) as unknown as TeamEvent;
+
+  it("stops an assignment after too many failed calls or too many calls, counted from its start", () => {
+    const earlier = Array.from({ length: 10 }, () => tool("audience-analyst", false));
+    const failing = [
+      ...earlier,
+      ...Array.from({ length: TEAM_LIMITS.assignmentFailures }, () =>
+        tool("audience-analyst", false),
+      ),
+    ];
+    expect(assignmentLimit({ events: failing }, "audience-analyst", earlier.length)?.limit).toBe(
+      "assignmentFailures",
+    );
+    expect(
+      assignmentLimit({ events: failing.slice(0, -1) }, "audience-analyst", earlier.length),
+    ).toBeNull();
+    const busy = Array.from({ length: TEAM_LIMITS.assignmentToolCalls }, () => tool("copy-lead"));
+    expect(assignmentLimit({ events: busy }, "copy-lead", 0)?.limit).toBe("assignmentToolCalls");
+    // Another agent's calls don't count.
+    expect(assignmentLimit({ events: busy }, "audience-analyst", 0)).toBeNull();
+  });
+
+  it("stops the lead's turn after too many calls, and the run after too many model calls or tokens", () => {
+    const lead = Array.from({ length: TEAM_LIMITS.leadToolCallsPerTurn }, () =>
+      tool("campaign-lead"),
+    );
+    expect(leadTurnLimit({ events: lead }, "campaign-lead", 0)?.scope).toBe("turn");
+    expect(leadTurnLimit({ events: lead }, "campaign-lead", 1)).toBeNull();
+    expect(
+      runLimit({ events: Array.from({ length: TEAM_LIMITS.runModelCalls }, () => model(1)) })
+        ?.limit,
+    ).toBe("runModelCalls");
+    expect(runLimit({ events: [model(TEAM_LIMITS.runTokens)] })?.limit).toBe("runTokens");
+    expect(runLimit({ events: [model(1000)] })).toBeNull();
   });
 });
