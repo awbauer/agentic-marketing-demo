@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-26T16:48:25.794Z",
+  "generatedAt": "2026-11-26T16:56:01.471Z",
   "status": "passed",
   "baseRef": "origin/main",
   "mergeBase": "22582b6c9829809f0ec5490f0ff01052b0c42887",
@@ -31,6 +31,16 @@
       ]
     },
     {
+      "section": "campaign-squad",
+      "status": "reviewed",
+      "paths": [
+        "apps/edge/src/team/run.ts",
+        "apps/web/src/team/TeamPlatform.tsx",
+        "apps/web/src/team/session-metrics.ts",
+        "packages/architecture/src/team.ts"
+      ]
+    },
+    {
       "section": "reliability",
       "status": "reviewed",
       "paths": [
@@ -42,15 +52,6 @@
       "status": "reviewed",
       "paths": [
         "apps/web/src/ScopeBar.tsx"
-      ]
-    },
-    {
-      "section": "campaign-squad",
-      "status": "reviewed",
-      "paths": [
-        "apps/web/src/team/TeamPlatform.tsx",
-        "apps/web/src/team/session-metrics.ts",
-        "packages/architecture/src/team.ts"
       ]
     },
     {
