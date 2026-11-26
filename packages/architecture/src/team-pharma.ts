@@ -1141,7 +1141,10 @@ export function buildAudience(brief: CampaignBrief, request: AudienceRequest) {
       return [];
     }
     const bands = item.deciles.filter((band) => (DECILE_BANDS as readonly string[]).includes(band));
-    if (bands.length === 0) problems.push(`${segment.name}: choose decile bands (high, mid, low).`);
+    if (bands.length === 0)
+      problems.push(
+        `${segment.name}: set deciles to one or more of "high", "mid", "low", e.g. {"segmentId": "${item.segmentId}", "deciles": ["high", "mid"]}.`,
+      );
     const prescribers = bands.reduce((sum, band) => sum + universe.deciles[band], 0);
     const total = DECILE_BANDS.reduce((sum, band) => sum + universe.deciles[band], 0);
     // Do-not-contact is spread across deciles in proportion; nobody on it is reachable.

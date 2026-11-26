@@ -52,6 +52,7 @@ import {
   teamModel,
 } from "./run";
 import { serverHost } from "../platform/models";
+import { newSaveState, refusal, type SaveState, stuckOnRefusal, stuckReport } from "./repeat-guard";
 
 const channel = z.enum(MEDIA_CHANNELS);
 const specialist = z.enum(TEAM_SPECIALISTS);
@@ -358,7 +359,7 @@ function dataTools(run: TeamRun, agent: TeamSpecialist): ToolSet {
   return all;
 }
 
-function deliverableTool(run: TeamRun, agent: TeamSpecialist, saved: { done: boolean }): ToolSet {
+function deliverableTool(run: TeamRun, agent: TeamSpecialist, saved: SaveState): ToolSet {
   const name = DELIVERABLE_OF[agent];
   const description: Record<typeof name, string> = {
     report_research:
@@ -387,8 +388,7 @@ function deliverableTool(run: TeamRun, agent: TeamSpecialist, saved: { done: boo
                 : agent === "copy-lead"
                   ? copyProblems(run.brief.brand, input as never)
                   : projectMedia(run.brief, input as never).problems;
-          if (problems.length)
-            return { error: `Refused. Fix every problem and save again: ${problems.join(" ")}` };
+          if (problems.length) return refusal(saved, problems);
           const version = (run.versions[agent] ?? 0) + 1;
           run.versions[agent] = version;
           (run.outputs as Record<string, unknown>)[agent] = input;
@@ -549,7 +549,7 @@ export async function runSpecialist(
   const started = Date.now();
   const tokensBefore = run.tokens;
   const deliverable = DELIVERABLE_OF[agent];
-  const saved = { done: false };
+  const saved = newSaveState();
   const asked = { count: 0 };
   // The spokes this piece builds on, per the lead's plan, that have saved work to ask about.
   const upstream = (
@@ -592,7 +592,7 @@ export async function runSpecialist(
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
   // A model can end a step in prose without calling a tool, which ends the loop. Give it up to two
   // nudges, each offering only the save (ADR-019).
-  for (let attempt = 0; attempt < 3 && !saved.done; attempt += 1) {
+  for (let attempt = 0; attempt < 3 && !saved.done && !stuckOnRefusal(saved); attempt += 1) {
     if (attempt > 0)
       messages.push({
         role: "user",
@@ -610,7 +610,7 @@ export async function runSpecialist(
       system: system(run, agent, "work"),
       messages,
       tools,
-      stopWhen: [stepCountIs(10), () => saved.done],
+      stopWhen: [stepCountIs(10), () => saved.done, () => stuckOnRefusal(saved)],
       // The spoke's own tools, its choice of order: the first step must use one of them, and from
       // the fifth step (or on a nudge) only saving is on offer. Asking an upstream spoke first is
       // guidance in its prompt, not a mandate.
@@ -696,7 +696,9 @@ export async function runSpecialist(
       .reverse()
       .find((event) => event.type === "tool" && event.agent === agent && !event.step.ok);
     const why = failed?.type === "tool" ? ` The last failure: ${failed.step.error}` : "";
-    report = `I could not save my work with ${deliverable}.${why}`.slice(0, 700);
+    report = stuckOnRefusal(saved)
+      ? stuckReport(deliverable, saved).slice(0, 700)
+      : `I could not save my work with ${deliverable}.${why}`.slice(0, 700);
   }
   const version = run.versions[agent] ?? 0;
   if (saved.done)
