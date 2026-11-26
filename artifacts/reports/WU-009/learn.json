@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-26T04:24:24.368Z",
+  "generatedAt": "2026-11-26T12:53:52.091Z",
   "status": "passed",
-  "baseRef": "upstream/main",
-  "mergeBase": "d1b4d238dcecdc7611c431a13d47e157d720633b",
+  "baseRef": "origin/main",
+  "mergeBase": "be72c3b729a02b5d5dd77efd8aee91b4a0e20447",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,40 +13,25 @@
   },
   "drift": [
     {
-      "section": "campaign-squad",
-      "status": "updated",
-      "paths": [
-        "apps/edge/src/team/director.ts",
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts",
-        "apps/web/src/team/AgentModal.tsx",
-        "apps/web/src/team/Guardrails.tsx",
-        "apps/web/src/team/LifecycleSummary.tsx",
-        "apps/web/src/team/TeamHierarchy.tsx",
-        "apps/web/src/team/TeamLifecycle.tsx",
-        "apps/web/src/team/TeamPeople.tsx",
-        "apps/web/src/team/TeamView.tsx",
-        "apps/web/src/team/detail.tsx",
-        "apps/web/src/team/team-state.ts",
-        "apps/web/src/team/team.css",
-        "packages/architecture/src/team.ts"
-      ]
-    },
-    {
       "section": "pharma-lifecycle",
-      "status": "updated",
+      "status": "reviewed",
       "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts",
-        "apps/web/src/team/TeamLifecycle.tsx",
-        "packages/architecture/src/team-pharma.ts"
+        "apps/edge/src/team/lifecycle-workers.ts"
       ]
     },
     {
-      "section": "ui",
+      "section": "campaign-squad",
+      "status": "reviewed",
+      "paths": [
+        "apps/edge/src/team/lifecycle-workers.ts",
+        "apps/web/src/team/IdCard.tsx"
+      ]
+    },
+    {
+      "section": "two-hosts",
       "status": "updated",
       "paths": [
-        "apps/web/src/App.tsx"
+        "apps/gcp/src/agent/ai-chat.ts"
       ]
     }
   ],
