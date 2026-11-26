@@ -202,6 +202,7 @@ export const SECTION_SOURCES: Record<string, readonly string[]> = {
   ],
   "pharma-lifecycle": [
     "packages/architecture/src/team-pharma.ts",
+    "packages/architecture/src/team-governance.ts",
     "apps/edge/src/team/lifecycle.ts",
     "apps/edge/src/team/lifecycle-workers.ts",
     "apps/web/src/team/TeamLifecycle.tsx",

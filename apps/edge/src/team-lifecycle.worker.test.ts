@@ -39,6 +39,13 @@ describe("pharma campaign lifecycle", () => {
       await post("/api/arch/team/runs", { briefId: "lumera-hf-awareness", mode: "lifecycle" }),
     );
     expect(start[0]).toMatchObject({ type: "start", mode: "lifecycle" });
+    // The run records the policy set it started under, and each prompt carries its version.
+    expect(start[0].infra.policyVersion).toMatch(/^pol-[0-9a-f]{8}$/);
+    expect(start.find((event) => event.type === "prompt").version).toMatch(/^pr-[0-9a-f]{8}$/);
+    expect(
+      start.find((event) => event.type === "tool" && event.step.decision).step.decision
+        .policyVersion,
+    ).toBe(start[0].infra.policyVersion);
     const id = start[0].id as string;
 
     // Focus: the analyst's areas cite real data, and the brand lead picks from them.
@@ -82,6 +89,14 @@ describe("pharma campaign lifecycle", () => {
     expect(drafts[0].step.ok).toBe(false);
     expect(drafts[0].step.error).toMatch(/cardivance-superior is refused/);
     expect(drafts.at(-1).step.ok).toBe(true);
+    // Cite or refuse: the refused claim isn't written; it lands in the gap log.
+    const gap = content.find((event) => event.type === "claim-gap").gap;
+    expect(gap).toMatchObject({
+      product: "Cardivance",
+      raisedBy: "copy-lead",
+      route: "claims-backlog",
+    });
+    expect(gap.point).toMatch(/cardivance-superior/);
     const modules = content.find(
       (event) => event.type === "artifact" && event.name === "draft_modules",
     );
@@ -121,6 +136,17 @@ describe("pharma campaign lifecycle", () => {
     const legal = await events(
       await decide(id, { gate: "medical", decision: "approve" }, "reviewer"),
     );
+    // The decision record: what Medical saw, under which policy and prompts, and how long it took.
+    const record = legal.find((event) => event.type === "decided").record;
+    expect(record.reviewed.map((item: Json) => item.name)).toEqual([
+      "draft_modules",
+      "submit_mlr_job",
+    ]);
+    expect(record.policyVersion).toMatch(/^pol-/);
+    expect(Object.keys(record.promptVersions)).toEqual(
+      expect.arrayContaining(["copy-lead", "mlr-coordinator"]),
+    );
+    expect(record.decidedInMs).toBeGreaterThanOrEqual(0);
     expect(legal.filter((event) => event.type === "model")).toHaveLength(0);
     expect(waitingOn(legal)).toMatchObject({ gate: "legal", persona: "senior" });
     const regulatory = await events(
@@ -168,6 +194,12 @@ describe("pharma campaign lifecycle", () => {
       form: "FDA Form 2253",
     });
     expect(waitingOn(form)).toMatchObject({ gate: "fda-2253", persona: "compliance" });
+    // Go-live books the placements once, keyed, and reads the channels back.
+    const booking = form.find(
+      (event) => event.type === "artifact" && event.name === "deployment_receipt",
+    ).data;
+    expect(booking).toMatchObject({ matches: true, attempts: 1 });
+    expect(booking.readBack).toEqual(booking.sent);
 
     // Analytics: results come in, the analyst recommends, the brand lead decides.
     const analytics = await events(
@@ -177,6 +209,18 @@ describe("pharma campaign lifecycle", () => {
       analytics.find((event) => event.type === "artifact" && event.name === "campaign_results").data
         .simulated,
     ).toBe(true);
+    // Form 2253 is filed once and its acknowledgment read back; replies are screened for safety.
+    const filing = analytics.find(
+      (event) => event.type === "artifact" && event.name === "form_2253_receipt",
+    );
+    expect(filing.phase).toBe("publish");
+    expect(filing.data).toMatchObject({ matches: true, attempts: 1 });
+    const intake = analytics.find(
+      (event) => event.type === "artifact" && event.name === "safety_intake",
+    ).data;
+    expect(intake.flags.map((flag: Json) => flag.kind)).toEqual(
+      expect.arrayContaining(["possible-adverse-event", "off-label-question"]),
+    );
     const next = waitingOn(analytics);
     expect(next).toMatchObject({ gate: "next-action" });
     expect(next.options.map((option: Json) => option.id)).toEqual([
@@ -202,5 +246,49 @@ describe("pharma campaign lifecycle", () => {
     const mlr = scorecard.checks.find((check: Json) => check.id === "mlr-rounds");
     expect(mlr.score).toBe(1);
     expect(mlr.detail).toContain("1 request for changes; 1 approved on the next review");
+    // Each worker's report is graded against the trace, and the judge uses the pharma rubric.
+    expect(scorecard.checks.find((check: Json) => check.id === "honest-reports").score).toBe(1);
+    expect(scorecard.judge.scores.map((item: Json) => item.criterion)).toContain("fair_balance");
+  });
+
+  it("seeds a flawed module into the MLR queue and withdraws it before approval", async () => {
+    const start = await events(
+      await post("/api/arch/team/runs", {
+        briefId: "lumera-hf-awareness",
+        mode: "lifecycle",
+        seededFlaw: true,
+      }),
+    );
+    expect(start[0].practice).toEqual({ seededFlaw: true });
+    const id = start[0].id as string;
+    await events(
+      await decide(id, { gate: "focus", decision: "approve", choice: "1" }, "brand-lead"),
+    );
+    await events(
+      await decide(id, { gate: "concept", decision: "approve", choice: "1" }, "brand-lead"),
+    );
+    const content = await events(
+      await decide(id, { gate: "concept-review", decision: "approve" }, "reviewer"),
+    );
+    const seeded = content.find((event) => event.type === "seeded-flaw").seeded;
+    expect(seeded.moduleId).toBe("EM9");
+    const job = content.find(
+      (event) => event.type === "artifact" && event.name === "submit_mlr_job",
+    ).data;
+    const flawed = job.modules.find((module: Json) => module.id === "EM9");
+    expect(flawed.disclosures).toEqual([]);
+    // Every reviewer misses it: it is still withdrawn before anything is approved.
+    await events(await decide(id, { gate: "medical", decision: "approve" }, "reviewer"));
+    await events(await decide(id, { gate: "legal", decision: "approve" }, "senior"));
+    const approved = await events(
+      await decide(id, { gate: "regulatory", decision: "approve" }, "compliance"),
+    );
+    const approval = approved.find(
+      (event) => event.type === "artifact" && event.name === "mlr_approval",
+    ).data;
+    expect(approval.modules.map((module: Json) => module.id)).not.toContain("EM9");
+    expect(
+      approved.find((event) => event.type === "message" && /seeded test/.test(event.text)),
+    ).toBeTruthy();
   });
 });

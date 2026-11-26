@@ -6,24 +6,26 @@ import {
   type ArtifactName,
   applyDecision,
   type CampaignBrief,
+  type CampaignStrategy,
+  type ClaimGap,
+  type Conflict,
   type LifecycleState,
   newLifecycle,
   phaseOfGate,
   recordArtifact,
+  type SeededFlaw,
   TEAM_AGENTS,
-  type TeamMode,
-  type CampaignStrategy,
-  type Conflict,
   TEAM_SPECIALISTS,
   type TeamAgentId,
   type TeamAgentState,
   type TeamEvent,
   type TeamGate,
   type TeamMessageKind,
+  type TeamMode,
   type TeamParty,
   type TeamPlan,
-  type TeamSpecialist,
   type TeamScorecard,
+  type TeamSpecialist,
   type TeamToolStep,
 } from "@northstar/architecture";
 
@@ -194,6 +196,12 @@ export type TeamState = {
   >;
   /** The run's scorecard, once it has ended. */
   scorecard: TeamScorecard | null;
+  /** Points the squad couldn't support with approved content: the gap log. */
+  gaps: ClaimGap[];
+  /** A flaw the MLR system seeded into the review queue, if the run seeds one. */
+  seeded: SeededFlaw | null;
+  /** Practices switched on for the run. */
+  practice: { seededFlaw: boolean };
   events: number;
   /** The layer of the infrastructure the latest event touched. */
   layer: InfraLayer | null;
@@ -312,6 +320,9 @@ export function emptyTeamState(): TeamState {
     waiting: null,
     decisions: [],
     scorecard: null,
+    gaps: [],
+    seeded: null,
+    practice: { seededFlaw: false },
     events: 0,
     layer: null,
   };
@@ -350,6 +361,7 @@ export function reduceTeam(state: TeamState, event: TeamEvent): TeamState {
         brief: event.brief,
         models: event.models,
         infra: event.infra ?? null,
+        practice: event.practice ?? { seededFlaw: false },
         events: 1,
         layer: "experience",
         phases: new Set<TeamPhase>(["brief"]),
@@ -525,6 +537,13 @@ export function reduceTeam(state: TeamState, event: TeamEvent): TeamState {
       return next;
     case "evaluation":
       next.scorecard = event.scorecard;
+      return next;
+    case "claim-gap":
+      next.gaps = [...state.gaps, event.gap];
+      next.layer = "rules";
+      return next;
+    case "seeded-flaw":
+      next.seeded = event.seeded;
       return next;
     case "saved":
       next.saved = event.ok;

@@ -12,12 +12,12 @@
 // Everything here is deterministic: the services check what the agents propose against governed
 // content (the claims library, its evidence, the disclosure rules, the asset library) and refuse
 // what breaks a rule. The market data and the in-market results are fictional and labelled so.
-import { DISCLOSURE_RULES, claimPacket } from "./agents.ts";
+import { claimPacket, DISCLOSURE_RULES } from "./agents.ts";
+import { ASSET_LIBRARY } from "./assets.ts";
 import { framingProblems, headlineShape } from "./language.ts";
 import type { CampaignBrief, LifecycleWorker, TeamGate, TeamTool } from "./team.ts";
-import { ASSET_LIBRARY } from "./assets.ts";
-import { assetChoices, researchSourceIds } from "./team-services.ts";
 import { teamMarket } from "./team-data.ts";
+import { assetChoices, researchSourceIds } from "./team-services.ts";
 import {
   attributesOf,
   type Brand,
@@ -1609,6 +1609,9 @@ export const SYSTEM_ARTIFACTS = [
   "final_form_check",
   "campaign_results",
   "claim_trace",
+  "deployment_receipt",
+  "form_2253_receipt",
+  "safety_intake",
 ] as const;
 export type SystemArtifact = (typeof SYSTEM_ARTIFACTS)[number];
 export type ArtifactName = TeamTool | SystemArtifact;

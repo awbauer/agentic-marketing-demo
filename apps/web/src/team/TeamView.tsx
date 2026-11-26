@@ -1,52 +1,54 @@
-import { AI_PLATFORM_TERMS, AI_PLATFORMS, hostTerms } from "@northstar/contracts";
 // The campaign squad page: hand over a brief, then follow a campaign lead and four spokes as
 // they work it one agent at a time — each assignment, hand-back, side question, send-back and
 // tool call — until the proposal goes to the client.
 import {
+  agentEvidence,
   BRANDS,
   type Brand,
   type CampaignBrief,
-  runsPharmaLifecycle,
-  TEAM_BRIEFS,
-  TEAM_PARTY_LABELS,
-  TEAM_GATES,
   isTeamProvider,
   type PHARMA_PHASES,
   phaseOfGate,
-  teamAgentsFor,
-  type TeamMode,
+  runsPharmaLifecycle,
+  seededOutcome,
+  TEAM_BRIEFS,
+  TEAM_GATES,
+  TEAM_PARTY_LABELS,
   TEAM_PROVIDERS,
   type TeamAgentId,
-  type TeamProvider,
   type TeamEvent,
+  type TeamMode,
+  type TeamProvider,
+  teamAgentsFor,
   teamOpenModels,
 } from "@northstar/architecture";
+import { AI_PLATFORM_TERMS, AI_PLATFORMS, hostTerms } from "@northstar/contracts";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useAiPlatform } from "../ai-platform";
 import { ArchApiError, archFetch, archStream, useArch } from "../architecture/api";
 import { ErrorNote } from "../architecture/Shared";
-import { useAiPlatform } from "../ai-platform";
 import { useScope } from "../scope";
+import { AgentModal } from "./AgentModal";
+import { ClaimsProvider, claimIndex } from "./Claims";
+import { TechnicalProvider, Term, useTechnicalSetting } from "./detail";
+import { GuardrailPanel } from "./Guardrails";
+import { LifecycleStats, LifecycleStatus } from "./LifecycleSummary";
 import { RichText } from "./RichText";
 import { type LibraryRun, RunLibrary } from "./RunLibrary";
+import { REPLAY_SPEEDS, type ReplaySpeed, replayDelays } from "./replay";
+import { SourcesProvider, sourceIndex } from "./Sources";
+import { recordSessionRun, resetSessionMetrics } from "./session-metrics";
 import { TeamHierarchy } from "./TeamHierarchy";
-import { DecisionCard, DecisionLog, SignOffRecord } from "./TeamPeople";
-import { LifecycleStats, LifecycleStatus } from "./LifecycleSummary";
 import {
   ARTIFACT_TITLES,
   LifecycleDecisionCard,
   PhaseStepper,
   PhaseWorkspace,
 } from "./TeamLifecycle";
+import { DecisionCard, DecisionLog, ReviewerMetricsTable, SignOffRecord } from "./TeamPeople";
 import { EvalsPanel, InfrastructurePanel, SemanticLayerPanel } from "./TeamPlatform";
 import { StrategyView } from "./TeamWork";
-import { REPLAY_SPEEDS, type ReplaySpeed, replayDelays } from "./replay";
-import { AgentModal } from "./AgentModal";
 import { ToolLibrary } from "./ToolLibrary";
-import { ClaimsProvider, claimIndex } from "./Claims";
-import { SourcesProvider, sourceIndex } from "./Sources";
-import { GuardrailPanel } from "./Guardrails";
-import { Term, TechnicalProvider, useTechnicalSetting } from "./detail";
-import { recordSessionRun, resetSessionMetrics } from "./session-metrics";
 import { foldTeam, isPeerMessage, KIND_LABELS, TEAM_PHASES, type TeamMessage } from "./team-state";
 import "../architecture/architecture.css";
 import "./team.css";
@@ -443,6 +445,8 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   const briefs = TEAM_BRIEFS.filter(
     (brief) => scope.brand === "all" || brief.brand === scope.brand,
   );
+  // A seeded flaw tests the MLR reviewers: one flawed module slipped into their queue.
+  const [seedFlaw, setSeedFlaw] = useState(false);
   const [mode, setModeState] = useState<TeamMode>(() => {
     try {
       return localStorage.getItem(MODE_KEY) === "lifecycle" ? "lifecycle" : "squad";
@@ -608,8 +612,9 @@ export function TeamView({ onClose }: { onClose: () => void }) {
           ? "done"
           : "stopped",
       scorecard: state.scorecard,
+      ...(state.mode === "lifecycle" ? { agents: agentEvidence(visible) } : {}),
     });
-  }, [status, shown, state]);
+  }, [status, shown, state, visible]);
 
   /** A person's decision on the waiting run; the squad's next steps stream onto the same page. */
   async function decide(decision: "approve" | "changes", note: string, choice?: string) {
@@ -673,6 +678,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
         : { brief }),
       provider,
       mode,
+      ...(mode === "lifecycle" && seedFlaw ? { seededFlaw: true } : {}),
     };
     try {
       await archStream<TeamEvent>(
@@ -805,6 +811,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
           brief={state.brief}
           decisions={state.decisions}
           busy={busy}
+          seeding={state.practice.seededFlaw}
           onDecide={(decision, note, choice) => {
             setPhasePick(null);
             void decide(decision, note, choice);
@@ -1069,6 +1076,20 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                             ? "Start the campaign lifecycle"
                             : "Hand the brief to the squad"}
                     </button>
+                    {mode === "lifecycle" && (
+                      <label
+                        className="team-seed-toggle"
+                        title="The MLR system slips one deliberately flawed module into the review queue and scores whether a reviewer catches it. It is withdrawn before approval either way."
+                      >
+                        <input
+                          type="checkbox"
+                          checked={seedFlaw}
+                          disabled={busy}
+                          onChange={(event) => setSeedFlaw(event.target.checked)}
+                        />
+                        Seed a flawed module for the MLR reviewers
+                      </label>
+                    )}
                     {status === "replaying" ? (
                       <div className="team-replay-controls">
                         <button
@@ -1176,6 +1197,8 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                         decision={lifecycleDecision}
                         onOpenTurn={(id) => setPhasePick(id)}
                         guardrails={state.guardrails}
+                        gaps={state.gaps}
+                        seeded={seededOutcome(visible)}
                       />
                       <aside className="team-rail" aria-label="Live activity">
                         {diagram}
@@ -1355,7 +1378,10 @@ function UnderTheHood({
             {state.decisions.length === 0 ? (
               <p className="arch-note">No person has decided anything on this run yet.</p>
             ) : (
-              <DecisionLog decisions={state.decisions} titles={ARTIFACT_TITLES} />
+              <>
+                <DecisionLog decisions={state.decisions} titles={ARTIFACT_TITLES} />
+                <ReviewerMetricsTable decisions={state.decisions} />
+              </>
             )}
             {state.conflicts.length > 0 && (
               <div className="team-conflicts">

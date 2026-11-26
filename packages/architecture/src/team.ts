@@ -16,6 +16,7 @@ import type { AgentOverrides } from "./registry.ts";
 import type { Persona } from "./state-machine.ts";
 import { MEDIA_CHANNELS, type MediaChannel, teamMarket } from "./team-data.ts";
 import type { TeamScorecard } from "./team-evals.ts";
+import type { ClaimGap, DecisionRecord, SeededFlaw } from "./team-governance.ts";
 import { BRANDS, type Brand } from "./types.ts";
 
 /**
@@ -742,7 +743,7 @@ export type TeamToolStep = {
   tool: string;
   input: unknown;
   ok: boolean;
-  decision?: { decision: string; policyId: string; reason: string };
+  decision?: { decision: string; policyId: string; reason: string; policyVersion?: string };
   output?: unknown;
   error?: string;
 };
@@ -800,7 +801,11 @@ export type TeamEvent =
         policies: number;
         store: string;
         scripted: boolean;
+        /** The team policy set's version when the run started (a hash of its policies). */
+        policyVersion?: string;
       };
+      /** Practices switched on for this run, such as a seeded flaw for the MLR reviewers. */
+      practice?: { seededFlaw: boolean };
     }
   | {
       type: "model";
@@ -827,6 +832,8 @@ export type TeamEvent =
       tools: string[];
       toolChoice?: string;
       settings: { effort?: string; temperature?: number; maxOutputTokens?: number };
+      /** A hash of the system prompt, tools and settings: the prompt's version. */
+      version?: string;
       /** USD per million tokens, or null when the model has no recorded price. */
       price?: { input: number; cachedInput: number; output: number } | null;
     }
@@ -869,6 +876,8 @@ export type TeamEvent =
       why: string;
       /** For a choice: the options the person picks from, by id. */
       options?: Array<{ id: string; label: string; detail?: string }>;
+      /** When the run started waiting (ISO time). */
+      at?: string;
     }
   | {
       type: "decided";
@@ -880,6 +889,8 @@ export type TeamEvent =
       choice?: string;
       /** When the person decided (ISO time); runs saved before it was recorded have none. */
       at?: string;
+      /** What was decided on, under which policy and prompt versions, and how long it took. */
+      record?: DecisionRecord;
     }
   /** The lifecycle moved into a phase, or finished one. */
   | { type: "phase"; phase: string; state: "active" | "done"; round: number }
@@ -893,6 +904,10 @@ export type TeamEvent =
       round: number;
       data: unknown;
     }
+  /** A point the squad couldn't support with approved content: recorded, not written. */
+  | { type: "claim-gap"; gap: ClaimGap }
+  /** The MLR system slipped a deliberately flawed module into the review queue. */
+  | { type: "seeded-flaw"; seeded: SeededFlaw }
   | { type: "delivered"; strategy: CampaignStrategy }
   | { type: "evaluation"; scorecard: TeamScorecard }
   | {

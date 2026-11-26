@@ -4,54 +4,68 @@
 // until the person at the browser decides, acting as the role the step needs. The MLR system
 // routes a submitted job to Medical, Legal and Regulatory in turn without waiting on the lead.
 import {
-  TEAM_STEP_CAPS,
-  teamAgentsFor,
-  applyDecision,
-  approveJob,
   type ApprovedJob,
   type AudienceLine,
+  applyDecision,
+  approveJob,
+  bookPlacements,
   buildTeamPolicies,
   type CampaignBrief,
-  chosen,
   choiceOptions,
+  chosen,
   currentStep,
+  type DecisionRecord,
+  type DeploymentLine,
+  type Form2253,
+  file2253,
+  finalFormCheck,
+  hcpReplies,
   isChoiceGate,
+  isLifecycleWorker,
   type LifecycleState,
   type LifecycleWorker,
   MLR_GATES,
   type MlrJob,
+  mlrJobCode,
+  type NextAction,
   newLifecycle,
   PHARMA_PHASES,
   type PhaseStep,
-  pharmaPhase,
-  recordArtifact,
-  finalFormCheck,
-  type NextAction,
   type Placement,
+  pharmaPhase,
+  promptVersionsOf,
+  recordArtifact,
+  reviewedBy,
+  SEEDED_MODULE_ID,
+  screenReplies,
   simulateResults,
-  traceClaims,
   TEAM_DIRECTOR,
   TEAM_GATES,
   TEAM_PARTY_LABELS,
+  TEAM_STEP_CAPS,
   type TeamAgentId,
   type TeamEvent,
   type TeamGate,
   type TeamParty,
   type TeamProvider,
-  type DeploymentLine,
-  isLifecycleWorker,
-  mlrJobCode,
+  teamAgentsFor,
+  traceClaims,
+  type WriteReceipt,
+  withoutSeeded,
 } from "@northstar/architecture";
 import { type ModelMessage, stepCountIs, streamText, tool, wrapLanguageModel } from "ai";
 import { z } from "zod";
 import { AGENT_GENERATION } from "../architecture/agent-runtime";
 import { ArchError, type Ctx, invoke, overridesFor } from "../architecture/context";
-import { storeLabel } from "../platform/data";
 import { ISO } from "../architecture/objects";
 import { forcedToolCallMiddleware } from "../forced-tool-middleware";
+import { storeLabel } from "../platform/data";
+import { serverHost } from "../platform/models";
 import { settle } from "./director";
 import { runLifecycleWorker } from "./lifecycle-workers";
+import { leadTurnLimit, recordLimit, runLimit } from "./limits";
 import {
+  addUsage,
   assertProvider,
   authorizeTeam,
   type Emit,
@@ -67,10 +81,8 @@ import {
   type TeamRun,
   teamModel,
   teamModels,
-  addUsage,
+  teamPolicyVersion,
 } from "./run";
-import { serverHost } from "../platform/models";
-import { leadTurnLimit, recordLimit, runLimit } from "./limits";
 
 /** Who each person step is, as a party on the message bus. */
 export const GATE_PARTY: Record<TeamGate, TeamParty> = {
@@ -191,6 +203,7 @@ function pauseFor(run: TeamRun, gate: TeamGate, why: string) {
     title: GATE_TITLES[gate](run.brief),
     why,
     ...(isChoiceGate(gate) ? { options: choiceOptions(state, gate) } : {}),
+    at: new Date().toISOString(),
   });
 }
 
@@ -352,12 +365,14 @@ export function emitArtifact(
   name: Parameters<typeof recordArtifact>[1],
   by: Parameters<typeof recordArtifact>[2],
   data: unknown,
+  /** The phase it belongs to, when the run has already moved on (a filing at a phase's last step). */
+  phase?: string,
 ) {
   const state = lifecycleOf(run);
   const artifact = recordArtifact(state, name, by, data);
   run.emit({
     type: "artifact",
-    phase: state.phase,
+    phase: phase ?? state.phase,
     name,
     by: by as TeamAgentId | "system",
     version: artifact.version,
@@ -372,6 +387,7 @@ export async function startLifecycleRun(
   ctx: Ctx,
   brief: CampaignBrief,
   provider: TeamProvider = "cloudflare",
+  practice: { seededFlaw: boolean } = { seededFlaw: false },
 ) {
   await authorizeTeam(ctx, TEAM_DIRECTOR, "delegate_task", brief.brand);
   assertProvider(ctx, provider);
@@ -401,7 +417,9 @@ export async function startLifecycleRun(
         ).length,
         store: storeLabel(ctx.env),
         scripted: ctx.env.AGENT_MODEL === "scripted",
+        policyVersion: await teamPolicyVersion(ctx),
       },
+      practice,
     });
     run.emit({ type: "phase", phase: state.phase, state: "active", round: 1 });
     say(run, "brand-lead", TEAM_DIRECTOR, "brief", `${brief.title}. ${brief.objectives}`);
@@ -461,14 +479,16 @@ export async function continueLifecycleRun(
     run.waiting = null;
     const choice =
       input.decision === "approve" && isChoiceGate(input.gate) ? input.choice : undefined;
+    const at = new Date().toISOString();
     run.emit({
       type: "decided",
       gate: input.gate,
       decision: input.decision,
       note,
       persona: ctx.user.persona,
-      at: new Date().toISOString(),
+      at,
       ...(choice ? { choice } : {}),
+      record: await decisionRecord(run, input.gate, at),
     });
     const chose = choice
       ? choiceOptions(state, input.gate).find((option) => option.id === choice)
@@ -540,12 +560,48 @@ export async function continueLifecycleRun(
   };
 }
 
+/**
+ * The decision record: the exact versions of the work the person saw, the policy set and the
+ * prompts that produced it, and how long the person took from being asked.
+ */
+async function decisionRecord(run: TeamRun, gate: TeamGate, at: string): Promise<DecisionRecord> {
+  const state = lifecycleOf(run);
+  const steps = reviewedBy(gate);
+  const prompts = promptVersionsOf(run.events);
+  const asked = [...run.events]
+    .reverse()
+    .find((event) => event.type === "await-person" && event.gate === gate);
+  const askedAt = asked?.type === "await-person" ? (asked.at ?? null) : null;
+  return {
+    reviewed: steps.flatMap(({ tool }) => {
+      const item = state.artifacts[tool as keyof LifecycleState["artifacts"]];
+      return item ? [{ name: tool, version: item.version }] : [];
+    }),
+    policyVersion: await teamPolicyVersion(run.ctx),
+    promptVersions: Object.fromEntries(
+      steps.flatMap(({ agent }) => (prompts[agent] ? [[agent, prompts[agent]]] : [])),
+    ),
+    askedAt,
+    decidedInMs: askedAt ? Math.max(0, Date.parse(at) - Date.parse(askedAt)) : null,
+  };
+}
+
 /** What the system does when a person approves: issue the MLR approval, or go live. */
 async function afterDecision(run: TeamRun, gate: TeamGate, decision: "approve" | "changes") {
   const state = lifecycleOf(run);
   if (decision !== "approve") return;
   if (gate === "regulatory") {
-    const job = state.artifacts.submit_mlr_job?.data as MlrJob;
+    const submitted = state.artifacts.submit_mlr_job?.data as MlrJob;
+    // A seeded test module never reaches approval, caught or not.
+    const job = withoutSeeded(submitted);
+    if (job.modules.length !== submitted.modules.length)
+      say(
+        run,
+        "mlr-coordinator",
+        "team",
+        "report",
+        `The MLR system withdrew module ${SEEDED_MODULE_ID} before approval: it was a seeded test of the review, not real content.`,
+      );
     const approved = approveJob(job, ISO(run.ctx).slice(0, 10));
     emitArtifact(run, "mlr_approval", "system", approved);
     say(
@@ -565,7 +621,47 @@ async function afterDecision(run: TeamRun, gate: TeamGate, decision: "approve" |
       `Final form: ${built.variants.length} built variants checked against ${approved.documentNumber}; ${built.allMatch ? "every one matches the approved version" : "a variant differs, so publishing is blocked"}.`,
     );
   }
+  if (gate === "go-live") {
+    const approved = state.artifacts.mlr_approval?.data as ApprovedJob | undefined;
+    const placements =
+      (state.artifacts.schedule_deployment?.data as { placements?: Placement[] } | undefined)
+        ?.placements ?? [];
+    if (approved) {
+      const receipt = bookPlacements(
+        placements,
+        approved,
+        ISO(run.ctx),
+        state.artifacts.deployment_receipt?.data as WriteReceipt | undefined,
+      );
+      emitArtifact(run, "deployment_receipt", "system", receipt);
+      say(
+        run,
+        "marketing-ops",
+        "team",
+        "report",
+        receipt.matches
+          ? `Booked ${receipt.readBack.length} placements once (key ${receipt.idempotencyKey}); read back from the channels, they match what was approved. Held until Form 2253 is filed.`
+          : `Booking read back ${receipt.readBack.length} of ${receipt.sent.length} placements: they don't match what was approved. Reconcile them before Form 2253 is filed.`,
+      );
+    }
+  }
   if (gate === "fda-2253") {
+    const form = state.artifacts.prepare_form_2253?.data as Form2253 | undefined;
+    if (form) {
+      const receipt = file2253(
+        form,
+        ISO(run.ctx),
+        state.artifacts.form_2253_receipt?.data as WriteReceipt | undefined,
+      );
+      emitArtifact(run, "form_2253_receipt", "system", receipt, "publish");
+      say(
+        run,
+        "regulatory",
+        "team",
+        "report",
+        `Form 2253 filed once (key ${receipt.idempotencyKey}, ${receipt.reference}); the acknowledgment read back lists ${receipt.readBack.length} materials, ${receipt.matches ? "matching what was filed" : "not matching what was filed"}.`,
+      );
+    }
     const audience =
       (state.artifacts.build_audience?.data as { lines?: AudienceLine[] })?.lines ?? [];
     const schedule = state.artifacts.schedule_deployment?.data as
@@ -578,6 +674,17 @@ async function afterDecision(run: TeamRun, gate: TeamGate, decision: "approve" |
       schedule?.placements ?? [],
     );
     emitArtifact(run, "campaign_results", "system", results);
+    const intake = screenReplies(hcpReplies(results.lines), ISO(run.ctx).slice(0, 10));
+    emitArtifact(run, "safety_intake", "system", intake);
+    const events = intake.flags.filter((flag) => flag.kind === "possible-adverse-event").length;
+    const offLabel = intake.flags.length - events;
+    say(
+      run,
+      "market",
+      "team",
+      "report",
+      `${intake.screened} HCP replies screened: ${events} possible adverse event${events === 1 ? "" : "s"} sent to pharmacovigilance within a business day, ${offLabel} off-label question${offLabel === 1 ? "" : "s"} sent to medical information. Promotion answers neither.`,
+    );
     say(
       run,
       "market",

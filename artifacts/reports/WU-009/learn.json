@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-26T04:24:24.368Z",
+  "generatedAt": "2026-11-26T13:11:20.333Z",
   "status": "passed",
-  "baseRef": "upstream/main",
-  "mergeBase": "d1b4d238dcecdc7611c431a13d47e157d720633b",
+  "baseRef": "origin/main",
+  "mergeBase": "be72c3b729a02b5d5dd77efd8aee91b4a0e20447",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -16,19 +16,20 @@
       "section": "campaign-squad",
       "status": "updated",
       "paths": [
-        "apps/edge/src/team/director.ts",
+        "apps/edge/src/team/api.ts",
+        "apps/edge/src/team/evals.ts",
         "apps/edge/src/team/lifecycle-workers.ts",
         "apps/edge/src/team/lifecycle.ts",
-        "apps/web/src/team/AgentModal.tsx",
-        "apps/web/src/team/Guardrails.tsx",
-        "apps/web/src/team/LifecycleSummary.tsx",
-        "apps/web/src/team/TeamHierarchy.tsx",
+        "apps/edge/src/team/run.ts",
+        "apps/edge/src/team/scripted.ts",
         "apps/web/src/team/TeamLifecycle.tsx",
         "apps/web/src/team/TeamPeople.tsx",
+        "apps/web/src/team/TeamPlatform.tsx",
         "apps/web/src/team/TeamView.tsx",
-        "apps/web/src/team/detail.tsx",
+        "apps/web/src/team/session-metrics.ts",
         "apps/web/src/team/team-state.ts",
         "apps/web/src/team/team.css",
+        "packages/architecture/src/team-evals.ts",
         "packages/architecture/src/team.ts"
       ]
     },
@@ -39,14 +40,15 @@
         "apps/edge/src/team/lifecycle-workers.ts",
         "apps/edge/src/team/lifecycle.ts",
         "apps/web/src/team/TeamLifecycle.tsx",
+        "packages/architecture/src/team-governance.ts",
         "packages/architecture/src/team-pharma.ts"
       ]
     },
     {
-      "section": "ui",
-      "status": "updated",
+      "section": "object-model",
+      "status": "reviewed",
       "paths": [
-        "apps/web/src/App.tsx"
+        "packages/architecture/src/index.ts"
       ]
     }
   ],
