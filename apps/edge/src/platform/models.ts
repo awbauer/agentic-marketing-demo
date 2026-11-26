@@ -76,6 +76,11 @@ export type ModelPlatform = {
 export type ModelBindings = {
   MODELS?: ModelPlatform;
   AI_PLATFORM?: string;
+  /**
+   * Which platforms the AI platform menu may offer, comma-separated (`workers-ai,vertex`). A
+   * platform left out is neither listed nor run, even when it is configured. Unset: all of them.
+   */
+  AI_PLATFORMS_ENABLED?: string;
   /** Workers AI: the Worker's binding, and the AI Gateway its calls go through. */
   AI?: Ai;
   AI_GATEWAY_ID?: string;
@@ -139,8 +144,11 @@ export function aiPlatformOptions(env: ModelBindings): AiPlatformOptions {
   return {
     default: platforms.default,
     platforms: AI_PLATFORMS.filter(
-      // A host lists only what it could ever run: Google Cloud has no Workers AI binding.
-      (id) => platforms.available[id] || (id === "vertex" ? true : Boolean(env.AI)),
+      // A host lists only what it could ever run (Google Cloud has no Workers AI binding), and
+      // only what AI_PLATFORMS_ENABLED allows.
+      (id) =>
+        platforms.available[id] ||
+        (enabledAiPlatforms(env).has(id) && (id === "vertex" ? true : Boolean(env.AI))),
     ).map((id) => ({
       id,
       label: AI_PLATFORM_TERMS[id].label,
@@ -163,17 +171,38 @@ function asProvider(platform: ModelPlatform): ProviderV4 {
   };
 }
 
+/** The platforms AI_PLATFORMS_ENABLED allows: every one when it is unset or blank. */
+export function enabledAiPlatforms(env: Pick<ModelBindings, "AI_PLATFORMS_ENABLED">) {
+  const listed = (env.AI_PLATFORMS_ENABLED ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (listed.length === 0) return new Set<AiPlatformId>(AI_PLATFORMS);
+  const unknown = listed.filter((id) => !isAiPlatformId(id));
+  if (unknown.length > 0)
+    console.warn(
+      `[models] AI_PLATFORMS_ENABLED lists ${unknown.join(", ")}; use ${AI_PLATFORMS.join(", ")}.`,
+    );
+  return new Set(listed.filter(isAiPlatformId));
+}
+
 function buildPlatforms(env: ModelBindings): AiPlatforms {
   const available: Partial<Record<AiPlatformId, ModelPlatform>> = {};
   const missing: Partial<Record<AiPlatformId, string>> = {};
+  const enabled = enabledAiPlatforms(env);
   if (env.MODELS) {
     available[env.MODELS.kind] = env.MODELS;
   } else {
-    if (env.AI) available["workers-ai"] = workersAiModels(env.AI, env.AI_GATEWAY_ID);
-    const vertex = vertexFromEnv(env);
-    if ("platform" in vertex) available.vertex = vertex.platform;
-    else missing.vertex = vertex.reason;
+    if (env.AI && enabled.has("workers-ai"))
+      available["workers-ai"] = workersAiModels(env.AI, env.AI_GATEWAY_ID);
+    if (enabled.has("vertex")) {
+      const vertex = vertexFromEnv(env);
+      if ("platform" in vertex) available.vertex = vertex.platform;
+      else missing.vertex = vertex.reason;
+    }
   }
+  if (enabled.size === 0)
+    console.warn("[models] AI_PLATFORMS_ENABLED allows no platform; no models will run.");
   const requested = isAiPlatformId(env.AI_PLATFORM) ? env.AI_PLATFORM : null;
   if (env.AI_PLATFORM && !requested)
     console.warn(`[models] AI_PLATFORM must be workers-ai or vertex, not ${env.AI_PLATFORM}.`);

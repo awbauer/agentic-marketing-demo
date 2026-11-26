@@ -41,6 +41,36 @@ export function teamProviderLabel(provider: TeamProvider, host: string = "cloudf
     openai: "OpenAI Responses API",
   }[provider];
 }
+/**
+ * Where a run's open-model tier ran: the AI platform chosen in the top bar (ADR-021), recorded on
+ * the run. Runs from before it was recorded fall back to the host's own platform.
+ */
+export function teamOpenModels(
+  aiPlatform: string | null | undefined,
+  host: string = "cloudflare",
+): "workers-ai" | "vertex" {
+  if (aiPlatform === "vertex" || aiPlatform === "workers-ai") return aiPlatform;
+  return host === "google-cloud" ? "vertex" : "workers-ai";
+}
+
+/** A run's provider by name, with the open-model tier named for the platform it ran on. */
+export function teamRunProviderLabel(
+  provider: TeamProvider,
+  aiPlatform: string | null | undefined,
+  host: string = "cloudflare",
+) {
+  if (provider !== "cloudflare") return teamProviderLabel(provider, host);
+  return teamOpenModels(aiPlatform, host) === "vertex"
+    ? teamProviderLabel("cloudflare", "google-cloud")
+    : TEAM_PROVIDER_LABELS.cloudflare;
+}
+
+/** The platform the open-model tier ran on, from a run's start event, if it was recorded. */
+export function runAiPlatform(events: readonly TeamEvent[]): "workers-ai" | "vertex" | undefined {
+  const start = events[0];
+  return start?.type === "start" ? start.infra?.aiPlatform : undefined;
+}
+
 export const isTeamProvider = (value: unknown): value is TeamProvider =>
   (TEAM_PROVIDERS as readonly unknown[]).includes(value);
 
@@ -729,6 +759,8 @@ export type TeamEvent =
       /** The infrastructure this run is served by. */
       infra: {
         provider: TeamProvider;
+        /** Where the open-model tier ran, when the run used it (ADR-021). */
+        aiPlatform?: "workers-ai" | "vertex";
         aiGateway: string | null;
         policies: number;
         store: string;

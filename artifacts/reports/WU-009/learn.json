@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-25T17:07:57.191Z",
+  "generatedAt": "2026-11-26T00:25:08.512Z",
   "status": "failed",
   "baseRef": "origin/main",
-  "mergeBase": "4f0b853acdd07cdc74523884296180232aafd5ea",
+  "mergeBase": "224d3e0ff60ec6f0083129c3d1923ae8673976ea",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,50 +13,40 @@
   },
   "drift": [
     {
-      "section": "gateway",
-      "status": "stale",
+      "section": "two-hosts",
+      "status": "updated",
       "paths": [
-        "apps/edge/src/architecture/store.ts"
+        "apps/edge/src/platform/models.ts",
+        "apps/gcp/src/platform/firestore.ts",
+        "docs/decisions/ADR-021-ai-platform-apart-from-host.md"
       ]
     },
     {
       "section": "campaign-squad",
       "status": "updated",
       "paths": [
-        "apps/edge/src/team/api.ts",
         "apps/edge/src/team/director.ts",
-        "apps/edge/src/team/evals.ts",
-        "apps/edge/src/team/lifecycle-workers.ts",
+        "apps/edge/src/team/library.ts",
         "apps/edge/src/team/lifecycle.ts",
         "apps/edge/src/team/run.ts",
-        "apps/web/src/team/TeamHierarchy.tsx",
-        "apps/web/src/team/TeamLifecycle.tsx",
-        "apps/web/src/team/TeamView.tsx",
-        "apps/web/src/team/team-state.ts",
-        "apps/web/src/team/team.css",
-        "packages/architecture/src/team.ts",
-        "apps/edge/src/team/library.ts",
         "apps/web/src/team/AgentModal.tsx",
         "apps/web/src/team/RunLibrary.tsx",
-        "apps/web/src/team/replay.ts",
-        "docs/decisions/ADR-016-squad-run-library.md"
+        "apps/web/src/team/TeamPlatform.tsx",
+        "apps/web/src/team/TeamView.tsx",
+        "apps/web/src/team/session-metrics.ts",
+        "packages/architecture/src/team.ts"
       ]
     },
     {
       "section": "pharma-lifecycle",
-      "status": "updated",
+      "status": "stale",
       "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts",
-        "apps/web/src/team/TeamLifecycle.tsx",
-        "docs/decisions/ADR-015-pharma-campaign-lifecycle.md",
-        "packages/architecture/src/team-pharma.ts",
-        "docs/decisions/ADR-017-claims-managed-lifecycle.md"
+        "apps/edge/src/team/lifecycle.ts"
       ]
     }
   ],
   "notices": [],
   "failures": [
-    "Learn drift: this branch changes code that these Learn sections explain, but the sections didn't change:\n  • gateway (“The agentic gateway”) ← apps/edge/src/architecture/store.ts\nUpdate each section in apps/web/src/learn/content.ts (or its lesson or reference entries) so it teaches the change.\nIf nothing a reader learns has changed, say so in a commit trailer:\n  Learn-Reviewed: gateway (why no Learn update is needed)"
+    "Learn drift: this branch changes code that these Learn sections explain, but the sections didn't change:\n  • pharma-lifecycle (“A pharma campaign, focus to analytics, with MLR”) ← apps/edge/src/team/lifecycle.ts\nUpdate each section in apps/web/src/learn/content.ts (or its lesson or reference entries) so it teaches the change.\nIf nothing a reader learns has changed, say so in a commit trailer:\n  Learn-Reviewed: pharma-lifecycle (why no Learn update is needed)"
   ]
 }

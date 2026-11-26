@@ -14,6 +14,7 @@ interface __BaseEnv_CloudflareBindings {
 	SALESFORCE_MCP_URL: "https://northstar-mcp.becurious.one/mcp";
 	VERTEX_PROJECT: "burner-andbauer-7311";
 	VERTEX_LOCATION: "us-central1";
+	AI_PLATFORMS_ENABLED: "workers-ai,vertex";
 	SURFACE_ALLOWED_ORIGINS: "https://pu1793831090502.lightning.force.com";
 	NEO4J_QUERY_URL: string;
 	NEO4J_URI: string;
@@ -36,7 +37,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "ENVIRONMENT" | "AUTH_MODE" | "PROOF_WORKSPACE_ID" | "AI_GATEWAY_ID" | "CAMPAIGN_IMAGE_MODEL" | "SALESFORCE_MCP_URL" | "VERTEX_PROJECT" | "VERTEX_LOCATION" | "SURFACE_ALLOWED_ORIGINS" | "NEO4J_QUERY_URL" | "NEO4J_URI" | "NEO4J_USERNAME" | "NEO4J_PASSWORD" | "NEO4J_DATABASE" | "AURA_INSTANCEID" | "AURA_INSTANCENAME">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "ENVIRONMENT" | "AUTH_MODE" | "PROOF_WORKSPACE_ID" | "AI_GATEWAY_ID" | "CAMPAIGN_IMAGE_MODEL" | "SALESFORCE_MCP_URL" | "VERTEX_PROJECT" | "VERTEX_LOCATION" | "AI_PLATFORMS_ENABLED" | "SURFACE_ALLOWED_ORIGINS" | "NEO4J_QUERY_URL" | "NEO4J_URI" | "NEO4J_USERNAME" | "NEO4J_PASSWORD" | "NEO4J_DATABASE" | "AURA_INSTANCEID" | "AURA_INSTANCENAME">> {}
 }
 
 // Begin runtime types

@@ -17,6 +17,7 @@ import {
   type ApprovalState,
   buildWorld,
   type GovernedObject,
+  runAiPlatform,
 } from "@northstar/architecture";
 import { AUDIT_RETENTION_MS } from "@northstar/contracts";
 import type { MemberDirectory } from "../../../edge/src/auth";
@@ -633,6 +634,7 @@ function teamLibraryRepository(db: Firestore, names: Collections): TeamLibraryRe
           brand: run.brief.brand,
           mode: run.mode,
           provider: run.provider,
+          ai_platform: runAiPlatform(run.events) ?? null,
           scripted: run.scripted,
           status: run.status,
           tokens: run.tokens,
@@ -669,6 +671,7 @@ function teamLibraryRepository(db: Firestore, names: Collections): TeamLibraryRe
           "brand",
           "mode",
           "provider",
+          "ai_platform",
           "scripted",
           "status",
           "tokens",
@@ -697,6 +700,7 @@ function teamLibraryRepository(db: Firestore, names: Collections): TeamLibraryRe
             brand: String(row.brand),
             mode: String(row.mode),
             provider: String(row.provider),
+            ...(row.ai_platform ? { aiPlatform: String(row.ai_platform) } : {}),
             scripted: Boolean(row.scripted),
             status: String(row.status),
             tokens: Number(row.tokens),

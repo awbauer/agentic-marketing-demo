@@ -17,6 +17,8 @@ export type LibraryRun = {
   brand: string;
   mode: string;
   provider: string;
+  /** Where the open-model tier ran, from the run's start event (ADR-021); absent on older runs. */
+  aiPlatform?: string;
   scripted: boolean;
   status: string;
   tokens: number;
@@ -91,7 +93,7 @@ export async function recordRun(
 export async function listRuns(db: D1Database): Promise<LibraryRun[]> {
   const { results } = await db
     .prepare(
-      "SELECT id, brief_id, title, brand, mode, provider, scripted, status, tokens, json_array_length(events) AS event_count, stamps, created_at, updated_at FROM team_run_library ORDER BY updated_at DESC, rowid DESC LIMIT ?",
+      "SELECT id, brief_id, title, brand, mode, provider, json_extract(events, '$[0].infra.aiPlatform') AS ai_platform, scripted, status, tokens, json_array_length(events) AS event_count, stamps, created_at, updated_at FROM team_run_library ORDER BY updated_at DESC, rowid DESC LIMIT ?",
     )
     .bind(LIBRARY_SIZE)
     .all<Row>();
@@ -104,6 +106,7 @@ export async function listRuns(db: D1Database): Promise<LibraryRun[]> {
       brand: String(row.brand),
       mode: String(row.mode),
       provider: String(row.provider),
+      ...(row.ai_platform ? { aiPlatform: String(row.ai_platform) } : {}),
       scripted: Number(row.scripted) === 1,
       status: String(row.status),
       tokens: Number(row.tokens),

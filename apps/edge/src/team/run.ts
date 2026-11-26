@@ -261,6 +261,13 @@ export function teamModels(
   ) as Record<TeamAgentId, string>;
 }
 
+/** Where a run on this provider runs its open-model tier: the top bar's AI platform (ADR-021). */
+export function runAiPlatformFor(ctx: Ctx, provider: TeamProvider) {
+  if (provider !== "cloudflare" || ctx.env.AGENT_MODEL === "scripted") return {};
+  const kind = modelPlatform(ctx.env, ctx.aiPlatform)?.kind;
+  return kind ? { aiPlatform: kind } : {};
+}
+
 /** Whether each provider can run here, and if not, why. All three need the AI Gateway. */
 export function providerStatus(ctx: Ctx) {
   const env = providerEnv(ctx);

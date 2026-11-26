@@ -2,7 +2,9 @@
 // and the service-account token that lets a Cloudflare Worker call Vertex AI.
 import { exportPKCS8, generateKeyPair, jwtVerify } from "jose";
 import { describe, expect, it } from "vitest";
+import type { Ctx } from "../../../edge/src/architecture/context";
 import { aiPlatformOptions, aiPlatforms, modelPlatform } from "../../../edge/src/platform/models";
+import { providerStatus, runAiPlatformFor } from "../../../edge/src/team/run";
 import {
   parseServiceAccountKey,
   parseWorkloadIdentity,
@@ -54,6 +56,37 @@ describe("AI platforms", () => {
     const env = { HOST: "google-cloud", VERTEX_PROJECT: "p", GOOGLE_ACCESS_TOKEN: async () => "t" };
     expect(modelPlatform(env, "workers-ai")?.kind).toBe("vertex");
     expect(aiPlatformOptions(env).platforms.map((platform) => platform.id)).toEqual(["vertex"]);
+  });
+
+  it("lists and runs only what AI_PLATFORMS_ENABLED allows", () => {
+    const both = { AI: fakeAi, VERTEX_PROJECT: "p", GOOGLE_ACCESS_TOKEN: async () => "t" };
+    const vertexOnly = { ...both, AI_PLATFORMS_ENABLED: "vertex" };
+    expect(aiPlatformOptions(vertexOnly)).toMatchObject({
+      default: "vertex",
+      platforms: [{ id: "vertex", available: true }],
+    });
+    // A request can't choose a platform the setting leaves out.
+    expect(modelPlatform(vertexOnly, "workers-ai")?.kind).toBe("vertex");
+    const workersOnly = { ...both, AI_PLATFORMS_ENABLED: " workers-ai " };
+    expect(aiPlatformOptions(workersOnly).platforms.map((platform) => platform.id)).toEqual([
+      "workers-ai",
+    ]);
+    expect(modelPlatform(workersOnly, "vertex")?.kind).toBe("workers-ai");
+    // Blank means every platform; unknown ids are ignored.
+    expect(aiPlatformOptions({ ...both, AI_PLATFORMS_ENABLED: "" }).platforms).toHaveLength(2);
+    expect(
+      aiPlatformOptions({ ...both, AI_PLATFORMS_ENABLED: "vertex,openrouter" }).platforms,
+    ).toHaveLength(1);
+  });
+
+  it("records and labels the squad's open-model tier on the chosen platform", () => {
+    const env = { AI: fakeAi, VERTEX_PROJECT: "p", GOOGLE_ACCESS_TOKEN: async () => "t" };
+    const ctx = (aiPlatform?: "vertex" | "workers-ai") => ({ env, aiPlatform }) as unknown as Ctx;
+    expect(runAiPlatformFor(ctx("vertex"), "cloudflare")).toEqual({ aiPlatform: "vertex" });
+    expect(runAiPlatformFor(ctx(), "cloudflare")).toEqual({ aiPlatform: "workers-ai" });
+    expect(runAiPlatformFor(ctx("vertex"), "anthropic")).toEqual({});
+    const open = providerStatus(ctx("vertex")).find((item) => item.id === "cloudflare");
+    expect(open).toMatchObject({ label: "Vertex AI (open models)", gateway: null });
   });
 
   it("has no platform when nothing is configured", () => {

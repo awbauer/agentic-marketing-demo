@@ -83,7 +83,7 @@ The knowledge graph (ADR-006) reads from Neo4j AuraDB through the Query API.
 
 ## Vertex AI from the Worker (ADR-021)
 
-The top bar's AI platform menu offers Vertex AI once the Worker holds a federation credential. No Google key is involved: the Worker signs its own short-lived token, and Google's workload identity pool `northstar-workers` (provider `cloudflare-worker`, project `burner-andbauer-7311`) exchanges it for an access token of `northstar-vertex-worker`, which holds `roles/aiplatform.user` only.
+The top bar's AI platform menu offers Vertex AI once the Worker holds a federation credential. No Google key is involved: the Worker signs its own short-lived token, and Google's workload identity pool `northstar-workers` (provider `cloudflare-worker`, project `burner-andbauer-7311`) exchanges it for an access token of `northstar-vertex-worker`, which holds `roles/aiplatform.user` only. To hide a platform from the menu, and stop requests from choosing it, remove it from `AI_PLATFORMS_ENABLED` in `wrangler.jsonc` (`workers-ai,vertex`) and deploy.
 
 Put the credential on the Worker straight from Secret Manager, without writing it to disk or a terminal:
 

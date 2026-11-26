@@ -52,6 +52,9 @@
     // secret holds the federation credential (infra/cloudflare/pot/README.md); Workers AI stays the default.
     "VERTEX_PROJECT": "burner-andbauer-7311",
     "VERTEX_LOCATION": "us-central1",
+    // Which AI platforms the top bar's menu offers, comma-separated. Remove one to hide it and stop
+    // requests from choosing it; AI_PLATFORM (optional) names the default among those left.
+    "AI_PLATFORMS_ENABLED": "workers-ai,vertex",
     // Lightning origins that may receive a signed-in person's Access token after Login.
     "SURFACE_ALLOWED_ORIGINS": "https://pu1793831090502.lightning.force.com"
   },
