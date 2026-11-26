@@ -7,16 +7,12 @@ import {
   type Brand,
   type CampaignBrief,
   runsPharmaLifecycle,
-  TEAM_AGENTS,
   TEAM_BRIEFS,
-  TEAM_DIRECTOR,
   TEAM_PARTY_LABELS,
   TEAM_GATES,
   isTeamProvider,
   type PHARMA_PHASES,
   phaseOfGate,
-  isLifecycleWorker,
-  isTeamSpecialist,
   teamAgentsFor,
   type TeamMode,
   TEAM_PROVIDERS,
@@ -34,13 +30,15 @@ import { RichText } from "./RichText";
 import { type LibraryRun, RunLibrary } from "./RunLibrary";
 import { TeamHierarchy } from "./TeamHierarchy";
 import { DecisionCard, DecisionLog } from "./TeamPeople";
-import { ArtifactView, LifecycleDecisionCard, PhaseStepper, PhaseWorkspace } from "./TeamLifecycle";
+import { LifecycleDecisionCard, PhaseStepper, PhaseWorkspace } from "./TeamLifecycle";
 import { EvalsPanel, InfrastructurePanel, SemanticLayerPanel } from "./TeamPlatform";
-import { StrategyView, TeamWorkView } from "./TeamWork";
+import { StrategyView } from "./TeamWork";
 import { REPLAY_SPEEDS, type ReplaySpeed, replayDelays } from "./replay";
 import { AgentModal } from "./AgentModal";
+import { ToolLibrary } from "./ToolLibrary";
+import { ClaimsProvider, claimIndex } from "./Claims";
 import { GuardrailPanel } from "./Guardrails";
-import { recordSessionRun } from "./session-metrics";
+import { recordSessionRun, resetSessionMetrics } from "./session-metrics";
 import { foldTeam, isPeerMessage, KIND_LABELS, TEAM_PHASES, type TeamMessage } from "./team-state";
 import "../architecture/architecture.css";
 import "./team.css";
@@ -363,157 +361,67 @@ function MessageFeed({
   );
 }
 
-function AgentInspector({
+/**
+ * The agents at a glance: what each is doing, its model, its calls and the guardrails it ran into.
+ * Everything else about an agent (prompts, usage, messages, every call, its work) is in its
+ * details, one click away, so this list doesn't repeat it.
+ */
+function AgentRoster({
   state,
-  selected,
-  follow,
-  onFollow,
-  onSelect,
   onOpen,
 }: {
   state: ReturnType<typeof foldTeam>;
-  selected: TeamAgentId;
-  follow: boolean;
-  onFollow: (follow: boolean) => void;
-  onSelect: (id: TeamAgentId) => void;
   onOpen: (id: TeamAgentId) => void;
 }) {
-  const manifest = TEAM_AGENTS.find((agent) => agent.id === selected);
-  const view = state.agents[selected];
-  const lifecycle = state.mode === "lifecycle";
-  const specialist = !lifecycle && isTeamSpecialist(selected) ? selected : null;
-  const latest = specialist ? view.versions.at(-1) : undefined;
-  const made = lifecycle ? state.artifacts.filter((artifact) => artifact.by === selected) : [];
   return (
-    <section className="team-inspector" aria-labelledby="team-inspector-title">
-      <h3 id="team-inspector-title" className="sr-only">
-        Agent detail
-      </h3>
-      <div className="arch-tabs small" role="tablist" aria-label="Agents">
-        {teamAgentsFor(state.mode).map(({ id }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={selected === id}
-            onClick={() => onSelect(id)}
-          >
-            <i className={`team-dot is-${state.agents[id].state}`} aria-hidden="true" />
-            {TEAM_PARTY_LABELS[id]}
-          </button>
-        ))}
-        <label className="team-follow">
-          <input
-            type="checkbox"
-            checked={follow}
-            onChange={(event) => onFollow(event.target.checked)}
-          />
-          Follow the working agent
-        </label>
-      </div>
-      <div className="team-inspector-body" role="tabpanel">
-        <header>
-          <h4>
-            {manifest?.name}{" "}
-            <button type="button" className="text-button" onClick={() => onOpen(selected)}>
-              Full details: prompt, usage, calls
-            </button>
-          </h4>
-          <p>{manifest?.summary}</p>
-          <p className="arch-note">
-            {manifest?.role === "hub" ? "Hub" : "Spoke"} ·{" "}
-            {manifest?.tier === "coordinator" ? "coordinator" : "worker"} model{" "}
-            <code>{(state.models[selected] ?? "—").replace("@cf/", "")}</code> · state{" "}
-            <strong>{view.state}</strong>
-            {view.note ? ` (${view.note})` : ""}
-            {view.revisions ? ` · revised ${view.revisions}×` : ""}
-          </p>
-          <p className="team-grants">
-            Gateway grants:{" "}
-            {manifest?.tools.map((tool) => (
-              <code key={tool}>{tool}</code>
-            ))}
-          </p>
-        </header>
-        {view.review && (
-          <p className={`team-review verdict-${view.review.verdict}`}>
-            Lead’s call: <strong>{view.review.verdict === "accept" ? "kept" : "sent back"}</strong>
-            {view.review.feedback && view.review.feedback !== "Kept."
-              ? ` — ${view.review.feedback}`
-              : ""}
-          </p>
-        )}
-        {specialist && state.brief && (
-          <>
-            <h5>
-              Latest work{latest ? ` · version ${latest.version}` : ""}
-              {latest ? ` · ${(latest.latencyMs / 1000).toFixed(1)} s` : ""}
-            </h5>
-            <TeamWorkView agent={specialist} work={latest?.output} brief={state.brief} />
-          </>
-        )}
-        {lifecycle && isLifecycleWorker(selected) && (
-          <>
-            <h5>Saved work ({made.length})</h5>
-            {made.length === 0 ? (
-              <p className="arch-note">Nothing saved yet.</p>
-            ) : (
-              made.slice(-2).map((artifact) => (
-                <div key={`${artifact.name}-${artifact.version}`}>
-                  <h6>
-                    <code>{artifact.name}</code> · version {artifact.version} · round{" "}
-                    {artifact.round}
-                  </h6>
-                  <ArtifactView artifact={artifact} choices={state.lifecycle?.choices} />
-                </div>
-              ))
-            )}
-          </>
-        )}
-        {selected === TEAM_DIRECTOR && state.plan && (
-          <>
-            <h5>The lead’s work plan</h5>
-            <ul>
-              {state.plan.deliverables.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-            <ol className="team-assignments">
-              {state.plan.assignments.map((item) => (
-                <li key={item.agent}>
-                  <strong>{TEAM_PARTY_LABELS[item.agent]}</strong>: {item.task}
-                  {item.dependsOn.length > 0 && (
-                    <small>
-                      {" "}
-                      · after {item.dependsOn.map((id) => TEAM_PARTY_LABELS[id]).join(", ")}
-                    </small>
-                  )}
-                </li>
-              ))}
-            </ol>
-            {state.plan.budgetGuidance && <p className="arch-note">{state.plan.budgetGuidance}</p>}
-          </>
-        )}
-        <h5>Tool calls ({view.tools.length})</h5>
-        {view.tools.length === 0 ? (
-          <p className="arch-note">No calls yet.</p>
-        ) : (
-          <ol className="team-tools">
-            {view.tools.map((step, index) => (
-              <li key={`${step.tool}-${index}`} className={step.ok ? "ok" : "failed"}>
-                <code>{step.tool}</code>{" "}
-                <span className={`team-decision ${step.decision?.decision ?? "none"}`}>
-                  {step.decision
-                    ? `${step.decision.decision === "allow" ? "✓ allowed" : "✗ denied"} by ${step.decision.policyId}`
-                    : "not checked"}
-                </span>
-                {step.error && <small className="team-tool-error">{step.error}</small>}
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-    </section>
+    <div className="team-table-wrap">
+      <table className="team-table team-roster">
+        <caption className="sr-only">The agents on this run</caption>
+        <thead>
+          <tr>
+            <th scope="col">Agent</th>
+            <th scope="col">Now</th>
+            <th scope="col">Model</th>
+            <th scope="col">Tool calls</th>
+            <th scope="col">Guardrails</th>
+          </tr>
+        </thead>
+        <tbody>
+          {teamAgentsFor(state.mode).map((agent) => {
+            const view = state.agents[agent.id];
+            const hits = state.guardrails
+              .filter((hit) => hit.agent === agent.id)
+              .reduce((sum, hit) => sum + hit.count, 0);
+            return (
+              <tr key={agent.id}>
+                <th scope="row">
+                  <button type="button" className="text-button" onClick={() => onOpen(agent.id)}>
+                    {agent.name}
+                  </button>
+                  <small>
+                    {" "}
+                    {agent.role === "hub" ? "hub" : "spoke"} · {agent.tier}
+                  </small>
+                </th>
+                <td>
+                  <i className={`team-dot is-${view.state}`} aria-hidden="true" /> {view.state}
+                  {view.note ? <small> · {view.note}</small> : null}
+                </td>
+                <td>
+                  <code>{(state.models[agent.id] ?? "—").replace("@cf/", "")}</code>
+                </td>
+                <td>{view.tools.length}</td>
+                <td>{hits ? `${hits} caught` : "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="arch-note">
+        Click an agent (here or on the team map) for its prompts, usage, messages, every tool call
+        and its work.
+      </p>
+    </div>
   );
 }
 
@@ -565,11 +473,8 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   const [shown, setShown] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<ArchApiError | null>(null);
-  const [selected, setSelected] = useState<TeamAgentId>(TEAM_DIRECTOR);
   /** The agent whose details are open in the modal, if any. */
   const [detail, setDetail] = useState<TeamAgentId | null>(null);
-  // Off unless the reader asks: tabs never switch under them.
-  const [follow, setFollow] = useState(false);
   // The phase the reader picked in the stepper; null follows the run's active phase.
   const [phasePick, setPhasePick] = useState<PhaseId | null>(null);
   const decisionSlot = useRef<HTMLDivElement>(null);
@@ -656,6 +561,8 @@ export function TeamView({ onClose }: { onClose: () => void }) {
 
   const visible = shown === null ? events : events.slice(0, shown);
   const state = useMemo(() => foldTeam(visible), [visible]);
+  // Every claim on the page opens the library's details, as the run's agents read them.
+  const claims = useMemo(() => claimIndex(state), [state]);
 
   // This session's metrics, kept in this browser: a live run counts when its request ends (it
   // finished, stopped, or waits on a person), a replay when it plays or is skipped to the end.
@@ -676,6 +583,11 @@ export function TeamView({ onClose }: { onClose: () => void }) {
       ...(state.infra?.aiPlatform ? { aiPlatform: state.infra.aiPlatform } : {}),
       source: before === "replaying" ? "replay" : "live",
       scripted: Boolean(state.infra?.scripted),
+      tools: [
+        ...new Set(
+          Object.values(state.agents).flatMap((view) => view.tools.map((step) => step.tool)),
+        ),
+      ],
       status: state.waiting
         ? "waiting"
         : state.done && (state.lifecycle ? state.lifecycle.finished : true)
@@ -684,16 +596,6 @@ export function TeamView({ onClose }: { onClose: () => void }) {
       scorecard: state.scorecard,
     });
   }, [status, shown, state]);
-
-  // While a run plays, keep the inspector on whichever agent is working now.
-  useEffect(() => {
-    if (!follow || status === "done" || status === "idle") return;
-    const working = teamAgentsFor(state.mode)
-      .map((agent) => agent.id)
-      .reverse()
-      .find((id) => ["working", "revising"].includes(state.agents[id].state));
-    if (working && working !== selected) setSelected(working);
-  }, [state, follow, status]);
 
   /** A person's decision on the waiting run; the squad's next steps stream onto the same page. */
   async function decide(decision: "approve" | "changes", note: string, choice?: string) {
@@ -718,6 +620,25 @@ export function TeamView({ onClose }: { onClose: () => void }) {
       setError(asError(failure));
     }
     setStatus("done");
+  }
+
+  /**
+   * Starts this browser's squad session over: clears the run on the page, the remembered run and
+   * this session's metrics (and with them the tool library's session highlights). Runs saved to the
+   * shared library stay there.
+   */
+  function resetSession() {
+    stopPlayback();
+    setEvents([]);
+    setFromLibrary(false);
+    stamps.current = null;
+    setShown(null);
+    setError(null);
+    setStatus("idle");
+    setDetail(null);
+    setPhasePick(null);
+    remember(null);
+    resetSessionMetrics();
   }
 
   async function run() {
@@ -960,281 +881,282 @@ export function TeamView({ onClose }: { onClose: () => void }) {
     </div>
   );
   return (
-    <section className="evaluations-view arch-view team-view" aria-labelledby="team-title">
-      <div className="section-header">
-        <div>
-          <p className="kicker">
-            {view === "lifecycle"
-              ? "Pharma campaign lifecycle · agents and people"
-              : "Campaign squad · hub and spokes"}
-          </p>
-          <h2 id="team-title">
-            {view === "lifecycle"
-              ? "Seven agents, six phases, MLR at the centre"
-              : "Five agents, one campaign proposal"}
-          </h2>
-        </div>
-        <div className="arch-header-actions">
-          <fieldset className="team-mode">
-            <legend className="sr-only">What the team runs</legend>
-            <div className="team-switch" role="radiogroup" aria-label="Run mode">
-              {(
-                [
-                  ["squad", "Campaign squad"],
-                  ["lifecycle", "Pharma lifecycle"],
-                ] as const
-              ).map(([id, label]) => (
-                <label key={id} className={mode === id ? "on" : ""}>
-                  <input
-                    type="radio"
-                    name="team-mode"
-                    value={id}
-                    checked={mode === id}
-                    disabled={busy}
-                    onChange={() => chooseMode(id)}
-                  />
-                  <strong>{label}</strong>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <button type="button" className="text-button" onClick={onClose}>
-            Back to workspace
-          </button>
-        </div>
-      </div>
-      <div className="arch-body">
-        <div className="arch-main">
-          <section className="team-brief" aria-labelledby="team-brief-title">
-            {state.id ? (
-              <details className="team-setup">
-                <summary>
-                  <span id="team-brief-title" className="team-setup-title">
-                    {state.brief?.title ?? brief.title}
-                  </span>
-                  <span className="team-setup-meta">
-                    {state.brief?.brand ?? brief.brand} · $
-                    {(state.brief?.budgetUsd ?? brief.budgetUsd).toLocaleString("en-US")} ·{" "}
-                    {state.brief?.start ?? brief.start} → {state.brief?.end ?? brief.end} · on{" "}
-                    {
-                      // A run names where it ran; before one starts, the current choice.
-                      state.infra
-                        ? providerShort(state.infra.provider, state.infra.aiPlatform ?? null).name
-                        : providerName
-                    }
-                  </span>
-                  <span className="team-setup-open">Change brief or provider</span>
-                </summary>
-                <p className="arch-lede">{lede}</p>
-                {chooser}
-              </details>
-            ) : (
-              <>
-                <p className="arch-lede">{lede}</p>
-                <h3 id="team-brief-title">Choose a brief</h3>
-                {chooser}
-              </>
-            )}
-            <div className="team-actions">
-              <button
-                type="button"
-                className="arch-primary"
-                disabled={
-                  busy ||
-                  chosen?.available === false ||
-                  (mode === "lifecycle" && !runsPharmaLifecycle(brief.brand))
-                }
-                onClick={() => {
-                  setPhasePick(null);
-                  void run();
-                }}
-              >
-                {status === "running"
-                  ? "The team is working…"
-                  : state.id
-                    ? "Start a new run"
-                    : mode === "lifecycle"
-                      ? "Start the campaign lifecycle"
-                      : "Hand the brief to the squad"}
-              </button>
-              {status === "replaying" ? (
-                <div className="team-replay-controls">
-                  <button type="button" className="text-button" onClick={paused ? resume : pause}>
-                    {paused ? "Resume" : "Pause"}
-                  </button>
-                  <label>
-                    Speed{" "}
-                    <select
-                      value={speed}
-                      onChange={(event) => changeSpeed(event.target.value as ReplaySpeed)}
-                    >
-                      {REPLAY_SPEEDS.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button type="button" className="text-button" onClick={skip}>
-                    Skip to the end
-                  </button>
-                  <small role="status">
-                    Replaying · event {shown ?? events.length} of {events.length}
-                    {paused ? " · paused" : ""}
-                  </small>
-                </div>
-              ) : (
-                events.length > 0 &&
-                status !== "running" && (
-                  <button type="button" className="text-button" onClick={() => replay()}>
-                    Replay agent by agent
-                  </button>
-                )
-              )}
-              <RunLibrary
-                scope={scope}
-                disabled={status === "running"}
-                currentId={state.id}
-                onPick={replayFromLibrary}
-              />
-              {fromLibrary && status === "done" && (
-                <small className="arch-note" role="status">
-                  A recorded run from the library: read-only
-                  {state.waiting
-                    ? `, stopped where it waited for the ${TEAM_GATES[state.waiting.gate].decider.toLowerCase()}`
-                    : ""}
-                  . Start a new run to take decisions.
-                </small>
-              )}
-              {status === "running" && startedAt.current ? (
-                <small className="team-clock" role="status">
-                  Working · {clock(now - startedAt.current)} · last update{" "}
-                  {Math.max(0, Math.round((now - (lastEventAt.current ?? now)) / 1000))} s ago
-                  {working ? ` · ${working}` : ""}
-                </small>
-              ) : state.done ? (
-                <small
-                  className={`team-done-inline ${state.strategy || state.lifecycle?.finished ? "" : "stopped"}`}
-                  role="status"
-                >
-                  {state.done.summary}
-                </small>
-              ) : (
-                <small>
-                  Real models on {providerName}; a run takes a few minutes and differs each time.
-                </small>
-              )}
-            </div>
-          </section>
-
-          {error && <ErrorNote error={error} />}
-          {state.error && (
-            <p className="team-error" role="alert">
-              {state.error}
+    <ClaimsProvider value={claims}>
+      <section className="evaluations-view arch-view team-view" aria-labelledby="team-title">
+        <div className="section-header">
+          <div>
+            <p className="kicker">
+              {view === "lifecycle"
+                ? "Pharma campaign lifecycle · agents and people"
+                : "Campaign squad · hub and spokes"}
             </p>
-          )}
-
-          {view === "lifecycle" ? (
-            <>
-              <PhaseStepper
-                lifecycle={state.lifecycle}
-                selected={phase}
-                waiting={live ? state.waiting : null}
-                following={phase === activePhase}
-                onSelect={(id) => setPhasePick(id)}
-              />
-              <div className="team-life">
-                <PhaseWorkspace
-                  phase={phase}
-                  lifecycle={state.lifecycle}
-                  artifacts={state.artifacts}
-                  waiting={live ? state.waiting : null}
-                  decision={lifecycleDecision}
-                  onOpenTurn={(id) => setPhasePick(id)}
-                />
-                <aside className="team-rail" aria-label="Live activity">
-                  {diagram}
-                  <MessageFeed messages={state.messages} title="Team conversation" />
-                </aside>
-              </div>
-            </>
-          ) : (
-            <>
-              <ol className="team-steps" aria-label="Progress">
-                {TEAM_PHASES.map((item) => (
-                  <li
-                    key={item.id}
-                    className={
-                      state.phases.has(item.id)
-                        ? "reached"
-                        : busy && current?.id === item.id
-                          ? "current"
-                          : ""
-                    }
-                    aria-current={busy && current?.id === item.id ? "step" : undefined}
-                  >
-                    <span aria-hidden="true" />
-                    {item.label}
-                    {item.id === "pieces" ? ` (${state.kept}/4)` : ""}
-                  </li>
+            <h2 id="team-title">
+              {view === "lifecycle"
+                ? "Seven agents, six phases, MLR at the centre"
+                : "Five agents, one campaign proposal"}
+            </h2>
+          </div>
+          <div className="arch-header-actions">
+            <fieldset className="team-mode">
+              <legend className="sr-only">What the team runs</legend>
+              <div className="team-switch" role="radiogroup" aria-label="Run mode">
+                {(
+                  [
+                    ["squad", "Campaign squad"],
+                    ["lifecycle", "Pharma lifecycle"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <label key={id} className={mode === id ? "on" : ""}>
+                    <input
+                      type="radio"
+                      name="team-mode"
+                      value={id}
+                      checked={mode === id}
+                      disabled={busy}
+                      onChange={() => chooseMode(id)}
+                    />
+                    <strong>{label}</strong>
+                  </label>
                 ))}
-              </ol>
-              <div className="team-grid">
-                {diagram}
-                <MessageFeed messages={state.messages} />
               </div>
-            </>
-          )}
-
-          <UnderTheHood
-            state={state}
-            selected={selected}
-            follow={follow}
-            onFollow={setFollow}
-            onSelect={(id) => {
-              setFollow(false);
-              setSelected(id);
-            }}
-            onOpen={setDetail}
-          />
-
-          {/* The squad's decision is added below what's above, so nothing the reader is looking
-              at moves; the lifecycle's sits in its phase's workspace. */}
-          {view !== "lifecycle" && (
-            <div ref={decisionSlot}>
-              {state.waiting && state.brief && live && !state.lifecycle && (
-                <DecisionCard
-                  waiting={state.waiting}
-                  strategy={state.strategy}
-                  brief={state.brief}
-                  decisions={state.decisions}
-                  busy={busy}
-                  onDecide={(decision, note) => void decide(decision, note)}
-                />
-              )}
-            </div>
-          )}
-
-          {state.waiting && live && !busy && (
+            </fieldset>
             <button
               type="button"
-              className="team-turn-pill"
-              onClick={view === "lifecycle" ? openTurn : openDecision}
+              className="team-reset"
+              onClick={resetSession}
+              disabled={busy}
+              title="Clear the run on this page and this session's metrics; the shared run library is kept"
             >
-              Your turn: {TEAM_GATES[state.waiting.gate].label} →
+              Reset session
             </button>
-          )}
-          {state.strategy && state.brief && (
-            <StrategyView strategy={state.strategy} brief={state.brief} />
-          )}
+            <button type="button" className="text-button" onClick={onClose}>
+              Back to workspace
+            </button>
+          </div>
         </div>
-      </div>
-      {detail && <AgentModal state={state} agent={detail} onClose={() => setDetail(null)} />}
-    </section>
+        <div className="arch-body">
+          <div className="arch-main">
+            <section className="team-brief" aria-labelledby="team-brief-title">
+              {state.id ? (
+                <details className="team-setup">
+                  <summary>
+                    <span id="team-brief-title" className="team-setup-title">
+                      {state.brief?.title ?? brief.title}
+                    </span>
+                    <span className="team-setup-meta">
+                      {state.brief?.brand ?? brief.brand} · $
+                      {(state.brief?.budgetUsd ?? brief.budgetUsd).toLocaleString("en-US")} ·{" "}
+                      {state.brief?.start ?? brief.start} → {state.brief?.end ?? brief.end} · on{" "}
+                      {
+                        // A run names where it ran; before one starts, the current choice.
+                        state.infra
+                          ? providerShort(state.infra.provider, state.infra.aiPlatform ?? null).name
+                          : providerName
+                      }
+                    </span>
+                    <span className="team-setup-open">Change brief or provider</span>
+                  </summary>
+                  <p className="arch-lede">{lede}</p>
+                  {chooser}
+                </details>
+              ) : (
+                <>
+                  <p className="arch-lede">{lede}</p>
+                  <h3 id="team-brief-title">Choose a brief</h3>
+                  {chooser}
+                </>
+              )}
+              <div className="team-actions">
+                <button
+                  type="button"
+                  className="arch-primary"
+                  disabled={
+                    busy ||
+                    chosen?.available === false ||
+                    (mode === "lifecycle" && !runsPharmaLifecycle(brief.brand))
+                  }
+                  onClick={() => {
+                    setPhasePick(null);
+                    void run();
+                  }}
+                >
+                  {status === "running"
+                    ? "The team is working…"
+                    : state.id
+                      ? "Start a new run"
+                      : mode === "lifecycle"
+                        ? "Start the campaign lifecycle"
+                        : "Hand the brief to the squad"}
+                </button>
+                {status === "replaying" ? (
+                  <div className="team-replay-controls">
+                    <button type="button" className="text-button" onClick={paused ? resume : pause}>
+                      {paused ? "Resume" : "Pause"}
+                    </button>
+                    <label>
+                      Speed{" "}
+                      <select
+                        value={speed}
+                        onChange={(event) => changeSpeed(event.target.value as ReplaySpeed)}
+                      >
+                        {REPLAY_SPEEDS.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="button" className="text-button" onClick={skip}>
+                      Skip to the end
+                    </button>
+                    <small role="status">
+                      Replaying · event {shown ?? events.length} of {events.length}
+                      {paused ? " · paused" : ""}
+                    </small>
+                  </div>
+                ) : (
+                  events.length > 0 &&
+                  status !== "running" && (
+                    <button type="button" className="text-button" onClick={() => replay()}>
+                      Replay agent by agent
+                    </button>
+                  )
+                )}
+                <RunLibrary
+                  scope={scope}
+                  disabled={status === "running"}
+                  currentId={state.id}
+                  onPick={replayFromLibrary}
+                />
+                {fromLibrary && status === "done" && (
+                  <small className="arch-note" role="status">
+                    A recorded run from the library: read-only
+                    {state.waiting
+                      ? `, stopped where it waited for the ${TEAM_GATES[state.waiting.gate].decider.toLowerCase()}`
+                      : ""}
+                    . Start a new run to take decisions.
+                  </small>
+                )}
+                {status === "running" && startedAt.current ? (
+                  <small className="team-clock" role="status">
+                    Working · {clock(now - startedAt.current)} · last update{" "}
+                    {Math.max(0, Math.round((now - (lastEventAt.current ?? now)) / 1000))} s ago
+                    {working ? ` · ${working}` : ""}
+                  </small>
+                ) : state.done ? (
+                  <small
+                    className={`team-done-inline ${state.strategy || state.lifecycle?.finished ? "" : "stopped"}`}
+                    role="status"
+                  >
+                    {state.done.summary}
+                  </small>
+                ) : (
+                  <small>
+                    Real models on {providerName}; a run takes a few minutes and differs each time.
+                  </small>
+                )}
+              </div>
+            </section>
+
+            {error && <ErrorNote error={error} />}
+            {state.error && (
+              <p className="team-error" role="alert">
+                {state.error}
+              </p>
+            )}
+
+            {view === "lifecycle" ? (
+              <>
+                <PhaseStepper
+                  lifecycle={state.lifecycle}
+                  selected={phase}
+                  waiting={live ? state.waiting : null}
+                  following={phase === activePhase}
+                  onSelect={(id) => setPhasePick(id)}
+                />
+                <div className="team-life">
+                  <PhaseWorkspace
+                    phase={phase}
+                    lifecycle={state.lifecycle}
+                    artifacts={state.artifacts}
+                    waiting={live ? state.waiting : null}
+                    decision={lifecycleDecision}
+                    onOpenTurn={(id) => setPhasePick(id)}
+                  />
+                  <aside className="team-rail" aria-label="Live activity">
+                    {diagram}
+                    <MessageFeed messages={state.messages} title="Team conversation" />
+                  </aside>
+                </div>
+              </>
+            ) : (
+              <>
+                <ol className="team-steps" aria-label="Progress">
+                  {TEAM_PHASES.map((item) => (
+                    <li
+                      key={item.id}
+                      className={
+                        state.phases.has(item.id)
+                          ? "reached"
+                          : busy && current?.id === item.id
+                            ? "current"
+                            : ""
+                      }
+                      aria-current={busy && current?.id === item.id ? "step" : undefined}
+                    >
+                      <span aria-hidden="true" />
+                      {item.label}
+                      {item.id === "pieces" ? ` (${state.kept}/4)` : ""}
+                    </li>
+                  ))}
+                </ol>
+                <div className="team-grid">
+                  {diagram}
+                  <MessageFeed messages={state.messages} />
+                </div>
+              </>
+            )}
+
+            <UnderTheHood state={state} onOpen={setDetail} />
+
+            {/* The squad's decision is added below what's above, so nothing the reader is looking
+              at moves; the lifecycle's sits in its phase's workspace. */}
+            {view !== "lifecycle" && (
+              <div ref={decisionSlot}>
+                {state.waiting && state.brief && live && !state.lifecycle && (
+                  <DecisionCard
+                    waiting={state.waiting}
+                    strategy={state.strategy}
+                    brief={state.brief}
+                    decisions={state.decisions}
+                    busy={busy}
+                    onDecide={(decision, note) => void decide(decision, note)}
+                  />
+                )}
+              </div>
+            )}
+
+            {state.waiting && live && !busy && (
+              <button
+                type="button"
+                className="team-turn-pill"
+                onClick={view === "lifecycle" ? openTurn : openDecision}
+              >
+                Your turn: {TEAM_GATES[state.waiting.gate].label} →
+              </button>
+            )}
+            {state.strategy && state.brief && (
+              <StrategyView strategy={state.strategy} brief={state.brief} />
+            )}
+          </div>
+        </div>
+        {detail && <AgentModal state={state} agent={detail} onClose={() => setDetail(null)} />}
+      </section>
+    </ClaimsProvider>
   );
 }
 
-type HoodTab = "agents" | "infra" | "semantic" | "evals" | "decisions";
+type HoodTab = "agents" | "tools" | "infra" | "semantic" | "evals" | "decisions";
 
 /**
  * Everything under the agents, in one panel: each agent's grants and calls, the infrastructure,
@@ -1243,22 +1165,15 @@ type HoodTab = "agents" | "infra" | "semantic" | "evals" | "decisions";
  */
 function UnderTheHood({
   state,
-  selected,
-  follow,
-  onFollow,
-  onSelect,
   onOpen,
 }: {
   state: ReturnType<typeof foldTeam>;
-  selected: TeamAgentId;
-  follow: boolean;
-  onFollow: (follow: boolean) => void;
-  onSelect: (id: TeamAgentId) => void;
   onOpen: (id: TeamAgentId) => void;
 }) {
   const [tab, setTab] = useState<HoodTab>("agents");
   const tabs: Array<[HoodTab, string]> = [
     ["agents", "Agents"],
+    ["tools", "Tool library"],
     ["infra", "Agent infrastructure"],
     ["semantic", "Semantic layer"],
     ["evals", `Evals${state.scorecard ? ` · ${state.scorecard.overall}` : ""}`],
@@ -1287,14 +1202,9 @@ function UnderTheHood({
       </header>
       <div role="tabpanel">
         {tab === "agents" ? (
-          <AgentInspector
-            state={state}
-            selected={selected}
-            follow={follow}
-            onFollow={onFollow}
-            onSelect={onSelect}
-            onOpen={onOpen}
-          />
+          <AgentRoster state={state} onOpen={onOpen} />
+        ) : tab === "tools" ? (
+          <ToolLibrary state={state} />
         ) : tab === "infra" ? (
           <InfrastructurePanel state={state} />
         ) : tab === "semantic" ? (

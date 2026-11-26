@@ -9,6 +9,7 @@ import {
   PHARMA_PHASES,
   type PhaseStep,
   TEAM_AGENTS,
+  TEAM_DIRECTOR,
   TEAM_PARTY_LABELS,
   type TeamAgentId,
   type TeamEvent,
@@ -423,6 +424,30 @@ function Work({ state, id }: { state: TeamState; id: TeamAgentId }) {
             </li>
           ))}
         </ol>
+      )}
+      {id === TEAM_DIRECTOR && state.plan && (
+        <>
+          <h5>The lead’s work plan</h5>
+          <ul>
+            {state.plan.deliverables.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <ol className="team-assignments">
+            {state.plan.assignments.map((item) => (
+              <li key={item.agent}>
+                <strong>{TEAM_PARTY_LABELS[item.agent]}</strong>: {item.task}
+                {item.dependsOn.length > 0 && (
+                  <small>
+                    {" "}
+                    · after {item.dependsOn.map((dep) => TEAM_PARTY_LABELS[dep]).join(", ")}
+                  </small>
+                )}
+              </li>
+            ))}
+          </ol>
+          {state.plan.budgetGuidance && <p className="arch-note">{state.plan.budgetGuidance}</p>}
+        </>
       )}
       {specialist && state.brief && (
         <>
