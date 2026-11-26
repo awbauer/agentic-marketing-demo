@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-26T04:13:54.815Z",
+  "generatedAt": "2026-11-26T04:24:24.368Z",
   "status": "passed",
   "baseRef": "upstream/main",
   "mergeBase": "d1b4d238dcecdc7611c431a13d47e157d720633b",
@@ -40,6 +40,13 @@
         "apps/edge/src/team/lifecycle.ts",
         "apps/web/src/team/TeamLifecycle.tsx",
         "packages/architecture/src/team-pharma.ts"
+      ]
+    },
+    {
+      "section": "ui",
+      "status": "updated",
+      "paths": [
+        "apps/web/src/App.tsx"
       ]
     }
   ],

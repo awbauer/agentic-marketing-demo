@@ -200,6 +200,27 @@ export function App() {
   const [view, setView] = useView();
   // History and the use-case library open from the chat page, so the rail shows them as Chat.
   const chatViews: ReadonlyArray<typeof view> = ["chat", "history", "usecases"];
+  // On a phone the side rail is a drawer behind the menu button: picking a page or pressing
+  // Escape closes it, and opening it moves focus to the current page's link.
+  const [navOpen, setNavOpen] = useState(false);
+  const railRef = useRef<HTMLElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new page closes the drawer.
+  useEffect(() => {
+    setNavOpen(false);
+  }, [view]);
+  useEffect(() => {
+    if (!navOpen) return;
+    const rail = railRef.current;
+    (
+      rail?.querySelector<HTMLElement>(".nav-item.active") ??
+      rail?.querySelector<HTMLElement>(".nav-item")
+    )?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
   const confirmationRef = useRef<HTMLElement>(null);
   const connectorStatusLoaded = useRef(false);
   /** The confirmation the server holds, from its latest state: a failed write may have spent it. */
@@ -588,6 +609,16 @@ export function App() {
   return (
     <main>
       <header className="topbar">
+        <button
+          type="button"
+          className="nav-toggle"
+          aria-label={navOpen ? "Close the menu" : "Open the menu"}
+          aria-expanded={navOpen}
+          aria-controls="workspace-nav"
+          onClick={() => setNavOpen(!navOpen)}
+        >
+          <span aria-hidden="true">{navOpen ? "✕" : "☰"}</span>
+        </button>
         <div className="brand-mark">N</div>
         <div>
           <p>Northstar</p>
@@ -608,7 +639,12 @@ export function App() {
         </div>
       </header>
       <div className="workspace">
-        <nav className="rail" aria-label="Workspace navigation">
+        <nav
+          id="workspace-nav"
+          ref={railRef}
+          className={`rail${navOpen ? " open" : ""}`}
+          aria-label="Workspace navigation"
+        >
           <div>
             <p className="nav-label">Workspace</p>
             <button
@@ -794,6 +830,15 @@ export function App() {
             <small>Fictional sample data</small>
           </div>
         </nav>
+        {navOpen && (
+          <button
+            type="button"
+            className="nav-backdrop"
+            aria-label="Close the menu"
+            tabIndex={-1}
+            onClick={() => setNavOpen(false)}
+          />
+        )}
         {view === "evaluations" && <EvaluationView onClose={() => setView("chat")} />}
         {view === "learn" && (
           <LearnView

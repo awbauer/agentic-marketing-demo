@@ -817,7 +817,7 @@ Each step shows live. Preparing: the plan, the permission check (how many passed
         summary: "Answers render as rich text, and records render as governed cards.",
         body: `- **Markdown answers.** The model may use concise Markdown, rendered with \`react-markdown\`, which never renders raw HTML, so model output can't inject markup.
 - **HXL cards.** Salesforce's HXL widgets (MCP Apps) let an agent action return a typed, interactive card, such as campaign readiness. Where HXL can't render, an accessible **native fallback** is built from the same contract.
-- **Phones and tablets.** Below 1000px the side rail narrows to one icon per page (each named on hover and to screen readers); on a phone it becomes a row of page links pinned under the header, and the brand, role and AI platform menus take a row of their own, so every page stays one tap away.
+- **Phones and tablets.** Below 1000px the side rail narrows to one icon per page (each named on hover and to screen readers); on a phone the whole sidebar (pages, sources and the MCP gateway panel) slides out from the menu button (☰) in the header, closes when you pick a page, tap outside it or press Escape, and the brand, role and AI platform menus take a row of their own.
 
 ::: details How native cards show each item
 - **Item rows on native cards.** A list result shows one row per item: a colored status (usable, waiting, blocked), the item, a monospaced ID and a readable date, so an MLR ID and its expiry stand out. A row can list what stands behind it, such as a claim's trial evidence and the assets that carry it.

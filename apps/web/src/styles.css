@@ -100,6 +100,21 @@ select:disabled,
 .connection.error:before {
   background: #e27664;
 }
+.nav-toggle {
+  display: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #52635a;
+  border-radius: 8px;
+  background: #26362f;
+  color: #fff;
+  font-size: 18px;
+}
+.nav-backdrop {
+  display: none;
+}
 .avatar {
   border: 1px solid #52635a;
   background: #26362f;
@@ -2825,38 +2840,61 @@ select:disabled,
     min-width: 0;
     max-width: none;
   }
+  /* The side rail becomes a drawer, opened by the menu button in the header. */
   .rail {
-    display: block;
-    position: sticky;
-    top: 0;
-    z-index: 30;
-    width: auto;
-    height: auto;
-    padding: 6px 10px;
-    overflow-x: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-    scrollbar-width: none;
-  }
-  .rail > :not(:first-child),
-  .rail .nav-label {
-    display: none;
-  }
-  .rail > :first-child {
     display: flex;
-    gap: 4px;
-    width: max-content;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    width: min(290px, 86vw);
+    padding: 18px 14px;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+    transform: translateX(-105%);
+    visibility: hidden;
+    transition:
+      transform 0.2s ease,
+      visibility 0.2s;
+  }
+  .rail.open {
+    transform: none;
+    visibility: visible;
+  }
+  /* Everything the wide rail holds shows in the drawer, with each page's name. */
+  .rail .nav-label,
+  .rail .source-list {
+    display: block;
+  }
+  .rail .connector-panel {
+    display: grid;
+  }
+  .rail .rail-footer {
+    display: flex;
   }
   .rail .nav-item {
-    display: flex;
-    gap: 6px;
-    width: auto;
-    margin: 0;
-    padding: 6px 10px;
-    font-size: 13px;
-    white-space: nowrap;
+    justify-content: flex-start;
+    font-size: 14px;
   }
   .rail .nav-item span {
-    font-size: 13px;
+    font-size: inherit;
+  }
+  .nav-toggle {
+    display: grid;
+  }
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    border: 0;
+    background: rgb(10 20 15 / 45%);
+  }
+}
+@media (max-width: 650px) and (prefers-reduced-motion: reduce) {
+  .rail {
+    transition: none;
   }
 }
