@@ -57,6 +57,18 @@ describe("pharma lifecycle rules", () => {
     ).toEqual(["Focus area 1 cites made-up, which is not in the brand's data."]);
   });
 
+  it("tells a concept with no claims which topics it may use", () => {
+    const problems = conceptProblems(world, brief, [
+      { name: "One", bigIdea: "x", claimTopics: [], assets: [{ assetId: "lt-img-logo", use: "" }] },
+      { name: "Two", bigIdea: "y", claimTopics: [], assets: [{ assetId: "lt-img-logo", use: "" }] },
+    ]);
+    const missing = problems.find((problem) => problem.includes("name the claims"));
+    expect(missing).toContain("claimTopics");
+    expect(missing).toContain("cardivance-mortality (CLM-CRD-0042)");
+    // A claim the library refuses for this campaign is not offered.
+    expect(missing).not.toContain("cardivance-superior");
+  });
+
   it("refuses a concept carried by an unapproved claim or an out-of-rights image", () => {
     const problems = conceptProblems(world, brief, [
       {
