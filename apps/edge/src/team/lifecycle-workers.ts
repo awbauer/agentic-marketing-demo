@@ -77,6 +77,31 @@ const many = <T extends z.ZodType>(item: T) => z.union([z.array(item), item]);
 const words = z.union([z.array(z.string()), z.string()]).optional();
 const date = z.string();
 
+/**
+ * The claim topics an item names, under whichever key a model put them: the topics it lists, plus
+ * every topic or claim ID (CLM-…) that appears anywhere in it, mapped to its topic. Models asked
+ * for "claim IDs" send those, and gpt-oss writes ids with non-breaking hyphens.
+ */
+function namedClaimTopics(
+  item: Record<string, unknown>,
+  library: ReadonlyArray<{ topic: string; claimId: string | null }>,
+): string[] {
+  const text = JSON.stringify(item).replace(/\u2011/g, "-");
+  const byId = new Map(
+    library.flatMap((claim) => (claim.claimId ? [[claim.claimId, claim.topic] as const] : [])),
+  );
+  return [
+    ...new Set([
+      ...list(item.claimTopics as string[] | string).map((topic) => byId.get(topic) ?? topic),
+      ...library
+        .filter(
+          (claim) => text.includes(claim.topic) || (claim.claimId && text.includes(claim.claimId)),
+        )
+        .map((claim) => claim.topic),
+    ]),
+  ];
+}
+
 /** A field's text under whichever key a model used for it, with objects flattened to text. */
 function fieldText(item: Record<string, unknown>, key: RegExp): string {
   const flat = (value: unknown): string =>
@@ -325,21 +350,25 @@ function saveTool(
           z.object({
             name: z.string(),
             bigIdea: z.string(),
-            claimTopics: words,
+            claimTopics: words.describe(
+              'Claim topics from get_claims_library, e.g. ["cardivance-mortality", "cardivance-safety"].',
+            ),
             assets: many(z.object({ assetId: z.string(), use: z.string().optional() })),
           }),
         ),
       }),
       run: async (input: { concepts: unknown }) => {
+        const world = await lifecycleWorld(run);
+        const library = claimsLibrary(world, brief.brand, brief.end);
         const concepts = list(input.concepts as Concept[]).map((concept) => ({
           ...concept,
-          claimTopics: list(concept.claimTopics as string[] | string),
+          claimTopics: namedClaimTopics(concept as unknown as Record<string, unknown>, library),
           assets: list(concept.assets).map((asset) => ({
             assetId: asset.assetId,
             use: asset.use ?? "",
           })),
         }));
-        const problems = conceptProblems(await lifecycleWorld(run), brief, concepts);
+        const problems = conceptProblems(world, brief, concepts);
         return problems.length ? refuse(problems) : save({ concepts });
       },
     },
@@ -371,18 +400,13 @@ function saveTool(
         if (!drafts.some((draft) => draft.channel === "display"))
           problems.push("Include a display module.");
         // A module uses the claims and images it names, under whichever key a model put them.
-        const topics = claimsLibrary(world, brief.brand, brief.end).map((claim) => claim.topic);
+        const library = claimsLibrary(world, brief.brand, brief.end);
         const assetIds = assetChoices(brief.brand, brief.end).map(({ asset }) => asset.id);
         drafts.forEach((draft, index) => {
           const channel = draft.channel as "email" | "display";
           const { headline: _h, opening: _o, closing: _c, cta: _a, ...rest } = draft;
           const named = JSON.stringify(rest).replace(/\u2011/g, "-");
-          const claimTopics = [
-            ...new Set([
-              ...list(draft.claimTopics as string[] | string),
-              ...topics.filter((topic) => named.includes(topic)),
-            ]),
-          ];
+          const claimTopics = namedClaimTopics(rest, library);
           const given = list(draft.assets as Array<{ assetId?: string; use?: string } | string>)
             .map((asset) =>
               typeof asset === "string"
@@ -679,7 +703,9 @@ export async function runLifecycleWorker(
         saved.done
           ? {}
           : attempt > 0 || stepNumber >= 4
-            ? { activeTools: [step.tool] }
+            ? // Only the save is on offer, and the model must call it: on Vertex, gpt-oss given a
+              // choice answered in prose until the worker gave up.
+              { activeTools: [step.tool], toolChoice: "required" as const }
             : stepNumber === 0
               ? { toolChoice: "required" as const }
               : {},

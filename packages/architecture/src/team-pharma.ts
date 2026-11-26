@@ -645,6 +645,17 @@ export type Concept = {
   assets: Array<{ assetId: string; use: string }>;
 };
 
+/**
+ * The topics a refusal offers, so a model that left claimTopics out knows what to send: a claim ID
+ * (CLM-…) or prose is not a topic, and models repeat a refused call when told only that it is wrong.
+ */
+function usableTopics(library: ReadonlyMap<string, LibraryClaim>): string {
+  const usable = [...library.values()].filter((claim) => claim.usable);
+  return usable.length
+    ? `Usable topics: ${usable.map((claim) => `${claim.topic}${claim.claimId ? ` (${claim.claimId})` : ""}`).join(", ")}.`
+    : "No claim in the library is usable for this campaign.";
+}
+
 export function conceptProblems(
   world: World,
   brief: CampaignBrief,
@@ -659,7 +670,10 @@ export function conceptProblems(
     const at = `Concept ${index + 1} (${concept.name || "untitled"})`;
     if (!concept.name?.trim() || !concept.bigIdea?.trim())
       problems.push(`${at}: give a name and a big idea.`);
-    if (concept.claimTopics.length === 0) problems.push(`${at}: name the claims that carry it.`);
+    if (concept.claimTopics.length === 0)
+      problems.push(
+        `${at}: name the claims that carry it in claimTopics. ${usableTopics(library)}`,
+      );
     for (const topic of concept.claimTopics) {
       const claim = library.get(topic);
       if (!claim) problems.push(`${at}: ${topic} is not in the claims library.`);
@@ -761,7 +775,9 @@ export function draftModule(
   if (draft.channel !== "email" && draft.channel !== "display")
     problems.push("channel must be email or display.");
   if (draft.claimTopics.length === 0)
-    problems.push("Cite at least one claim from the claims library.");
+    problems.push(
+      `Cite at least one claim from the claims library in claimTopics. ${usableTopics(library)}`,
+    );
   for (const topic of draft.claimTopics) {
     const claim = library.get(topic);
     if (!claim) problems.push(`${topic} is not in the claims library.`);
