@@ -2724,3 +2724,74 @@
     white-space: nowrap;
   }
 }
+
+/* Playbook controls: the gap log, write receipts, the seeded flaw and the decision record. */
+.team-gap-log q,
+.team-safety q {
+  quotes: "“" "”";
+}
+.team-receipt-lines {
+  margin: 6px 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.team-receipt-lines code {
+  overflow-wrap: anywhere;
+}
+.team-seeded {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.team-seeded.ok {
+  border-left-color: #1f7a4d;
+  background: #f1f8f4;
+}
+.team-seeded.failed {
+  border-left-color: #b42318;
+  background: #fdf3f2;
+}
+.team-oversight-note {
+  margin: 4px 0 8px;
+}
+.team-seed-toggle {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}
+.team-decision-record {
+  margin-top: 4px;
+  font-size: 12px;
+}
+.team-decision-record dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+  margin: 4px 0 0;
+}
+.team-decision-record dt {
+  color: var(--muted, #5b6b66);
+}
+.team-decision-record dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.team-judge-label button[aria-pressed="true"] {
+  font-weight: 700;
+  text-decoration: underline;
+}
+td.team-warn {
+  color: #8a1c12;
+  font-weight: 600;
+}
+.team-work p.ok {
+  color: #1f6b44;
+}
+.team-work p.failed {
+  color: #8a1c12;
+}

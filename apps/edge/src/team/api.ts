@@ -9,19 +9,19 @@ import {
   isTeamProvider,
   PHARMA_PHASES,
   runsPharmaLifecycle,
+  TEAM_AGENTS,
+  TEAM_BRIEFS,
   TEAM_GATES,
   TEAM_MODES,
   TEAM_PROVIDERS,
   type TeamEvent,
-  TEAM_AGENTS,
-  TEAM_BRIEFS,
   teamBriefById,
   toCedar,
 } from "@northstar/architecture";
 import { ArchError, type Ctx, overridesFor } from "../architecture/context";
 import { streamFlow } from "../architecture/orchestration";
-import { continueTeamRun, startTeamRun } from "./director";
 import { dataPlatform } from "../platform/data";
+import { continueTeamRun, startTeamRun } from "./director";
 import { startLifecycleRun } from "./lifecycle";
 import { providerStatus, teamModels } from "./run";
 
@@ -97,7 +97,9 @@ export async function handleTeam(
           "BAD_REQUEST",
           "The pharma lifecycle runs for a prescription brand (Lumera Therapeutics).",
         );
-      return streamFlow<TeamEvent>(await startLifecycleRun(ctx, brief, provider));
+      return streamFlow<TeamEvent>(
+        await startLifecycleRun(ctx, brief, provider, { seededFlaw: input.seededFlaw === true }),
+      );
     }
     return streamFlow<TeamEvent>(await startTeamRun(ctx, brief, provider));
   }

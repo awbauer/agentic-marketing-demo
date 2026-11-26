@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-26T12:53:52.091Z",
+  "generatedAt": "2026-11-26T14:58:04.336Z",
   "status": "passed",
   "baseRef": "origin/main",
-  "mergeBase": "be72c3b729a02b5d5dd77efd8aee91b4a0e20447",
+  "mergeBase": "698332bbb52e00a3164cbd36748e92a33fd3790b",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,25 +13,42 @@
   },
   "drift": [
     {
-      "section": "pharma-lifecycle",
-      "status": "reviewed",
-      "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts"
-      ]
-    },
-    {
       "section": "campaign-squad",
-      "status": "reviewed",
-      "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/web/src/team/IdCard.tsx"
-      ]
-    },
-    {
-      "section": "two-hosts",
       "status": "updated",
       "paths": [
-        "apps/gcp/src/agent/ai-chat.ts"
+        "apps/edge/src/team/api.ts",
+        "apps/edge/src/team/evals.ts",
+        "apps/edge/src/team/lifecycle-workers.ts",
+        "apps/edge/src/team/lifecycle.ts",
+        "apps/edge/src/team/run.ts",
+        "apps/edge/src/team/scripted.ts",
+        "apps/web/src/team/TeamLifecycle.tsx",
+        "apps/web/src/team/TeamPeople.tsx",
+        "apps/web/src/team/TeamPlatform.tsx",
+        "apps/web/src/team/TeamView.tsx",
+        "apps/web/src/team/session-metrics.ts",
+        "apps/web/src/team/team-state.ts",
+        "apps/web/src/team/team.css",
+        "packages/architecture/src/team-evals.ts",
+        "packages/architecture/src/team.ts"
+      ]
+    },
+    {
+      "section": "pharma-lifecycle",
+      "status": "updated",
+      "paths": [
+        "apps/edge/src/team/lifecycle-workers.ts",
+        "apps/edge/src/team/lifecycle.ts",
+        "apps/web/src/team/TeamLifecycle.tsx",
+        "packages/architecture/src/team-governance.ts",
+        "packages/architecture/src/team-pharma.ts"
+      ]
+    },
+    {
+      "section": "object-model",
+      "status": "reviewed",
+      "paths": [
+        "packages/architecture/src/index.ts"
       ]
     }
   ],

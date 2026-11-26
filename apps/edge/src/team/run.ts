@@ -7,8 +7,10 @@ import {
   buildTeamPolicies,
   type CampaignBrief,
   type CampaignStrategy,
+  type GatewayContext,
   type LifecycleState,
   newLifecycle,
+  shortHash,
   TEAM_AGENTS,
   TEAM_PROVIDER_LABELS,
   TEAM_PROVIDERS,
@@ -26,12 +28,11 @@ import {
   type TeamSpecialist,
   type TeamToolStep,
   teamProviderLabel,
-  type GatewayContext,
 } from "@northstar/architecture";
 import type { HostId } from "@northstar/contracts";
 import { type LanguageModel, type LanguageModelMiddleware, wrapLanguageModel } from "ai";
 import { modelFactory } from "../architecture/agent-runtime";
-import { ArchError, type Ctx, invoke } from "../architecture/context";
+import { ArchError, type Ctx, invoke, overridesFor } from "../architecture/context";
 import { modelPlatform, serverHost } from "../platform/models";
 import { anthropicModel, DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
 import { modelPrice } from "./evals";
@@ -397,6 +398,15 @@ export function teamModel(
 }
 
 /**
+ * The team policy set's version: a hash of every policy the gateway evaluates for the squad, with
+ * the operators' current kill switches and lifecycle constraints. A change to any of them is a new
+ * version, so each decision can be traced to the exact rules that made it.
+ */
+export async function teamPolicyVersion(ctx: Ctx): Promise<string> {
+  return `pol-${shortHash(JSON.stringify(buildTeamPolicies(await overridesFor(ctx))))}`;
+}
+
+/**
  * The gateway check for one team tool call, as `team:<tool>`, on the brief's brand, in the
  * context the tool was offered in (a squad spoke's work, or a lifecycle step).
  */
@@ -418,7 +428,12 @@ export async function authorizeTeam(
     () => null,
     { extraPolicies: buildTeamPolicies },
   );
-  return { decision: decision.decision, policyId: decision.policyId, reason: decision.reason };
+  return {
+    decision: decision.decision,
+    policyId: decision.policyId,
+    reason: decision.reason,
+    policyVersion: await teamPolicyVersion(ctx),
+  };
 }
 
 /**
@@ -532,6 +547,7 @@ export function metered(
     );
     if (seen) return;
     const choice = params.toolChoice;
+    const tools = (params.tools ?? []).map((item) => item.name);
     run.emit({
       type: "prompt",
       agent,
@@ -539,7 +555,8 @@ export function metered(
       model: name,
       provider: run.provider,
       system,
-      tools: (params.tools ?? []).map((item) => item.name),
+      tools,
+      version: `pr-${shortHash(JSON.stringify({ system, tools, choice: choice ?? null, temperature: params.temperature ?? null, maxOutputTokens: params.maxOutputTokens ?? null }))}`,
       ...(choice
         ? { toolChoice: choice.type === "tool" ? `tool: ${choice.toolName}` : choice.type }
         : {}),

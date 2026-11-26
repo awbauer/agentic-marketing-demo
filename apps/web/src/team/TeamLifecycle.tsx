@@ -6,6 +6,9 @@ import {
   type ApprovedJob,
   type AudienceLine,
   type CampaignBrief,
+  CLAIM_GAP_LABELS,
+  CLAIM_GAP_ROUTES,
+  type ClaimGap,
   type ClaimTrace,
   type ClaimUsage,
   type Concept,
@@ -20,25 +23,28 @@ import {
   type LifecycleState,
   type MlrJob,
   PERSONA_LABELS,
+  type PerformanceReport,
   PHARMA_CHANNELS,
   PHARMA_PHASES,
-  REVIEW_TIER_LABELS,
-  type PerformanceReport,
   type PharmaModule,
   type PhaseStep,
-  phaseOfGate,
   type Placement,
+  phaseOfGate,
+  REVIEW_TIER_LABELS,
   type ResultLine,
+  type SafetyIntake,
+  type SeededOutcome,
   stepDone,
   TEAM_GATES,
   TEAM_PARTY_LABELS,
   type TeamEvent,
+  type WriteReceipt,
 } from "@northstar/architecture";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Claim } from "./Claims";
+import { useTechnical } from "./detail";
 import { RichText, SourceChips } from "./RichText";
 import { ApprovedAssets } from "./TeamWork";
-import { useTechnical } from "./detail";
 import type { GuardrailHit } from "./team-state";
 
 type Artifact = Extract<TeamEvent, { type: "artifact" }>;
@@ -497,6 +503,154 @@ function FinalFormView({ check }: { check: FinalFormCheck }) {
   );
 }
 
+/**
+ * A write the system made outside the squad: keyed so a retry can't repeat it, then read back from
+ * the system that took it and compared with what was sent. Success is what the read-back shows.
+ */
+function ReceiptView({ receipt }: { receipt: WriteReceipt }) {
+  return (
+    <div className="team-work">
+      <p>
+        <strong>{receipt.status}.</strong> {receipt.system}: reference{" "}
+        <code>{receipt.reference}</code>, idempotency key <code>{receipt.idempotencyKey}</code>
+        {receipt.attempts > 1
+          ? `, attempted ${receipt.attempts} times and written once`
+          : ", written once"}
+        .
+      </p>
+      <p className={receipt.matches ? "ok" : "failed"}>
+        {receipt.matches
+          ? `Read back: the system holds all ${receipt.readBack.length} items, exactly as sent.`
+          : `Read back: the system holds ${receipt.readBack.length} of ${receipt.sent.length} items sent. They don't match; nothing is reported as done.`}
+      </p>
+      <ul className="team-receipt-lines">
+        {receipt.sent.map((line) => (
+          <li key={line}>
+            {receipt.readBack.includes(line) ? "✓" : "✗"} <code>{line}</code>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** HCP replies screened for possible adverse events and off-label questions, each routed out. */
+function SafetyIntakeView({ intake }: { intake: SafetyIntake }) {
+  return (
+    <div className="team-work">
+      <p>
+        {intake.screened} replies to the emails screened (simulated).{" "}
+        {intake.flags.length
+          ? `${intake.flags.length} routed out of marketing; promotion answers none of them.`
+          : "None needed routing."}
+      </p>
+      <div className="team-table-wrap">
+        <table className="team-table">
+          <thead>
+            <tr>
+              <th scope="col">Reply</th>
+              <th scope="col">Flag</th>
+              <th scope="col">Goes to, by</th>
+            </tr>
+          </thead>
+          <tbody>
+            {intake.replies.map((reply) => {
+              const flag = intake.flags.find((item) => item.replyId === reply.id);
+              return (
+                <tr key={reply.id}>
+                  <td>
+                    <q>{reply.text}</q>
+                  </td>
+                  <td className={flag?.kind === "possible-adverse-event" ? "failed" : undefined}>
+                    {flag
+                      ? `${flag.kind === "possible-adverse-event" ? "Possible adverse event" : "Off-label question"} (“${flag.matched}”)`
+                      : "—"}
+                  </td>
+                  <td>{flag ? `${flag.route}; ${flag.due}` : "The field team, as usual"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Cite or refuse: the points the squad couldn't support with approved content. None was written;
+ * each is the content team's backlog for a new claim through MLR, or a question for medical
+ * information.
+ */
+export function GapLog({ gaps, all }: { gaps: readonly ClaimGap[]; all?: boolean }) {
+  if (!gaps.length) return null;
+  return (
+    <details className="team-output team-gap-log" open={all}>
+      <summary>
+        <strong>{all ? "Claim gap log" : "Claim gaps"}</strong>
+        <span>
+          {gaps.length} point{gaps.length === 1 ? "" : "s"} approved content couldn&rsquo;t support,
+          recorded, not written
+        </span>
+      </summary>
+      <div className="team-table-wrap">
+        <table className="team-table">
+          <thead>
+            <tr>
+              <th scope="col">Point</th>
+              <th scope="col">Why not</th>
+              <th scope="col">Goes to</th>
+              <th scope="col">Raised by</th>
+            </tr>
+          </thead>
+          <tbody>
+            {gaps.map((gap) => (
+              <tr key={gap.id}>
+                <td>
+                  <q>{gap.point}</q>
+                </td>
+                <td>
+                  <strong>{CLAIM_GAP_LABELS[gap.kind]}.</strong> {gap.reason}
+                </td>
+                <td>{CLAIM_GAP_ROUTES[gap.route]}</td>
+                <td>
+                  {TEAM_PARTY_LABELS[gap.raisedBy as keyof typeof TEAM_PARTY_LABELS] ??
+                    gap.raisedBy}{" "}
+                  <small>({gap.product})</small>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="arch-note">
+        The agents assemble facts only from the approved claims library. What they can&rsquo;t cite
+        isn&rsquo;t written: it lands here with the date and product, and this log is the content
+        team&rsquo;s backlog for new claims through MLR. What customers ask that approved content
+        can&rsquo;t answer was rarely measured before.
+      </p>
+    </details>
+  );
+}
+
+/** Once the MLR reviewers have decided, whether they caught the flaw seeded into their queue. */
+export function SeededReveal({ outcome }: { outcome: SeededOutcome }) {
+  if (!outcome) return null;
+  return (
+    <div className={`team-seeded ${outcome.caught ? "ok" : "failed"}`} role="status">
+      <strong>
+        Seeded flaw {outcome.caught ? "caught" : "missed"}: module {outcome.seeded.moduleId}.
+      </strong>{" "}
+      {outcome.seeded.flaw}{" "}
+      {outcome.caught
+        ? `${outcome.by ? TEAM_GATES[outcome.by as keyof typeof TEAM_GATES]?.decider : "A reviewer"} asked for changes.`
+        : "Every reviewer approved the job carrying it."}{" "}
+      The MLR system slipped it in after the automated checks to measure the review, and it never
+      reaches approval either way.
+    </div>
+  );
+}
+
 function ClaimTraceView({ trace }: { trace: ClaimTrace }) {
   return (
     <div className="team-work">
@@ -675,6 +829,9 @@ export const ARTIFACT_TITLES: Record<string, string> = {
   prepare_form_2253: "Form FDA 2253",
   campaign_results: "Results",
   report_performance: "Performance read",
+  deployment_receipt: "Booking, read back",
+  form_2253_receipt: "Form 2253 filing, read back",
+  safety_intake: "Safety screening of HCP replies",
 };
 
 export function ArtifactView({
@@ -741,6 +898,11 @@ export function ArtifactView({
       return <ResultsView data={data} />;
     case "report_performance":
       return <PerformanceView report={data} />;
+    case "deployment_receipt":
+    case "form_2253_receipt":
+      return <ReceiptView receipt={data} />;
+    case "safety_intake":
+      return <SafetyIntakeView intake={data} />;
     default:
       return <pre className="team-json">{JSON.stringify(artifact.data, null, 2)}</pre>;
   }
@@ -849,10 +1011,13 @@ export function LifecycleDecisionCard({
   decisions,
   busy,
   onDecide,
+  seeding = false,
 }: {
   waiting: Waiting;
   lifecycle: LifecycleState;
   brief: CampaignBrief;
+  /** The run seeds a flawed item into the MLR queue; reviewers are told it happens. */
+  seeding?: boolean;
   decisions: readonly Decided[];
   busy: boolean;
   onDecide: (decision: "approve" | "changes", note: string, choice?: string) => void;
@@ -889,6 +1054,14 @@ export function LifecycleDecisionCard({
         <span>{from}</span>
         <RichText text={waiting.why} />
       </blockquote>
+      {["medical", "legal", "regulatory"].includes(waiting.gate) && (
+        <p className="arch-note team-oversight-note">
+          Reviews are measured: time to decide and how often changes are asked for.
+          {seeding
+            ? " This run seeds a deliberately flawed item into the MLR queue; read every module as you would a real job."
+            : ""}
+        </p>
+      )}
       {choice ? (
         <fieldset className="team-choice">
           <legend>Choose one</legend>
@@ -1152,6 +1325,16 @@ function gist(artifact: Artifact): string {
       return `${(data.lines as unknown[]).length} result lines over ${String(data.days)} days (simulated)${Array.isArray(data.byClaim) && data.byClaim.length ? `, by ${data.byClaim.length} claim IDs` : ""}`;
     case "report_performance":
       return `Recommends ${String(data.recommendation)}`;
+    case "deployment_receipt":
+    case "form_2253_receipt": {
+      const receipt = data as unknown as WriteReceipt;
+      return `${receipt.reference}, written once; read back ${receipt.matches ? "matches" : "does not match"}`;
+    }
+    case "safety_intake": {
+      const intake = data as unknown as SafetyIntake;
+      const ae = intake.flags.filter((flag) => flag.kind === "possible-adverse-event").length;
+      return `${intake.screened} replies screened: ${ae} possible adverse event${ae === 1 ? "" : "s"} to pharmacovigilance, ${intake.flags.length - ae} to medical information`;
+    }
     default:
       return "";
   }
@@ -1312,6 +1495,8 @@ export function PhaseWorkspace({
   decision,
   onOpenTurn,
   guardrails = [],
+  gaps = [],
+  seeded = null,
 }: {
   phase: PhaseId;
   lifecycle: LifecycleState | null;
@@ -1321,6 +1506,10 @@ export function PhaseWorkspace({
   onOpenTurn: (phase: PhaseId) => void;
   /** What the guardrails caught, so each output shows the pre-checks its drafts failed. */
   guardrails?: readonly GuardrailHit[];
+  /** The run's claim gap log. */
+  gaps?: readonly ClaimGap[];
+  /** Whether the MLR reviewers caught a seeded flaw, once they have decided. */
+  seeded?: SeededOutcome;
 }) {
   const index = PHARMA_PHASES.findIndex((item) => item.id === phase);
   const spec = PHARMA_PHASES[index];
@@ -1371,8 +1560,14 @@ export function PhaseWorkspace({
         />
       ))}
       {turn === phase && decision}
+      {phase === "content" && <SeededReveal outcome={seeded} />}
       <div className="team-outputs">
         <h4>What this phase produced</h4>
+        {phase === "analytics" ? (
+          <GapLog gaps={gaps} all />
+        ) : (
+          <GapLog gaps={gaps.filter((gap) => gap.phase === phase)} />
+        )}
         {names.length === 0 ? (
           <p className="arch-note">
             {status === "todo" ? "Nothing yet: this phase hasn't started." : "Nothing saved yet."}

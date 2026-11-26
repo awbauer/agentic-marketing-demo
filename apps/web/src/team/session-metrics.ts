@@ -2,7 +2,7 @@
 // finishes, and each replay they watch to the end (or skip to the end of), is recorded here and
 // nowhere else: nothing is sent to the server, other people's runs never appear, and Reset starts
 // a fresh session. Replays and scripted (synthetic) runs count, each labelled so.
-import type { TeamMode, TeamProvider, TeamScorecard } from "@northstar/architecture";
+import type { AgentEvidence, TeamMode, TeamProvider, TeamScorecard } from "@northstar/architecture";
 import { useSyncExternalStore } from "react";
 
 export type SessionRun = {
@@ -23,9 +23,18 @@ export type SessionRun = {
   tools?: string[];
   at: string;
   scorecard: TeamScorecard | null;
+  /** What the run says about each lifecycle worker, for autonomy earned by evidence. */
+  agents?: Record<string, AgentEvidence>;
 };
 
-export type SessionMetrics = { startedAt: string; runs: SessionRun[] };
+export type SessionMetrics = {
+  startedAt: string;
+  runs: SessionRun[];
+  /** This reader's verdict on the judge, per run: the human labels a judge is calibrated against. */
+  judgeLabels?: Record<string, "agree" | "disagree">;
+  /** When a person promoted each agent to Assist. */
+  promotions?: Record<string, string>;
+};
 
 const KEY = "northstar.team.session-metrics";
 /** Enough for a long demo; the oldest entries drop off beyond it. */
@@ -75,6 +84,18 @@ export function recordSessionRun(run: Omit<SessionRun, "key" | "at">, at = new D
   };
   const runs = [entry, ...metrics.runs.filter((item) => item.key !== entry.key)].slice(0, MAX_RUNS);
   write({ ...metrics, runs });
+}
+
+/** Records whether this reader agrees with the judge on a run. */
+export function labelJudge(runId: string, label: "agree" | "disagree") {
+  const metrics = snapshot();
+  write({ ...metrics, judgeLabels: { ...metrics.judgeLabels, [runId]: label } });
+}
+
+/** A person promotes an agent once its evidence supports it. */
+export function promoteAgent(agent: string, at = new Date()) {
+  const metrics = snapshot();
+  write({ ...metrics, promotions: { ...metrics.promotions, [agent]: at.toISOString() } });
 }
 
 /** Starts a fresh session: every recorded run is forgotten. */

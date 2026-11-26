@@ -2,12 +2,16 @@
 // browser takes it, acting as the role it needs: the compliance reviewer for a regulated brand's
 // copy, and the client for the proposal. The server checks the role; agents can never decide.
 import {
-  CLIENT_ROUNDS,
   type CampaignBrief,
   type CampaignStrategy,
+  CLIENT_ROUNDS,
+  FAST_APPROVAL_MS,
   MEDIA_CHANNEL_LABELS,
   PERSONA_LABELS,
+  reviewerMetrics,
   TEAM_GATES,
+  TEAM_PARTY_LABELS,
+  type TeamAgentId,
   type TeamEvent,
 } from "@northstar/architecture";
 import { useRef, useState } from "react";
@@ -183,9 +187,102 @@ export function DecisionLog({
           ) : null}
           {when(decision.at) ? <small> · {when(decision.at)}</small> : null}
           {decision.note ? <q>{decision.note}</q> : null}
+          {decision.record ? <DecisionRecordView record={decision.record} titles={titles} /> : null}
         </li>
       ))}
     </ol>
+  );
+}
+
+const seconds = (ms: number | null) =>
+  ms === null ? "—" : ms < 60_000 ? `${Math.round(ms / 1000)} s` : `${Math.round(ms / 60_000)} min`;
+
+/**
+ * What the decision rests on, for whoever has to answer for it later: the exact versions of the
+ * work the person saw, the policy set and the prompts behind it, and how long they took.
+ */
+function DecisionRecordView({
+  record,
+  titles,
+}: {
+  record: NonNullable<Decided["record"]>;
+  titles: Record<string, string>;
+}) {
+  return (
+    <details className="team-decision-record">
+      <summary>Decision record</summary>
+      <dl>
+        <dt>Decided on</dt>
+        <dd>
+          {record.reviewed.length
+            ? record.reviewed
+                .map((item) => `${titles[item.name] ?? item.name} v${item.version}`)
+                .join(", ")
+            : "The work in front of them"}
+        </dd>
+        <dt>Policy set</dt>
+        <dd>
+          <code>{record.policyVersion}</code>
+        </dd>
+        <dt>Prompts</dt>
+        <dd>
+          {Object.entries(record.promptVersions).length
+            ? Object.entries(record.promptVersions).map(([agent, version]) => (
+                <span key={agent}>
+                  {TEAM_PARTY_LABELS[agent as TeamAgentId] ?? agent} <code>{version}</code>{" "}
+                </span>
+              ))
+            : "—"}
+        </dd>
+        <dt>Time to decide</dt>
+        <dd>{seconds(record.decidedInMs)}</dd>
+      </dl>
+    </details>
+  );
+}
+
+/**
+ * Each reviewer's decisions on this run: how often they asked for changes and how long they took.
+ * An override rate near zero with near-instant approvals is a warning sign, not efficiency.
+ */
+export function ReviewerMetricsTable({ decisions }: { decisions: readonly Decided[] }) {
+  const rows = reviewerMetrics(decisions);
+  if (!rows.length) return null;
+  return (
+    <div className="team-table-wrap">
+      <table className="team-table">
+        <caption>Reviewers on this run</caption>
+        <thead>
+          <tr>
+            <th scope="col">Acting as</th>
+            <th scope="col">Decisions</th>
+            <th scope="col">Asked for changes</th>
+            <th scope="col">Median time to decide</th>
+            <th scope="col">Approved in under {FAST_APPROVAL_MS / 1000} s</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.persona}>
+              <th scope="row">
+                {PERSONA_LABELS[row.persona as keyof typeof PERSONA_LABELS] ?? row.persona}
+              </th>
+              <td>{row.decisions}</td>
+              <td>
+                {row.changes} ({Math.round(row.overrideRate * 100)}%)
+              </td>
+              <td>{seconds(row.medianMs)}</td>
+              <td className={row.fastApprovals ? "team-warn" : undefined}>{row.fastApprovals}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="arch-note">
+        Oversight is measured, not assumed: an approval faster than anyone could read the work, or
+        an override rate near zero over many decisions, is a warning sign. A run can also seed a
+        flawed item into the MLR queue to measure whether reviewers catch it.
+      </p>
+    </div>
   );
 }
 

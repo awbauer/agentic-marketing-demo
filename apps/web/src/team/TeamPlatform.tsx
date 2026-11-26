@@ -1,8 +1,9 @@
 // What the squad stands on, drawn from the run's own records: the semantic layer every agent reads
 // through, and the infrastructure layers each message, model call and tool call passes.
 import {
-  JUDGE_CRITERIA,
-  type JudgeCriterion,
+  AUTONOMY_STAGES,
+  autonomyOf,
+  judgeCriterionText,
   SEMANTIC_ENTITIES,
   SEMANTIC_METRIC_IDS,
   SEMANTIC_METRICS,
@@ -15,7 +16,13 @@ import {
   teamRunProviderLabel,
 } from "@northstar/architecture";
 import { hostTerms } from "@northstar/contracts";
-import { resetSessionMetrics, type SessionRun, useSessionMetrics } from "./session-metrics";
+import {
+  labelJudge,
+  promoteAgent,
+  resetSessionMetrics,
+  type SessionRun,
+  useSessionMetrics,
+} from "./session-metrics";
 import { type InfraLayer, isPeerMessage, type TeamState } from "./team-state";
 
 /** What this host calls its infrastructure (ADR-018). */
@@ -362,7 +369,7 @@ function Scorecard({
               <li key={item.criterion}>
                 <div>
                   <strong>{item.criterion.replaceAll("_", " ")}</strong>{" "}
-                  <small>{JUDGE_CRITERIA[item.criterion as JudgeCriterion]}</small>
+                  <small>{judgeCriterionText(item.criterion)}</small>
                   <p>{item.reason}</p>
                 </div>
                 <span className="team-judge-score">{item.score}/5</span>
@@ -370,10 +377,157 @@ function Scorecard({
             ))}
           </ul>
           <p className="arch-note">{scorecard.judge.summary}</p>
+          <JudgeLabel runId={scorecard.runId} />
         </>
       ) : (
         <p className="arch-note">No proposal to judge on this run.</p>
       )}
+    </div>
+  );
+}
+
+/**
+ * The reader's verdict on the judge, kept for this session: the human labels a judge is
+ * calibrated against. Until enough agree, the judge is an opinion, and the page says so.
+ */
+function JudgeLabel({ runId }: { runId: string }) {
+  const metrics = useSessionMetrics();
+  const labels = Object.values(metrics.judgeLabels ?? {});
+  const agreed = labels.filter((label) => label === "agree").length;
+  const mine = metrics.judgeLabels?.[runId];
+  return (
+    <div className="team-judge-label">
+      <p className="arch-note">
+        Do you agree with the judge on this run?{" "}
+        <button
+          type="button"
+          className="text-button"
+          aria-pressed={mine === "agree"}
+          onClick={() => labelJudge(runId, "agree")}
+        >
+          Agree
+        </button>{" "}
+        <button
+          type="button"
+          className="text-button"
+          aria-pressed={mine === "disagree"}
+          onClick={() => labelJudge(runId, "disagree")}
+        >
+          Disagree
+        </button>
+      </p>
+      <p className="arch-note">
+        {labels.length
+          ? `You agreed with the judge on ${agreed} of ${labels.length} run${labels.length === 1 ? "" : "s"} this session (${Math.round((agreed / labels.length) * 100)}%).`
+          : "No labels yet this session."}{" "}
+        A judge is trusted only once it agrees with people on at least 100 labelled cases; until
+        then its score is an opinion. It runs on a different model from the agents it scores where
+        it can.
+      </p>
+    </div>
+  );
+}
+
+/** Runs of one brief on one provider: passed only if every one of the k runs reached its outcome. */
+function reliability(runs: readonly SessionRun[], label: (run: SessionRun) => string) {
+  const groups = new Map<string, SessionRun[]>();
+  for (const run of runs) {
+    // A replay re-shows a run; only new runs are new evidence.
+    if (run.source !== "live" || !run.scorecard) continue;
+    const key = `${run.title}|${run.mode}|${label(run)}`;
+    groups.set(key, [...(groups.get(key) ?? []), run]);
+  }
+  return [...groups.values()].map((group) => {
+    const passed = group.filter(
+      (run) =>
+        run.status === "done" &&
+        (run.scorecard?.checks.find((check) => check.id === "outcome")?.score ?? 0) >= 1,
+    ).length;
+    return {
+      title: group[0]?.title ?? "",
+      provider: label(group[0] as SessionRun),
+      k: group.length,
+      passAt1: passed / group.length,
+      passK: passed === group.length,
+    };
+  });
+}
+
+/**
+ * Autonomy earned by evidence, per lifecycle agent, from this session's runs: clean runs build a
+ * streak, a person promotes once the streak is long enough, and a violation demotes automatically.
+ */
+function AutonomyPanel() {
+  const metrics = useSessionMetrics();
+  const runs = [...metrics.runs]
+    .filter((run) => run.source === "live" && run.agents)
+    .sort((a, b) => a.at.localeCompare(b.at));
+  const agents = [...new Set(runs.flatMap((run) => Object.keys(run.agents ?? {})))];
+  if (!agents.length)
+    return (
+      <p className="arch-note">
+        No lifecycle runs this session yet. Each finished lifecycle run adds evidence for every
+        agent that worked in it.
+      </p>
+    );
+  return (
+    <div className="team-table-wrap">
+      <table className="team-table">
+        <caption>Autonomy by evidence, this session</caption>
+        <thead>
+          <tr>
+            <th scope="col">Agent</th>
+            <th scope="col">Stage</th>
+            <th scope="col">Clean runs in a row</th>
+            <th scope="col">Moves</th>
+          </tr>
+        </thead>
+        <tbody>
+          {agents.map((agent) => {
+            const history = runs.flatMap((run) => {
+              const evidence = run.agents?.[agent];
+              return evidence ? [{ at: run.at, evidence }] : [];
+            });
+            const view = autonomyOf(history, metrics.promotions?.[agent] ?? null);
+            return (
+              <tr key={agent}>
+                <th scope="row">{TEAM_PARTY_LABELS[agent as TeamAgentId] ?? agent}</th>
+                <td>
+                  {AUTONOMY_STAGES[view.stage].label}
+                  {view.demoted ? " (demoted automatically)" : ""}
+                  <br />
+                  <small>{AUTONOMY_STAGES[view.stage].may}</small>
+                </td>
+                <td>
+                  {view.streak} of {view.needed}
+                </td>
+                <td>
+                  {view.canPromote ? (
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => promoteAgent(agent)}
+                    >
+                      Promote to Assist
+                    </button>
+                  ) : view.stage === "assist" ? (
+                    "Drops to Supervise on any violation"
+                  ) : (
+                    `${Math.max(0, view.needed - view.streak)} more clean run${view.needed - view.streak === 1 ? "" : "s"} before a person may promote it`
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="arch-note">
+        A clean run: every save cleared the rules first time and no person sent the work back. A
+        violation (a gateway denial, a hard limit, or a report the trace contradicts) drops an agent
+        to Supervise at once, and coming back takes one more clean run than the first promotion did.
+        In this demo the stage is a record of what the evidence supports: every write still waits
+        for a person at every stage.
+      </p>
     </div>
   );
 }
@@ -483,6 +637,41 @@ function RunsCompared() {
           </table>
         </div>
       )}
+      {(() => {
+        const rows = reliability(metrics.runs, label).filter((row) => row.k > 1);
+        return rows.length ? (
+          <div className="team-table-wrap">
+            <table className="team-table">
+              <caption>Reliability: the same brief run k times (pass^k)</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Brief</th>
+                  <th scope="col">Provider</th>
+                  <th scope="col">k</th>
+                  <th scope="col">Passed once (pass@1)</th>
+                  <th scope="col">Passed every time (pass^k)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={`${row.title}|${row.provider}`}>
+                    <th scope="row">{row.title}</th>
+                    <td>{row.provider}</td>
+                    <td>{row.k}</td>
+                    <td>{Math.round(row.passAt1 * 100)}%</td>
+                    <td>{row.passK ? "Yes" : "No"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="arch-note">
+            Run the same brief more than once on a provider to see pass^k: a brief passes only if
+            every run of it reached its outcome. Replays don&rsquo;t count; they re-show a run.
+          </p>
+        );
+      })()}
       <div className="team-table-wrap">
         <table className="team-table">
           <caption>Runs this session</caption>
@@ -522,8 +711,9 @@ export function EvalsPanel({ state }: { state: TeamState }) {
         Every run is scored when it ends. Checks come from the run&rsquo;s own record: did it reach
         an approved proposal, how often the rules refused work, whether the plan fits the budget and
         the audience, how the agents coordinated, and how many rounds people needed. A judge model
-        then scores the proposal against a rubric. The judge is the same for every provider, so the
-        providers can be compared fairly.
+        then scores the proposal against a rubric (for the pharma lifecycle, the approved modules on
+        fair balance, net impression and claim discipline). The judge is the same for every
+        provider, so the providers can be compared fairly.
       </p>
       {state.scorecard ? (
         <Scorecard scorecard={state.scorecard} aiPlatform={state.infra?.aiPlatform} />
@@ -536,6 +726,8 @@ export function EvalsPanel({ state }: { state: TeamState }) {
       )}
       <h4>Runs compared</h4>
       <RunsCompared />
+      <h4>Autonomy earned by evidence</h4>
+      <AutonomyPanel />
     </div>
   );
 }

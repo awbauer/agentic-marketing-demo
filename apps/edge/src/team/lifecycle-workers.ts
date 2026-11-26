@@ -10,8 +10,10 @@ import {
   assetChoices,
   buildAudience,
   buildTeamPolicies,
+  type ClaimGap,
   type Concept,
   CURRENT_LABEL,
+  claimGaps,
   claimsLibrary,
   conceptProblems,
   DECILE_BANDS,
@@ -23,6 +25,7 @@ import {
   focusSourceIds,
   type GatewayContext,
   HCP_UNIVERSE,
+  type LibraryClaim,
   type LifecycleWorker,
   type MlrJob,
   mlrJobCode,
@@ -36,8 +39,10 @@ import {
   placementsFor,
   prepareForm2253,
   preReviewChecks,
+  productOf,
   type ResultLine,
   reviewTier,
+  seedFlaw,
   semanticQuery,
   TEAM_STEP_CAPS,
   teamAgentById,
@@ -368,6 +373,41 @@ function saveTool(
     return { saved: true, version: item.version, ...extra };
   };
   const refuse = (problems: string[]) => refusal(saved, problems);
+  /**
+   * Cite or refuse: each point a refused save tried to make without approved content is logged
+   * as a gap (once per point and kind), for the content team's claims backlog or for medical
+   * information. It is never written into the work.
+   */
+  const recordGaps = (gaps: ReturnType<typeof claimGaps>) => {
+    const logged = new Set(
+      run.events.flatMap((event) =>
+        event.type === "claim-gap" ? [`${event.gap.point}|${event.gap.kind}`] : [],
+      ),
+    );
+    for (const gap of gaps) {
+      const key = `${gap.point}|${gap.kind}`;
+      if (logged.has(key)) continue;
+      logged.add(key);
+      const entry: ClaimGap = {
+        ...gap,
+        id: `GAP-${String(logged.size).padStart(3, "0")}`,
+        product: productOf(brief),
+        phase: run.lifecycle?.phase ?? "",
+        raisedBy: agent,
+        tool: step.tool,
+        at: new Date().toISOString(),
+      };
+      run.emit({ type: "claim-gap", gap: entry });
+    }
+  };
+  const gapsIn = (
+    library: readonly LibraryClaim[],
+    items: ReadonlyArray<{
+      topics: readonly string[];
+      channel?: "email" | "display";
+      texts: Array<{ label: string; text: string }>;
+    }>,
+  ) => items.flatMap((item) => claimGaps({ library, brand: brief.brand, ...item }));
   const definitions: Record<
     string,
     { description: string; schema: z.ZodType; run: (input: never) => unknown }
@@ -438,6 +478,16 @@ function saveTool(
           })),
         }));
         const problems = conceptProblems(world, brief, concepts);
+        if (problems.length)
+          recordGaps(
+            gapsIn(
+              library,
+              concepts.map((concept) => ({
+                topics: concept.claimTopics,
+                texts: [{ label: "big idea", text: String(concept.bigIdea ?? "") }],
+              })),
+            ),
+          );
         return problems.length ? refuse(problems) : save({ concepts });
       },
     },
@@ -489,10 +539,24 @@ function saveTool(
             assets,
           });
           if (result.ok) modules.push(result.module);
-          else
+          else {
+            recordGaps(
+              gapsIn(library, [
+                {
+                  topics: claimTopics,
+                  channel,
+                  texts: [
+                    { label: "headline", text: String(draft.headline ?? "") },
+                    { label: "opening", text: String(draft.opening ?? "") },
+                    { label: "closing", text: String(draft.closing ?? "") },
+                  ],
+                },
+              ]),
+            );
             problems.push(
               ...result.problems.map((problem) => `Module ${index + 1} (${channel}): ${problem}`),
             );
+          }
         });
         return problems.length
           ? refuse(problems)
@@ -531,7 +595,17 @@ function saveTool(
           tier,
           coordinatorNotes: notes,
         };
-        return save(job, {
+        // A seeded flaw tests the reviewers: once per run, the MLR system slips a flawed copy of a
+        // module into the queue after the automated checks. It is withdrawn before approval.
+        const start = run.events.find((event) => event.type === "start");
+        const seeding =
+          start?.type === "start" &&
+          start.practice?.seededFlaw &&
+          !run.events.some((event) => event.type === "seeded-flaw")
+            ? seedFlaw(job)
+            : null;
+        if (seeding) run.emit({ type: "seeded-flaw", seeded: seeding.seeded });
+        return save(seeding?.job ?? job, {
           jobCode: job.jobCode,
           checks: checks.length,
           allPassed: true,

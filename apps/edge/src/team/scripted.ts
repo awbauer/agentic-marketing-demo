@@ -486,6 +486,38 @@ function respond(prompt: Prompt): Next {
             summary: "A sound, on-brief plan. The copy could be more specific.",
           },
         };
+  if (agent === "pharma-judge")
+    return done.some((item) => item.tool === "score_proposal")
+      ? { text: "Scored." }
+      : {
+          tool: "score_proposal",
+          args: {
+            scores: [
+              {
+                criterion: "fair_balance",
+                score: 5,
+                reason: "Safety information sits beside every claim.",
+              },
+              {
+                criterion: "net_impression",
+                score: 4,
+                reason:
+                  "The modules say no more than their claims, though the headline leans hopeful.",
+              },
+              {
+                criterion: "claim_discipline",
+                score: 5,
+                reason: "Every fact is an approved claim.",
+              },
+              {
+                criterion: "fit_to_brief",
+                score: 4,
+                reason: "Serves the specialists the brief names.",
+              },
+            ],
+            summary: "Compliant, balanced modules on brief. The headline could be plainer.",
+          },
+        };
   if (mode === "answer") return { text: `${agent} answers from its saved work.` };
   if (lifecycle === "lead") return lifecycleLead(input, done, lastUser, resumed && done.length > 0);
   if (lifecycle && mode === "report") return { text: `${agent} saved ${lifecycle}.` };
