@@ -613,6 +613,7 @@ export function App() {
             <p className="nav-label">Workspace</p>
             <button
               type="button"
+              title="Chat"
               className={`nav-item ${chatViews.includes(view) ? "active" : ""}`}
               aria-current={chatViews.includes(view) ? "page" : undefined}
               onClick={() => setView("chat")}
@@ -621,6 +622,7 @@ export function App() {
             </button>
             <button
               type="button"
+              title="Evals"
               className={`nav-item ${view === "evaluations" ? "active" : ""}`}
               aria-current={view === "evaluations" ? "page" : undefined}
               onClick={() => setView("evaluations")}
@@ -629,6 +631,7 @@ export function App() {
             </button>
             <button
               type="button"
+              title="Learn"
               className={`nav-item ${view === "learn" ? "active" : ""}`}
               aria-current={view === "learn" ? "page" : undefined}
               onClick={() => setView("learn")}
@@ -637,6 +640,7 @@ export function App() {
             </button>
             <button
               type="button"
+              title="Playbook"
               className={`nav-item ${view === "playbook" ? "active" : ""}`}
               aria-current={view === "playbook" ? "page" : undefined}
               onClick={() => setView("playbook")}
@@ -645,6 +649,7 @@ export function App() {
             </button>
             <button
               type="button"
+              title="Graph"
               className={`nav-item ${view === "graph" ? "active" : ""}`}
               aria-current={view === "graph" ? "page" : undefined}
               onClick={() => setView("graph")}
@@ -653,6 +658,7 @@ export function App() {
             </button>
             <button
               type="button"
+              title="Journeys"
               className={`nav-item ${view === "journeys" ? "active" : ""}`}
               aria-current={view === "journeys" ? "page" : undefined}
               onClick={() => setView("journeys")}
@@ -661,6 +667,7 @@ export function App() {
             </button>
             <button
               type="button"
+              title="Architecture"
               className={`nav-item ${view === "architecture" ? "active" : ""}`}
               aria-current={view === "architecture" ? "page" : undefined}
               onClick={() => setView("architecture")}
@@ -669,6 +676,7 @@ export function App() {
             </button>
             <button
               type="button"
+              title="Campaign squad"
               className={`nav-item ${view === "team" ? "active" : ""}`}
               aria-current={view === "team" ? "page" : undefined}
               onClick={() => setView("team")}

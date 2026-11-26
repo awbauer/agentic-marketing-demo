@@ -2583,3 +2583,144 @@
   margin: 4px 0 0;
   padding-left: 18px;
 }
+
+/* The quality checks, closed to one line while all pass (MlrJobView). */
+.team-checks {
+  margin: 8px 0;
+}
+.team-checks > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* The decision's buttons stay in reach while the reader reads the evidence above them. */
+.team-decision-card .team-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  margin: 0 -4px;
+  padding: 10px 4px;
+  border-top: 1px solid var(--line);
+  background: inherit;
+}
+
+/* Where the page scrolls as a whole (the view's own scrolling is off below 1000px), let sticky
+   parts such as the decision's buttons and the phone's page links follow the window. */
+@media (max-width: 1000px) {
+  .team-view {
+    overflow: visible;
+  }
+}
+
+/* The map's agents as tappable buttons; shown only where the map is too small to tap. */
+.team-agent-chips {
+  display: none;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .team-view .section-header h2 {
+    font-size: 22px;
+    line-height: 1.2;
+  }
+  .team-view .arch-header-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  /* The path: compact tiles in one sideways row, not pinned over the page on a small screen. */
+  .team-stepper {
+    position: static;
+    padding: 6px;
+  }
+  .team-stepper ol {
+    grid-auto-columns: minmax(96px, 42vw);
+    scroll-snap-type: x proximity;
+  }
+  .team-stepper li {
+    scroll-snap-align: start;
+  }
+  .team-stepper button {
+    padding: 6px 8px;
+  }
+  .team-stepper-legend {
+    flex-wrap: wrap;
+  }
+  .team-agent-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0;
+  }
+  .team-agent-chips button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 36px;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+  }
+  .team-decision-card {
+    background: #fffaf0;
+  }
+  .team-decision-card .team-actions .arch-primary,
+  .team-decision-card .team-actions .arch-secondary {
+    min-height: 40px;
+  }
+  .team-turn-pill {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    text-align: center;
+  }
+  /* The agent's details fill the screen, with its tabs in one sideways row. */
+  .team-modal {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .team-modal-inner {
+    height: 100%;
+    max-height: 100dvh;
+  }
+  .team-modal-header {
+    padding: 12px 14px 8px;
+  }
+  .team-modal .arch-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 8px 14px 4px;
+    scrollbar-width: none;
+  }
+  .team-modal .arch-tabs button {
+    flex: none;
+    white-space: nowrap;
+  }
+  .team-modal-body {
+    padding: 10px 14px 24px;
+  }
+  .team-modal-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .team-hood .arch-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .team-hood .arch-tabs button {
+    flex: none;
+    white-space: nowrap;
+  }
+}

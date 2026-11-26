@@ -437,6 +437,9 @@ function AgentRoster({
 export function TeamView({ onClose }: { onClose: () => void }) {
   const { scope } = useScope();
   const [technical, setTechnical] = useTechnicalSetting();
+  // Whether the decision card is on screen: the "Your turn" pill then has nothing to point to,
+  // and on a phone it would sit over the card's own buttons.
+  const [cardInView, setCardInView] = useState(false);
   const briefs = TEAM_BRIEFS.filter(
     (brief) => scope.brand === "all" || brief.brand === scope.brand,
   );
@@ -844,6 +847,21 @@ export function TeamView({ onClose }: { onClose: () => void }) {
       />
     </>
   );
+  useEffect(() => {
+    const card = state.waiting ? document.querySelector(".team-decision-card") : null;
+    if (!card || typeof IntersectionObserver === "undefined") {
+      setCardInView(false);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => setCardInView(Boolean(entry?.isIntersecting)),
+      {
+        threshold: 0.05,
+      },
+    );
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [state.waiting, phase]);
   const lede =
     mode === "lifecycle" ? (
       <>
@@ -872,6 +890,16 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   const diagram = (
     <div className="team-diagram">
       <TeamHierarchy state={state} mode={view} onSelect={setDetail} />
+      {/* On a phone the map's labels are too small to tap: the same agents as buttons. */}
+      <fieldset className="team-agent-chips">
+        <legend className="sr-only">Open an agent's details</legend>
+        {teamAgentsFor(view).map((agent) => (
+          <button key={agent.id} type="button" onClick={() => setDetail(agent.id)}>
+            <i className={`team-dot is-${state.agents[agent.id].state}`} aria-hidden="true" />{" "}
+            {agent.name}
+          </button>
+        ))}
+      </fieldset>
       <p className="team-diagram-hint arch-note">
         {view === "lifecycle"
           ? "The project lead agent in the middle routes each step to an agent or a person. Click an agent to see what it does, its guardrails and exactly how it ran."
@@ -1208,7 +1236,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
                   </div>
                 )}
 
-                {state.waiting && live && !busy && (
+                {state.waiting && live && !busy && !cardInView && (
                   <button
                     type="button"
                     className="team-turn-pill"

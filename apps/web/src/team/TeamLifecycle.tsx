@@ -34,7 +34,7 @@ import {
   TEAM_PARTY_LABELS,
   type TeamEvent,
 } from "@northstar/architecture";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Claim } from "./Claims";
 import { RichText, SourceChips } from "./RichText";
 import { ApprovedAssets } from "./TeamWork";
@@ -297,30 +297,38 @@ function MlrJobView({ job }: { job: MlrJob }) {
           </li>
         ))}
       </ul>
-      <div className="team-table-wrap">
-        <table className="team-table">
-          <thead>
-            <tr>
-              <th scope="col">Module</th>
-              <th scope="col">Quality check</th>
-              <th scope="col">Result</th>
-            </tr>
-          </thead>
-          <tbody>
-            {job.checks.map((check) => (
-              <tr key={`${check.module}-${check.check}`}>
-                <td>
-                  <code>{check.module}</code>
-                </td>
-                <td>{check.check}</td>
-                <td className={check.ok ? "ok" : "failed"}>
-                  {check.ok ? "✓" : "✗"} {check.detail}
-                </td>
+      {/* Closed while every check passes, so a long table doesn't push the modules and the
+      reviewer's buttons screens away; a failed check opens it. */}
+      <details className="team-checks" open={job.checks.some((check) => !check.ok)}>
+        <summary>
+          Quality checks before review: {job.checks.filter((check) => check.ok).length} of{" "}
+          {job.checks.length} passed
+        </summary>
+        <div className="team-table-wrap">
+          <table className="team-table">
+            <thead>
+              <tr>
+                <th scope="col">Module</th>
+                <th scope="col">Quality check</th>
+                <th scope="col">Result</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {job.checks.map((check) => (
+                <tr key={`${check.module}-${check.check}`}>
+                  <td>
+                    <code>{check.module}</code>
+                  </td>
+                  <td>{check.check}</td>
+                  <td className={check.ok ? "ok" : "failed"}>
+                    {check.ok ? "✓" : "✗"} {check.detail}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
       <div className="team-modules">
         {job.modules.map((module) => (
           <ModuleView key={module.id} module={module} />
@@ -1015,9 +1023,18 @@ export function PhaseStepper({
   onSelect: (phase: PhaseId) => void;
 }) {
   const turn = waiting ? phaseOfGate(waiting.gate)?.id : undefined;
+  const list = useRef<HTMLOListElement>(null);
+  // On a narrow screen the path scrolls sideways: keep the stage that needs the reader (or the
+  // active one) in view. Only the row scrolls, never the page.
+  useEffect(() => {
+    const row = list.current;
+    const item = row?.querySelector<HTMLElement>("li.is-turn, li.is-active");
+    if (!row || !item || row.scrollWidth <= row.clientWidth) return;
+    row.scrollTo({ left: Math.max(0, item.offsetLeft - row.offsetLeft - 12), behavior: "smooth" });
+  }, [lifecycle?.phase, waiting?.gate, lifecycle?.passed.length]);
   return (
     <nav className="team-stepper" aria-label="Lifecycle phases">
-      <ol>
+      <ol ref={list}>
         {PHARMA_PHASES.flatMap((phase, index) => {
           const round = lifecycle?.rounds[phase.id] ?? 1;
           const stages = stagesOf(phase);
