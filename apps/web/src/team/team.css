@@ -2255,14 +2255,11 @@
   border-color: #b42318;
   color: #8a1c12;
 }
+/* Positioned by Claims.tsx: fixed to the viewport, rendered outside scrolling tables and modals. */
 .team-claim-card {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 4px);
-  left: 0;
+  z-index: 1000;
   display: grid;
   gap: 6px;
-  width: min(380px, 80vw);
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
