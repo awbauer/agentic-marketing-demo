@@ -657,11 +657,14 @@ export class AIChatAgent<
     this.#preStream.accepted.add(id);
     this.#preStream.latest = id;
     try {
-      this.#broadcastChat({ messages: incoming, type: MessageType.CF_AGENT_CHAT_MESSAGES }, [
-        connection.id,
-      ]);
-      await this.persistMessages(incoming, [connection.id], { _deleteStaleRows: true });
       const outcome = await this.#turns.run(id, epoch, async () => {
+        // Installed only when this turn starts: a request queued behind a running turn must not
+        // change the transcript that turn is still appending its answer to, or this turn's own
+        // message would no longer be the latest one when it runs.
+        this.#broadcastChat({ messages: incoming, type: MessageType.CF_AGENT_CHAT_MESSAGES }, [
+          connection.id,
+        ]);
+        await this.persistMessages(incoming, [connection.id], { _deleteStaleRows: true });
         await this.#awaitMcp();
         this.#setRequestContext(requestClientTools, requestBody);
         const response = await this.#callOnChatMessage(id, {

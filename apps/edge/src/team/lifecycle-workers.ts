@@ -85,22 +85,29 @@ const many = <T extends z.ZodType>(item: T) => z.union([z.array(item), item]);
 const words = z.union([z.array(z.string()), z.string()]).optional();
 const date = z.string();
 
+/** Non-breaking and other Unicode hyphens, as some models write them, made plain. */
+const plainHyphens = (text: string) => text.replace(/[\u2010\u2011\u2012\u2013\u2212]/g, "-");
+
 /**
  * The claim topics an item names, under whichever key a model put them: the topics it lists, plus
  * every topic or claim ID (CLM-…) that appears anywhere in it, mapped to its topic. Models asked
  * for "claim IDs" send those, and gpt-oss writes ids with non-breaking hyphens.
  */
-function namedClaimTopics(
+export function namedClaimTopics(
   item: Record<string, unknown>,
   library: ReadonlyArray<{ topic: string; claimId: string | null }>,
 ): string[] {
-  const text = JSON.stringify(item).replace(/\u2011/g, "-");
+  const text = plainHyphens(JSON.stringify(item));
   const byId = new Map(
     library.flatMap((claim) => (claim.claimId ? [[claim.claimId, claim.topic] as const] : [])),
   );
   return [
     ...new Set([
-      ...list(item.claimTopics as string[] | string).map((topic) => byId.get(topic) ?? topic),
+      ...list(item.claimTopics as string[] | string).map((value) => {
+        // Look up the plain-hyphen form: CLM‑CRD‑0042 (non-breaking hyphens) is CLM-CRD-0042.
+        const topic = typeof value === "string" ? plainHyphens(value).trim() : value;
+        return byId.get(topic) ?? topic;
+      }),
       ...library
         .filter(
           (claim) => text.includes(claim.topic) || (claim.claimId && text.includes(claim.claimId)),
