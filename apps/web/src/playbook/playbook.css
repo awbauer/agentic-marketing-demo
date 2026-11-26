@@ -1,0 +1,41 @@
+.playbook-byline {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.playbook-note {
+  margin: 0 24px 4px 20px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #eef3e6;
+  font-size: 13px;
+}
+.playbook-note .text-button {
+  padding: 0;
+  font-size: inherit;
+}
+.playbook-section h3 {
+  margin: 0 0 8px;
+}
+.playbook-section blockquote {
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-left: 3px solid #b9c4bb;
+  color: var(--muted);
+  font-size: 13px;
+}
+.playbook-in-workbench {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #e3e8e1;
+  font-size: 12px;
+  color: var(--muted);
+}
+.playbook-in-workbench .text-button {
+  padding: 0;
+  font-size: inherit;
+}
