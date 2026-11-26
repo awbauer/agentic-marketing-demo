@@ -10,6 +10,7 @@ import {
   misreports,
   PROMOTE_AFTER,
   PROMOTE_MARGIN,
+  promptVersionsOf,
   reviewerMetrics,
   reviewedBy,
   screenReplies,
@@ -125,6 +126,14 @@ describe("claim gaps", () => {
 });
 
 describe("decision records and reviewers", () => {
+  it("records the prompt a worker worked with, not its report prompt", () => {
+    const prompt = (purpose: string, version: string) =>
+      ({ type: "prompt", agent: "copy-lead", purpose, version }) as TeamEvent;
+    expect(promptVersionsOf([prompt("work", "pr-work"), prompt("report", "pr-report")])).toEqual({
+      "copy-lead": "pr-work",
+    });
+  });
+
   it("names the work each gate decides on", () => {
     expect(reviewedBy("medical").map((step) => step.tool)).toEqual([
       "draft_modules",
@@ -223,7 +232,14 @@ describe("writes with a key and a read-back", () => {
       materials: [{ materialId: "D-A-EM1" }],
     } as ApprovedJob;
     const placement = (placementId: string, materialId: string) =>
-      ({ placementId, materialId, start: "2027-01-05", end: "2027-02-05" }) as Placement;
+      ({
+        placementId,
+        materialId,
+        channel: "approved-email",
+        segmentIds: ["seg-a"],
+        start: "2027-01-05",
+        end: "2027-02-05",
+      }) as Placement;
     const ok = bookPlacements([placement("PL-001", "D-A-EM1")], approved, "now");
     expect(ok.matches).toBe(true);
     const off = bookPlacements(
@@ -233,6 +249,29 @@ describe("writes with a key and a read-back", () => {
     );
     expect(off).toMatchObject({ matches: false });
     expect(off.readBack).toHaveLength(1);
+  });
+
+  it("treats a change of audience as a new booking, not a retry", () => {
+    const approved = {
+      documentNumber: "D-A",
+      materials: [{ materialId: "D-A-EM1" }],
+    } as ApprovedJob;
+    const placement = (segmentIds: string[]) =>
+      ({
+        placementId: "PL-001",
+        materialId: "D-A-EM1",
+        channel: "approved-email",
+        segmentIds,
+        start: "2027-01-05",
+        end: "2027-02-05",
+      }) as Placement;
+    const first = bookPlacements([placement(["seg-a"])], approved, "now");
+    const same = bookPlacements([placement(["seg-a"])], approved, "later", first);
+    const retargeted = bookPlacements([placement(["seg-a", "seg-b"])], approved, "later", first);
+    expect(same.attempts).toBe(2);
+    expect(retargeted.idempotencyKey).not.toBe(first.idempotencyKey);
+    expect(retargeted).toMatchObject({ attempts: 1, matches: true });
+    expect(retargeted.readBack[0]).toContain("seg-a,seg-b");
   });
 });
 

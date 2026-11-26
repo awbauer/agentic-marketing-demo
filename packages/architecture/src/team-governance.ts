@@ -158,11 +158,21 @@ export function reviewedBy(gate: TeamGate): Array<{ tool: string; agent: string 
   return [];
 }
 
-/** The latest prompt version each agent sent, from a run's events. */
+/**
+ * The latest prompt version each agent did its work with, from a run's events. A worker's short
+ * report to the lead, after its work is saved, uses another prompt; it isn't what produced the
+ * work, so it is left out.
+ */
 export function promptVersionsOf(events: readonly TeamEvent[]): Record<string, string> {
   const versions: Record<string, string> = {};
   for (const event of events)
-    if (event.type === "prompt" && event.version) versions[event.agent] = event.version;
+    if (
+      event.type === "prompt" &&
+      event.version &&
+      event.purpose !== "report" &&
+      event.purpose !== "answer"
+    )
+      versions[event.agent] = event.version;
   return versions;
 }
 
@@ -316,17 +326,16 @@ export function bookPlacements(
   at: string,
   previous?: WriteReceipt | null,
 ): WriteReceipt {
-  const sent = placements.map(
-    (item) => `${item.placementId} ${item.materialId} ${item.start}→${item.end}`,
-  );
+  // The whole placement: what runs, where, to whom and when. A change to any of it is a new write.
+  const line = (item: Placement) =>
+    `${item.placementId} ${item.materialId} ${item.channel} to ${[...item.segmentIds].sort().join(",")} ${item.start}→${item.end}`;
+  const sent = placements.map(line);
   const key = keyOf([approved.documentNumber, ...sent]);
   if (previous && previous.idempotencyKey === key)
     return { ...previous, attempts: previous.attempts + 1 };
   const approvedMaterials = new Set(approved.materials.map((item) => item.materialId));
   // The channel holds only placements of approved materials; anything else it refuses.
-  const readBack = placements
-    .filter((item) => approvedMaterials.has(item.materialId))
-    .map((item) => `${item.placementId} ${item.materialId} ${item.start}→${item.end}`);
+  const readBack = placements.filter((item) => approvedMaterials.has(item.materialId)).map(line);
   return {
     system: "Channel schedules (Veeva CRM email, programmatic display), simulated",
     idempotencyKey: key,
