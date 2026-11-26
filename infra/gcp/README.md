@@ -7,7 +7,7 @@ The workbench's second deployment target (ADR-018, WU-077). The `gcloud` scripts
 | Worker + static assets | Cloud Run service `northstar-workbench` (Node 26 container) |
 | Durable Object `MarketingOrchestrator` | The same class in a Node agent host on Cloud Run; each chat's SQLite saved to `gs://<bucket>/sessions/` |
 | D1 `APP_DB` | Firestore (default) database, native mode |
-| R2 `CAMPAIGN_ASSETS` | Cloud Storage bucket `<project>-campaign-assets` |
+| R2 `CAMPAIGN_ASSETS` | Cloud Storage bucket `<project>-campaign-assets`; a lifecycle rule deletes generated images (`drafts/`) after seven days |
 | Workers AI + AI Gateway | Vertex AI: gpt-oss-120b (managed), Gemini 3.1 Flash Image, Claude on Vertex; Cloud Logging for each model call |
 | Access | Identity-Aware Proxy on Cloud Run, members allowlist in Firestore |
 | Access MCP portal | Direct Salesforce Hosted MCP with per-user OAuth (PKCE) |

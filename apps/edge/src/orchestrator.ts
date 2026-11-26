@@ -1302,7 +1302,12 @@ export class MarketingOrchestrator extends AIChatAgent<
         `Creative concept: ${concept}.`,
         "Editorial photography, warm natural light, inclusive but no identifiable real person, no text, no logo, no product claims.",
       ].join(" ");
-      const models = modelPlatform(this.env, this.aiPlatform);
+      // The image request carries the top bar's choice; the last chat turn's may be stale.
+      const requested = request.headers.get("x-ai-platform");
+      const models = modelPlatform(
+        this.env,
+        isAiPlatformId(requested) ? requested : this.aiPlatform,
+      );
       const bytes = models
         ? await models.image("@cf/black-forest-labs/flux-2-klein-4b", {
             prompt,

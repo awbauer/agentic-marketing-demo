@@ -34,7 +34,7 @@ import { LearnView } from "./learn/LearnView";
 import { Markdown } from "./Markdown";
 import { RouteMapPanel } from "./RouteMapPanel";
 import { SalesforceAgentsPanel } from "./SalesforceAgents";
-import { currentAiPlatform } from "./ai-platform";
+import { aiPlatformHeaders, currentAiPlatform } from "./ai-platform";
 import { ScopeBar } from "./ScopeBar";
 import { SourceList } from "./SourceList";
 import { BRAND_IMAGE_CONCEPT, BRAND_PLACEHOLDER, useScope } from "./scope";
@@ -301,7 +301,7 @@ export function App() {
     setActionError("");
     const response = await fetch(`/agent/${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...aiPlatformHeaders() },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     let result: T & { error?: { message?: string } };
