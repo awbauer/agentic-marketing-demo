@@ -171,7 +171,7 @@ GCP_PROJECT=<project> IAP_MEMBERS=<you@example.com> pnpm deploy:gcp   # build, d
 
 The deploy builds the image with Cloud Build, runs it on Cloud Run behind a global HTTPS load balancer with Identity-Aware Proxy, and prints the URL. [infra/gcp/README.md](infra/gcp/README.md) lists every resource, the organization policies the setup satisfies, and the steps that need a person (secrets, Model Garden, the Salesforce callback).
 
-**Cloudflare.** `pnpm deploy` builds and deploys the Worker; [infra/cloudflare/pot/README.md](infra/cloudflare/pot/README.md) has the gates.
+**Cloudflare.** `pnpm run deploy` builds the app, applies pending D1 migrations and deploys the Worker; merging to `main` does the same through Workers Builds; [infra/cloudflare/pot/README.md](infra/cloudflare/pot/README.md) has the gates.
 
 <details>
 <summary><b>All commands</b></summary>
@@ -187,7 +187,8 @@ The deploy builds the image with Cloud Build, runs it on Cloud Run behind a glob
 | `pnpm learn:check` / `pnpm learn:export` | Check that the Learn course covers the code, and regenerate `docs/learn-google-cloud.md` and `docs/learn.md`. |
 | `pnpm eval` / `pnpm eval:team` | Run the orchestrator evaluation, or compare squad providers on the reference briefs. |
 | `pnpm build:gcp` / `pnpm deploy:gcp` | Bundle the Google Cloud server; build and deploy it to Cloud Run. |
-| `pnpm deploy:dry-run` / `pnpm deploy` | Package or deploy the Cloudflare Worker. |
+| `pnpm deploy:dry-run` / `pnpm run deploy` | Package the Cloudflare Worker, or build it, apply pending D1 migrations and deploy it. |
+| `pnpm run db:migrate` | Apply pending D1 migrations to the Worker's database (every deploy does this first). |
 | `pnpm sf:metadata:check` | Validate the Salesforce Agent Script, Apex actions, permissions, catalog, Postman and audit-migration contract. |
 | `SF_TARGET_ORG=<sandbox-alias> SF_APPROVED_PROOF_ORG_ID=<org-id> pnpm sf:validate` | Fails closed unless the target is a Salesforce sandbox or the approved proof org, then checks API level, sample records, consent access and Agent Script metadata. |
 | `pnpm test:e2e:live` | Live proof against the deployed Cloudflare Worker; fails closed without authorized live-proof variables. |

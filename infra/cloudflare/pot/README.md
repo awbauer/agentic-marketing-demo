@@ -8,7 +8,7 @@ This directory records the Phase 1 deployment gate. `wrangler.jsonc` is the exec
 2. Confirm `wrangler whoami` names the isolated proof account. A login or MFA prompt is the human authorization boundary.
 3. Configure one Access application for the Worker URL, email one-time PIN, and an explicit evaluator allowlist. A pre-existing reusable policy may be attached when its rule is verified; treat that shared policy as external infrastructure and do not rename, edit, or delete it from this repository. Record application identifiers outside Git when they are account-specific.
 4. The committed deployment configuration is fail-closed with `ENVIRONMENT=proof` and `AUTH_MODE=access`. Set the Access team domain and audience as account-specific variables before the authenticated live test. The Worker must reject an unsigned `/api/session` request; never deploy the local E2E configuration.
-5. Run `pnpm deploy:dry-run`, then deploy with `pnpm deploy`. The checked-in configuration binds the existing D1 database and R2 bucket by immutable ID/name; never remove those fields or allow CI to auto-provision replacements. Record the resulting Worker version ID.
+5. Run `pnpm deploy:dry-run`, then deploy with `pnpm run deploy` (not `pnpm deploy`, which is pnpm's own command). It applies any pending D1 migrations, then deploys the Worker. The checked-in configuration binds the existing D1 database and R2 bucket by immutable ID/name; never remove those fields or allow CI to auto-provision replacements. Record the resulting Worker version ID.
 6. Read back `/api/health`, `/api/ready`, an authorized session, an unauthorized session, and the three binding dashboards. Confirm logs/traces contain correlation IDs without PII.
 7. Run `PROOF_BASE_URL=https://<worker-host> pnpm test:e2e:live` to prove the
    unsigned edge boundary. After a human completes the email one-time-PIN flow,
@@ -24,7 +24,7 @@ The Phase 2 portal is a browser-user integration, not a service-token integratio
 2. In Zero Trust > Access controls > MCP Portals, add the Salesforce Hosted MCP URL as a Streamable HTTP server with manual OAuth credentials. Register the exact callback URI shown by Cloudflare in the Salesforce External Client App. The current shared callback option is `https://oauth-callbacks.cloudflareaccess.com/cdn-cgi/access/outbound-oauth-callback`.
 3. Create one portal, add only the Salesforce server, keep **Require user auth** enabled (`on_behalf=true`), and keep Code Mode and Gateway routing/DLP off for this proof. Apply the evaluator allow policy to both portal and server Access applications.
 4. Curate the portal tool list to exactly `packages/contracts/src/tool-catalog.json`. Do not expose portal-native server toggles to the orchestrator's model context; the Worker filters again and never exposes write tools to autonomous execution.
-5. Set the Worker's `SALESFORCE_MCP_URL` secret to the portal `/mcp` endpoint and apply every pending D1 migration before the Worker. The confirmation audit schema must accept every action in `PROOF_DEFAULTS.allowedWrites`; `pnpm contracts:check` enforces that invariant. The endpoint is treated as deployment configuration to prevent an unreviewed URL from entering source.
+5. Set the Worker's `SALESFORCE_MCP_URL` secret to the portal `/mcp` endpoint and apply every pending D1 migration before the Worker (`pnpm run db:migrate`; every deploy also does it first). The confirmation audit schema must accept every action in `PROOF_DEFAULTS.allowedWrites`; `pnpm contracts:check` enforces that invariant. The endpoint is treated as deployment configuration to prevent an unreviewed URL from entering source.
 6. As the evaluator, connect from the workbench, complete portal OAuth and per-user Salesforce OAuth, then read back connection state, namespaced tools, readiness output, a confirmed draft save, and a confirmed review task. Both writes must show the same idempotency key in D1 audit and Salesforce authoritative read-back.
 
 After any `McpServerDefinition` change, the deployed XML is only the first read-back. Refresh the active custom server in Salesforce, use **Sync capabilities** for `northstar-marketing-salesforce`, preserve the portal's fail-closed allowlist, explicitly enable each new approved tool, and run `pnpm test:production:chat` with an ephemeral evaluator Access JWT. That command now fails unless all tools in `PHASE_2_CURATED_TOOLS` are visible and the real read-only `check_write_access` action returns a valid Salesforce permission report.
@@ -37,8 +37,9 @@ Connect the existing `northstar-marketing-workbench-pot` Worker to this reposito
 
 - Production branch: `main`
 - Root directory: `/`
-- Build command: `pnpm verify`
-- Deploy command: `pnpm exec wrangler deploy --config wrangler.jsonc`
+- Build command: `pnpm run build`
+- Deploy command: `pnpm run deploy:worker`. It applies pending D1 migrations to `APP_DB` (`wrangler d1 migrations apply --remote`), then runs `wrangler deploy`. A failed migration stops the deploy, so the Worker never runs code that expects a table the database lacks.
+- API token: the build token must include **Account › D1 › Edit** for the migration step. The token Workers Builds creates by default has no D1 permission; add it under My Profile › API Tokens before switching the deploy command.
 - Build cache: enabled
 - Build variable `NODE_VERSION`: `26`
 - Build variable `PNPM_VERSION`: `11.22.0`
@@ -66,7 +67,7 @@ pnpm exec wrangler secret delete WRITES_ENABLED --config wrangler.jsonc
 
 Briefs and campaigns are created by the `Northstar_Campaign_Creation` agent (a Marketing Cloud Next Campaign Creation agent) through its Hosted MCP tools `save_marketing_brief` and `create_marketing_campaign`; `get_marketing_records` reads them back.
 
-- **Deploy order:** merge the pull request, which deploys the MCP definition and Apex through CI, then apply D1 migrations with `pnpm exec wrangler d1 migrations apply APP_DB --remote --config wrangler.jsonc` and deploy the Worker. Refresh the Cloudflare MCP portal so it lists the new tools.
+- **Deploy order:** merge the pull request, which deploys the MCP definition and Apex through CI, and Workers Builds applies D1 migrations, then deploys the Worker (`pnpm run deploy:worker`). Refresh the Cloudflare MCP portal so it lists the new tools.
 - **Agent changes:** edit `salesforce/force-app/main/default/aiAuthoringBundles/Northstar_Campaign_Creation`, validate with `sf agent validate authoring-bundle`, and publish with `sf agent publish authoring-bundle`; it must stay on the `MktCloud__CampaignCreationAgent` template.
 - **Retired metadata:** after the new MCP definition is live, delete `NorthstarSaveCampaign`, `NorthstarSaveBrief`, `NorthstarSaveMessage`, `NorthstarSaveCampaignBrief`, `NorthstarRecordWrites`, `NorthstarRecordActionsTest`, `Northstar_Brief__c`, `Northstar_Message__c`, and `Campaign.Northstar_Brand__c` from the proof org.
 
