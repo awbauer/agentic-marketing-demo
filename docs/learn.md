@@ -342,12 +342,17 @@ flowchart TB
 
 **The store.** Neo4j AuraDB over the HTTPS **Query API**, because Workers can't open Bolt connections. Tool queries run in **read access mode**, so the database itself rejects writes; the only writes are the server's fixed long-term memory statements, kept to their own dataset.
 
+<details>
+<summary>The twelve tools, and how they're tested</summary>
+
 **The tools**, each returning an answer plus up to 25 **evidence paths**: `explain_buyer_group`, `find_audience_overlap`, `check_consent_coverage`, `find_similar_past_pushes`, `trace_content_lineage`, `get_graph_overview`; for sales and service use cases, `plan_account_outreach`, `assess_location_impact`, `map_weather_demand`; for financial services, `match_news_to_approved_content`, `prepare_deal_release`, `build_aum_account_plan`.
 
 **Parity, grounding, flows.**
 - Every tool also has an in-memory implementation over the same dataset; `pnpm kg:parity` proves both return identical results (so local development and evals match production) and reports latency, with the median under 500 ms.
 - Evaluations check that a graph answer names only accounts, people, campaigns, and menu items the tools returned.
 - The restaurant push campaign calls `find_similar_past_pushes` to learn what worked in the same weather and daypart, then passes that to the Salesforce content tool.
+
+</details>
 
 **Graph explorer.** The Graph page's brand filter is the header's brand. It narrows the canvas to the nodes at least as close to that brand as to any other, walking loaded relationships without crossing another brand. So Coastline Kitchen keeps its campaigns, locations, shared channels and consent without pulling in Northstar's B2B accounts, and Lumera shows only its own nodes and what sits close. There's also a Lumera group and two guided tours.
 
@@ -441,22 +446,43 @@ The **orchestrator** is a Cloudflare **Agents SDK** chat agent running in a **Du
 
 **The tool loop.** A turn runs up to 6 steps; on each, the model calls a tool or writes the answer. Tools come from five MCP servers, connected per turn: Salesforce, campaign context, the knowledge graph, external services (public holidays and weather alerts) and the mocked life-sciences systems (see *Tools and the Model Context Protocol*). The orchestrator picks the tools available on each step (see *Routing*) and records a **turn trace** of every event.
 
-**Around the loop**, the orchestrator handles what the model must not:
+**Around the loop**, the orchestrator handles what the model must not.
+
+<details>
+<summary>Confirmed writes, brief refinements, inventory checks and memory</summary>
+
 - **Confirmed writes.** Once you confirm, it asks Marketing Cloud's Campaign Creation agent to save the brief or create the campaign, then reads the records back. It checks Salesforce before and after the call, so a retry links what an earlier attempt saved instead of saving it twice. Each step is published as agent state over the WebSocket, so progress is live, not a spinner.
 - **Brief refinements.** It adds the Brief ID to a saved brief's preview refinement if the model left it out.
 - **Inventory checks.** It collects the forecast, the graph's demand map, and stock counts, computes which items are low, and rebuilds the answer step's system prompt so the model presents exactly that list.
 - **Long-term memory.** It writes memory when a write is read back or you ask it to remember a draft, and reopens one into the workspace on **Reopen**. The Worker's hourly job prunes the 24-hour audit and deletes memory past 14 days.
 
+</details>
+
 **Every tool call passes the gateway.** Before a chosen tool runs, the Worker asks the agentic gateway whether the orchestrator may call `tool:<name>`. The decision, policy and caller are recorded; a denial reaches the model as a tool error. See *The agentic gateway*.
+
+<details>
+<summary>How a tool result is judged usable</summary>
 
 **Is a result usable?** A Salesforce agent answers in words, so its reply is checked for phrases such as "no business units" or "cannot access"; if found, the model is told the result was empty and not to fill the gap. The workbench's own tools (knowledge graph, life-sciences systems, campaign context, external services) return data that can quote such words and still be a full answer (a claim that "is not on the approved label" is evidence), so theirs counts as empty only as an error or `found: false`.
 
+</details>
+
+<details>
+<summary>How the header's brand and role shape a turn</summary>
+
 **The header's brand and role.** Each chat message carries both. The server withholds other brands' tools, answers a request about another brand with a note to switch (not from memory), and tells the model the role so it leads with what that person decides. The model knows what each brand sells (Lumera's Cardivance, Glucora and Neurelva; Harborstone's Sweep Account; Coastline's chowder), so a named product maps to its brand. The brand also sets which claims checks a new draft starts with. The role changes emphasis only, never what Salesforce allows or what needs confirmation.
+
+</details>
+
+<details>
+<summary>The Lightning surface: sign-in, turns and scope</summary>
 
 **The Lightning surface.** A Lightning Web Component on the Lightning Design System opens the same agent and workspace from Salesforce; it is a window, not a second agent.
 - **Sign-in.** **Log in** opens Cloudflare Access; a Worker page then hands the Access token to the Lightning window, only for a Salesforce origin the Worker names. Apex relays each call with it in a `cf-access-token` header, so the Worker sees the same person, agent, Salesforce connection, and history as the browser app.
 - **Turns.** Apex can't hold a WebSocket, so a turn starts over HTTP and the component polls about once a second. It enters through the same `onChatMessage` (routing, gateway, tools, confirmation, and turn history unchanged), and the tool calls, trace, and route map come from the browser's code.
 - **Scope.** Chat, use cases, brand and role, connections, and history; the workspace panel and the Architecture, Graph, and Learn pages stay in the browser app.
+
+</details>
 
 **In this demo**
 
@@ -520,13 +546,27 @@ The workbench runs on either host from the same commit: on **Cloudflare** as one
 | Sign-in | Cloudflare Access | Identity-Aware Proxy, plus a members list in Firestore |
 | Chats | A Durable Object per user | A Node agent host, each chat saved to Cloud Storage |
 
+<details>
+<summary>How feature code reaches each platform</summary>
+
 Feature code asks `dataPlatform(env)` for repositories (D1, or the Firestore the GCP host puts into the environment) and `modelPlatform(env, choice)` for models. The HTTP routes live in `app.ts`; each host supplies only where chats run, how static files are served, and what readiness reports.
+
+</details>
 
 **The AI platform is chosen apart from the host (ADR-021).** Workers AI and Vertex AI are AI SDK providers in one registry, so code asks for `workers-ai:@cf/openai/gpt-oss-120b` or `vertex:@cf/openai/gpt-oss-120b` the same way.
 - The top bar's **AI platform** menu (beside Brand and Run as) lists what this server can reach and sends the choice with every chat message and workspace request. Cloudflare offers Workers AI, plus Vertex AI once it holds Google credentials; Google Cloud offers Vertex AI.
+
+<details>
+<summary>Credentials, tracing and narrowing the menu</summary>
+
 - The Worker needs no Google key: through **Workload Identity Federation** it signs its own short-lived token, which Google's Security Token Service exchanges for an hour's access as a service account that may only call Vertex AI.
 - The route map and trace name the platform each turn ran on. A Vertex turn has no AI Gateway hop, whichever host served it.
 - `AI_PLATFORMS_ENABLED` (in `wrangler.jsonc`, or a Cloud Run environment variable) narrows the menu: a comma-separated list; a platform left out is neither listed nor run, even if requested.
+
+</details>
+
+<details>
+<summary>Chats, models and sign-in on Google Cloud</summary>
 
 **Chats without Durable Objects.** The orchestrator extends the Agents SDK's chat agent. On Google Cloud the server bundle swaps that one import for a Node implementation of the same WebSocket protocol, so the browser's `useAgentChat` and the orchestrator are unchanged. As in a Durable Object, a chat keeps all its storage (messages, state, turn history, Salesforce tokens) in one in-memory SQLite database. The host saves it to Cloud Storage after each change, and the save fails if anyone else saved the chat since it was loaded. One Cloud Run instance with session affinity keeps each chat on a single writer.
 
@@ -534,9 +574,16 @@ Feature code asks `dataPlatform(env)` for repositories (D1, or the Firestore the
 
 **Sign-in and Salesforce on Google Cloud.** IAP signs each request it lets through; the server checks that assertion, then looks the email up in Firestore's `members` collection for the role, which IAP doesn't carry. Requests that bypass IAP are refused. The chat connects to Salesforce's hosted MCP server directly, with OAuth and PKCE, storing tokens encrypted in the chat's own storage (on Cloudflare, per-user OAuth goes through an Access MCP portal). The Lightning surface needs an Access token, so it stays on Cloudflare.
 
+</details>
+
+<details>
+<summary>How the page names its host, and the hourly job</summary>
+
 **The page names its host.** `packages/contracts/src/host.ts` says what each host calls its sign-in, models, database, storage and scheduler. The Google Cloud server tags its page with `<meta name="northstar-host" content="google-cloud">`; the Worker leaves it untouched. The browser reads the tag once, so one build names the right services in the route map, image workflow, squad providers, identity chain, and this course. The course is written once, with inline host and AI-platform markers that `apps/web/src/learn/variants.ts` resolves: host from the meta tag, platform from the **AI platform** menu. `docs/learn.md` is the Cloudflare/Workers AI edition; `docs/learn-google-cloud.md` the Google Cloud edition.
 
 **Maintenance.** The hourly job (audit pruning, drift sweeps, memory expiry) runs from the Worker's cron, or from Cloud Scheduler calling the service with a Google-signed token only its service account can get. Firestore's time-to-live policies also delete expired rows as a backstop.
+
+</details>
 
 **In this demo**
 
@@ -594,10 +641,17 @@ flowchart TB
 Each chat has a **working set**, shown in the Workspace panel and summarized in every prompt. **New chat** empties it. It has three parts:
 
 - **Focus:** the draft being built, as structured data: title, labeled fields, change note, and the context it came from.
-  - A campaign's focus is the **brief** Marketing Cloud's Campaign Creation agent drafted, read field for field from its reply (Key Message, Target Audience, Primary Goal, and so on), or from the answer if no brief comes back.
-  - Other drafts, such as Content Builder agent copy, are read from the answer's labeled parts: "**Headline:** …" on one line, or a label heading the lines below ("Body:" then bullets, "Ruled out" then a table, one line per row). A two-column table ("| Subject | … |") gives one field per row; HTML line breaks in it read as line breaks.
-  - After a claims check, the draft card shows its claims review: every factual sentence approved, or each flagged one with why.
-  - Each revision is a new version; earlier ones stay viewable. Once saved, the focus shows the brief's campaign preview, then the campaign and flow Salesforce read back.
+
+<details>
+<summary>How a draft becomes the focus</summary>
+
+- A campaign's focus is the **brief** Marketing Cloud's Campaign Creation agent drafted, read field for field from its reply (Key Message, Target Audience, Primary Goal, and so on), or from the answer if no brief comes back.
+- Other drafts, such as Content Builder agent copy, are read from the answer's labeled parts: "**Headline:** …" on one line, or a label heading the lines below ("Body:" then bullets, "Ruled out" then a table, one line per row). A two-column table ("| Subject | … |") gives one field per row; HTML line breaks in it read as line breaks.
+- After a claims check, the draft card shows its claims review: every factual sentence approved, or each flagged one with why.
+- Each revision is a new version; earlier ones stay viewable. Once saved, the focus shows the brief's campaign preview, then the campaign and flow Salesforce read back.
+
+</details>
+
 - **Context:** cards for what tools returned, each with source and fetch time: weather, forecasts, weather alerts, public holidays, the Federal Reserve's latest rate decision, store inventory, the inventory risk the workbench computed, the restaurant profile, graph evidence, remembered work, and Salesforce summaries.
 - **Records:** records the chat opened, created, or updated in any connected system, plus any reopened from memory (marked *Remembered* until read again). Every system, Salesforce or restaurant data alike, joins through one reference: system, object type, and id.
 
@@ -608,9 +662,14 @@ Why it's trustworthy:
 3. **Approvals come to you.** An **action card** appears in the chat when something needs approval: save the brief in Marketing Cloud, then create its campaign, or request a review after a readiness check. Accepting it prepares the confirmation card, with Salesforce's permission check.
 4. **Writes act on what you see.** Saving asks the Campaign Creation agent to save exactly the focus version on screen, recorded in the confirmation's request hash. The Brief, Campaign, and flow then appear in Records as Salesforce read them back.
 
+<details>
+<summary>Life-sciences cards and the claims check, row by row</summary>
+
 **Life-sciences cards.** The three Lumera tools add a target list, a claims check and a hospital plan, each with a summary line. The life-sciences systems add a card per answer, named for the system, so what came from Aprimo, Reltio or Drupal stays visible beside the graph's evidence. Each row has a status label, an ID and the date that matters: Aprimo assets as usable (with MLR ID and approval date) or not and why (pending review, expired, failed a check); Vault library claims with status; Screendragon jobs with stage and due date; HCP pages as compliant or not.
 
 **The claims check, claim by claim.** One row per claim, usable first: a verdict (usable, blocked, no approved content, content needs MLR), the claim, and why it's blocked. Under each: its supporting evidence (the trial, enrollment and result) and every asset carrying it, with MLR ID and whether it's usable. The answer's *Graph evidence* lists every path in words.
+
+</details>
 
 **Try it**
 
@@ -660,7 +719,13 @@ The orchestrator runs **gpt-oss-20b**, OpenAI's open-weight reasoning model, on 
 
 - **Why 20b:** after the routing and reliability fixes, 20b matched or beat gpt-oss-120b through the pipeline at about 60% of the latency and lower cost (see *Evaluations*).
 - **Where it runs.** The top bar's **AI platform** menu picks Workers AI or Vertex AI (ADR-021).
+
+<details>
+<summary>The model's tool-calling quirks</summary>
+
 - **Its quirks** shaped several guards: it sometimes writes a tool call into its reasoning or answer instead of calling the tool, and leaks its "harmony" channel markup into tool names.
+
+</details>
 
 **Try it**
 
@@ -718,9 +783,18 @@ flowchart LR
 
 In-process servers use an in-memory MCP transport: the real protocol, no network hop. External MCP clients reach the same servers over HTTP, behind Cloudflare Access.
 
+<details>
+<summary>How loosely typed tool inputs are accepted</summary>
+
 Tool inputs are typed, but models don't always type them exactly: the life-sciences tools accept a drug's name ("Cardivance") or its ID, and a channel or status in any case. The model still sees the strict values; only an input that matches nothing is rejected.
 
-**Life-sciences systems (mocked).** Pharma marketing runs on more than Salesforce. These read-only tools answer from the same fictional drugs, claims, MLR approvals and hospitals as the knowledge graph, so one system can be checked against another. None is a live connection:
+</details>
+
+**Life-sciences systems (mocked).** Pharma marketing runs on more than Salesforce. These read-only tools answer from the same fictional drugs, claims, MLR approvals and hospitals as the knowledge graph, so one system can be checked against another. None is a live connection.
+
+<details>
+<summary>The mocked life-sciences tools, system by system</summary>
+
 - **Aprimo** (digital assets, MLR workflow): `aprimo_search_approved_assets` (a drug's assets, MLR approval, expiry, usable now or not); `aprimo_get_mlr_review` (the medical, legal and regulatory stages, and why one is pending).
 - **Reltio** (master data): `reltio_resolve_organization` (a hospital's golden record, hierarchy, merged sources, possible duplicates).
 - **Veeva Vault PromoMats** (claims library, label): `vault_list_approved_claims`, `vault_get_prescribing_information`.
@@ -728,6 +802,8 @@ Tool inputs are typed, but models don't always type them exactly: the life-scien
 - **IQVIA** (prescription data, invented): `iqvia_get_prescribing_trends`.
 - **Salesforce Life Sciences Cloud**: `lsc_get_call_plan`, a hospital's field plan as counts of prescribers.
 - **Drupal** (the HCP website): `drupal_list_hcp_site_content` flags a live page with an expired approval.
+
+</details>
 
 Ask one question across them (is a drug's material consistent across Aprimo, the claims library and the website?) and the orchestrator calls three and points out where they disagree.
 
@@ -780,15 +856,29 @@ flowchart TB
 Salesforce is **authoritative** for campaign data; the orchestrator never invents Salesforce facts. It calls tools on a **Salesforce Hosted MCP server**:
 
 - **Agent-backed tools** each call an **Agentforce** agent defined as an Agent Script bundle. The **Salesforce agents** panel under each answer shows which (see *Structured UI*).
-  - **Northstar Campaign Creation** (a Marketing Cloud Next Campaign Creation agent): drafts, saves and refines briefs; creates campaigns and their flows. See *Marketing Cloud Next*.
-  - **Northstar Content Builder** (a Marketing Cloud Next Content Builder agent): drafts copy and content sections with the standard Draft Content and Create Section actions.
-  - **Northstar Account Discovery**: Marketing's account discovery and scoring APIs for signals, engagement and buyer groups.
-  - **Campaign Readiness and Governance**: a custom agent whose Apex actions summarize a campaign and check readiness, consent and brand rules. Custom on purpose: Marketing Cloud Next has no campaign-summary or readiness action, and its standard **Generate Campaign Insights** flow fails in this org until campaigns have sent and gathered engagement data.
+
+<details>
+<summary>The four Salesforce agents</summary>
+
+- **Northstar Campaign Creation** (a Marketing Cloud Next Campaign Creation agent): drafts, saves and refines briefs; creates campaigns and their flows. See *Marketing Cloud Next*.
+- **Northstar Content Builder** (a Marketing Cloud Next Content Builder agent): drafts copy and content sections with the standard Draft Content and Create Section actions.
+- **Northstar Account Discovery**: Marketing's account discovery and scoring APIs for signals, engagement and buyer groups.
+- **Campaign Readiness and Governance**: a custom agent whose Apex actions summarize a campaign and check readiness, consent and brand rules. Custom on purpose: Marketing Cloud Next has no campaign-summary or readiness action, and its standard **Generate Campaign Insights** flow fails in this org until campaigns have sent and gathered engagement data.
+
+</details>
+
 - **Briefs and campaigns** come only from the Campaign Creation agent's standard actions, as Marketing Cloud's own **Brief**, **BriefPlanStep**, **Campaign** and campaign **flow** records. The workbench has no custom objects or Apex for them.
 - **Other writes** (a review task, an image attachment, an inventory case for a store manager) are global **Apex invocable actions** that verify a signed confirmation.
 - **Permission check:** `check_write_access`, a read-only Apex action called before any write is prepared, runs as the signed-in user and reports each permission it checked.
 
-The model holds no write tool: only the confirmation flow calls write tools, and every write runs as you (see *Governance*). Metadata (Apex, fields, the permission set, the MCP definition) deploys through a gated CI pipeline to one approved proof org.
+The model holds no write tool: only the confirmation flow calls write tools, and every write runs as you (see *Governance*).
+
+<details>
+<summary>How Salesforce metadata is deployed</summary>
+
+Metadata (Apex, fields, the permission set, the MCP definition) deploys through a gated CI pipeline to one approved proof org.
+
+</details>
 
 **Try it**
 
@@ -844,6 +934,9 @@ flowchart TB
 
 In **Marketing Cloud Next**, a campaign starts as a **brief** and becomes a **campaign with a flow**. The workbench asks Salesforce's **Campaign Creation agent** to do this with standard actions instead of writing records itself.
 
+<details>
+<summary>The agent and its five standard actions</summary>
+
 **The agent.** `Northstar_Campaign_Creation` is an Agent Script agent built from Salesforce's `MktCloud__CampaignCreationAgent` template and published as a Campaign Creation agent. Only Agent Script agents can be Hosted MCP tools, so the workbench reaches it through the `NorthstarMarketingWorkbench` MCP server. Its **Marketing Campaigns** subagent runs the standard actions in Salesforce's required order:
 
 | Step | Standard action | What it does |
@@ -856,11 +949,16 @@ In **Marketing Cloud Next**, a campaign starts as a **brief** and becomes a **ca
 
 Its **Campaign Refinement** subagent runs **Refine Campaign Preview** on a saved preview ("make the second email shorter").
 
+</details>
+
 **How the workbench uses it.**
 1. A campaign request (the Coastline plan, or "create a campaign in Marketing Cloud") ends with `draft_campaign_brief`. The agent's brief becomes the workspace focus, field for field.
 2. **Save brief** (an action card, then a confirmation card): `save_marketing_brief` asks the agent to run steps 2 and 3.
 3. **Create the campaign** (a second card): `create_marketing_campaign` asks for steps 4 and 5.
 4. After each write, `get_marketing_records` (read-only Apex) reads back the Brief, its steps, the Campaign and the flow. The workspace shows only what Salesforce returned, never the agent's say-so.
+
+<details>
+<summary>How each call is made, and why a retry never saves twice</summary>
 
 **One request per call.** Hosted MCP agent tools take a single message, so each call carries everything the agent needs: the confirmed brief fields, or the Brief ID whose preview was confirmed. The agent is asked to include record ids in its reply, and the read-back verifies them. When you change a saved brief, the server adds the Brief ID to the Refine Campaign Preview request if the model left it out (it did in half of the live evaluation runs), so the agent needn't guess which brief you meant.
 
@@ -868,6 +966,8 @@ Its **Campaign Refinement** subagent runs **Refine Campaign Preview** on a saved
 - A save sent before and never confirmed (say, it timed out after the agent saved) whose brief Salesforce now shows is linked, not saved again. A same-named brief from another chat is left alone.
 - A brief that already has its campaign never gets a second one.
 - If the agent call fails, it checks once more, since the agent may have saved before the timeout. Only if nothing is there are you asked to try again.
+
+</details>
 
 **What stays in Marketing Cloud.** The flow is created as a draft. Choosing its audience and sender, and activating it, happen in Marketing Cloud; the workbench never sends or activates anything. Previews in this org plan email (and SMS) steps; a push request is recorded in the brief's guardrails.
 
@@ -933,12 +1033,20 @@ Not every decision belongs to the model. Each turn passes two deterministic rout
 - Other save, create or change requests: a fixed reply pointing to the confirmation flow.
 - Publish, send, delete and similar: refused.
 
+<details>
+<summary>How a question differs from a request</summary>
+
 A question about what to send ("What can we send clients?") asks for guidance, not an action, and reaches the model. Each sentence that names an action is judged on its own, so context before the question ("The Fed moved rates.") doesn't make it a request.
+
+</details>
 
 **2. Classifier and intent router.**
 - The **request classifier** labels the request's topic (claims, a target list, Fed news, inventory, …, or *off topic*). Rules label what the scenarios name, instantly; a small model call, run while the tools connect, adds labels the rules missed (a paraphrased claims question) and never removes one.
 - A clear intent picks a **scenario**, whose tools are the turn's candidates, never the whole catalog. A request no rule recognises gets the brand's catalog. The rules need specific signals and **defer to the model** when unsure, because wrong tools narrow what the model can do.
 - **Cedar policies** decide which candidates are on offer each step, from the labels and what has already run (see *The agentic gateway*). The model chooses among them; nothing forces a call (ADR-019, ADR-020).
+
+<details>
+<summary>Which request takes which route</summary>
 
 | Request | Route |
 |---|---|
@@ -966,6 +1074,8 @@ A question about what to send ("What can we send clients?") asks for guidance, n
 | A Lumera drug's materials consistent *across* systems | Three systems at once |
 
 For life sciences, the model is told only supported, on-label, MLR-approved claims can be used and groups are never people. If the chosen brand excludes the tool a request needs, the router says so instead of calling anything.
+
+</details>
 
 **Checks first, Marketing Cloud last.** Every new draft starts with its brand's claims checks and ends with Marketing Cloud's agents, whatever order the prompt implies: Lumera runs `check_clinical_claims` → `aprimo_search_approved_assets` → the brief; Harborstone `get_fed_announcements` → `match_news_to_approved_content` → the brief. The model drafts from what the checks allow and lists what it ruled out and why before asking for the brief. The header's brand decides the checks (with all brands, the one the request names). Coastline has no claims library in chat, so it starts from the restaurant's context. A revision of a brief in focus goes straight back to the agent.
 
@@ -1028,7 +1138,10 @@ flowchart TB
 
 > **Key idea:** Small models fail at tool calls in predictable ways, so each failure mode gets a specific guard.
 
-Small reasoning models fail at tool calling in predictable ways. The tool-call guard, a language-model middleware, handles each without deciding which tool the model calls (ADR-019):
+Small reasoning models fail at tool calling in predictable ways. The tool-call guard, a language-model middleware, handles each without deciding which tool the model calls (ADR-019).
+
+<details>
+<summary>The full list of failure cases</summary>
 
 | Failure | What the guard does |
 |---|---|
@@ -1041,6 +1154,8 @@ Small reasoning models fail at tool calling in predictable ways. The tool-call g
 | Runaway reasoning | Caps must-call steps at 2,048 tokens, reasoning included; a detailed request to a Salesforce agent can take several hundred alone |
 
 A mangled name looks like `summarize_campaign<|channel|>analysis`.
+
+</details>
 
 Per turn:
 - Structured timeouts cover the whole turn, gaps between chunks, and each tool call.
@@ -1096,7 +1211,12 @@ Every write (a brief, campaign and flow through Marketing Cloud's Campaign Creat
    - **Review task, image or inventory case:** the Worker signs the confirmation with HMAC. Apex verifies signature, expiry, same user and hash, then writes in **user mode**. An inventory case's contents come from the Worker, so its hash covers exactly those contents and Apex re-hashes what it receives.
 5. **Read-back.** The records are read back from Salesforce (`get_marketing_records` for Marketing Cloud), and only what Salesforce returns is shown. If the agent claims a save Salesforce doesn't show, nothing is shown as saved.
 
+<details>
+<summary>How each step shows live</summary>
+
 Each step shows live. Preparing: the plan, the permission check (how many passed), binding to a one-time confirmation. Running: the confirmation check, a look for an earlier attempt or the signing, the agent or Apex call, the read-back, the memory record. A failure marks where it stopped and why.
+
+</details>
 
 **Approved claims, word for word.** Once the chat has checked a brand's claims, each saved draft is reviewed sentence by sentence, as Journeys checks a module: a sentence stating a fact or what the product does must be an approved claim's exact text. Rewording an approved claim, restating a blocked one, or asserting what no claim says ("can improve outcomes") is flagged on the draft card with the reason, and saving to Marketing Cloud waits for a revision that clears it. Legal text, IDs and logistics (safety information, MLR IDs, send time, audience) aren't checked. The model drafts with the exact approved and blocked claims in front of it.
 
@@ -1108,7 +1228,12 @@ Each step shows live. Preparing: the plan, the permission check (how many passed
 | **You** | Reviewing exact values and confirming | — |
 | **Salesforce** | Authorization (profile, permission sets, field-level security, sharing), signature checks for Apex writes, the records, read-back | — |
 
+<details>
+<summary>The kill switches and what they turn off</summary>
+
 **Kill switches.** `WRITES_ENABLED`, `DISABLED_TOOLS` and `MEMORY_ENABLED` are Worker secrets that operators can flip without a deploy. `DISABLED_AGENTS` switches a registry agent off; the gateway denies everything it tries. Approval is separate from Salesforce writes: a workbench object becomes *approved* only through the state machine, by a person (see *Agents, prompts, models, and drift*).
+
+</details>
 
 **Read-only elsewhere.** Graph tools run read-only; only the server's fixed memory statements write, and only to the memory dataset. External-services tools read public data only (holidays, weather alerts, Federal Reserve press releases) and send nothing about customers. No customer PII enters prompts, logs or the graph.
 
@@ -1144,12 +1269,26 @@ flowchart LR
 
 - **Markdown answers.** The model may use concise Markdown, rendered with `react-markdown`, which never renders raw HTML, so model output can't inject markup.
 - **HXL cards.** Salesforce's HXL widgets (MCP Apps) let an agent action return a typed, interactive card, such as campaign readiness. Where HXL can't render, an accessible **native fallback** is built from the same contract.
+
+<details>
+<summary>How native cards show each item</summary>
+
 - **Item rows on native cards.** A list result shows one row per item: a colored status (usable, waiting, blocked), the item, a monospaced ID and a readable date, so an MLR ID and its expiry stand out. A row can list what stands behind it, such as a claim's trial evidence and the assets that carry it.
+
+</details>
+
 - **Salesforce agents panel.** Under each answer that called Salesforce: each call's agent, type and template, subagent, and actions (with their flow or Apex targets). The confirmation card shows the same for its write.
 - **Graph evidence panel.** Knowledge-graph paths render as directional chains, each with a screen-reader text alternative. Claims checks show claim by claim in *The workspace*.
+
+<details>
+<summary>Write progress, the case confirmation and the left rail</summary>
+
 - **Live write progress.** Accepting an action card shows **Preparing…** and the preparation steps until the confirmation card appears. **Confirm** disables the buttons and shows the write's steps as the Worker reports them. Afterwards a collapsible **Behind the scenes** record keeps each step and its duration, opening by itself if the write fails.
 - **Inventory case confirmation.** The store manager, the forecast, and each low item (on hand, needed, the dishes it goes into). After you confirm, a banner links to the Case.
 - **Left rail.** Data sources fold into one line (how many are ready, which are offline); open it for the full list. The **MCP Gateway** box below stays open: the Salesforce connection's state, how many governed tools are connected, and which.
+
+</details>
+
 - **Use-case library.** Every scenario, filterable by team, with prompts, systems and data flow. **Try it** fills the chat box without sending.
 - **Accessibility.** Targets WCAG 2.2 AA; tested in Chrome and Edge.
 
@@ -1157,7 +1296,12 @@ flowchart LR
 
 **One scope in the header.** **Brand** and **Run as** apply everywhere: the chat (the message box suggests a prompt for the brand), the Graph's brand filter, the use-case library, the Architecture workspaces and the turn history. **AI platform** picks where the models run: Workers AI or Vertex AI. It lists only what this server can reach, says why an option isn't set up, and is greyed out with one choice (ADR-021). Choices are remembered in the browser.
 
+<details>
+<summary>Every page's address</summary>
+
 **Every page has an address.** Each left-rail page has a path: `/squad`, `/architecture`, `/journeys`, `/graph`, `/learn`, `/evaluations`, plus `/history` and `/use-cases` from the chat (itself `/`). Reloads stay put, links open the page, and Back returns to the previous one.
+
+</details>
 
 **In this demo**
 
@@ -1188,15 +1332,29 @@ flowchart LR
 > **Key idea:** Every turn leaves a trace for engineers and a history for reviewers.
 
 - **Route map** (above the message box, in the browser and in Lightning) lights each component a turn passes through, pulsing on the one working now: the page, Cloudflare Access, the policy router, AI Gateway and Workers AI, then the agentic gateway and each MCP server. A Lightning turn also shows the Apex relay. The model hop names the AI platform the turn actually ran on (ADR-021). A turn that ran on Google Cloud says so in its trace, and its map shows Identity-Aware Proxy in place of Access.
-  - It reads the same trace as the view below, not a script: a turn the policy router answers leaves the model dark; a tool the gateway denies marks the gateway, not the system behind it; a failed tool marks its system. The first hops are implied (a request can't reach the Worker without them); the router, model and tools are recorded.
-  - The finished route stays until the next message. It follows the query only: a confirmed write runs after the turn and shows its progress on its confirmation card. Lightning polls about once a second, so a shorter hop can appear already passed.
+
+<details>
+<summary>How the route map reads a turn</summary>
+
+- It reads the same trace as the view below, not a script: a turn the policy router answers leaves the model dark; a tool the gateway denies marks the gateway, not the system behind it; a failed tool marks its system. The first hops are implied (a request can't reach the Worker without them); the router, model and tools are recorded.
+- The finished route stays until the next message. It follows the query only: a confirmed write runs after the turn and shows its progress on its confirmation card. Lightning polls about once a second, so a shorter hop can appear already passed.
+
+</details>
+
 - **Live tool calls** under the trace while an answer streams: system and tool, a spinner until the result returns, then a check or a cross.
 - **Technical trace** at the top of each answer, so the streaming answer doesn't move it: every lifecycle event in order, with timing. It opens while the answer streams (or when something went wrong) and stays open until you close it.
-  - turn start; step start and finish (finish reason, token counts); reasoning start and end, with the reasoning redacted; text start and end
-  - tool input and output, with the Salesforce agent, subagent and actions behind each Salesforce tool; errors; recovery messages; the outcome, including an answer written from a tool's result because the model wrote none
-  - a failed or empty tool result names the system that answered (Aprimo, the knowledge graph, Salesforce) and whether the call failed or returned nothing usable
-  - a closing line: the turn's total time, **tokens** (input plus output, summed over steps) and **tool calls**
+
+<details>
+<summary>Every event the trace records, and the operator logs</summary>
+
+- turn start; step start and finish (finish reason, token counts); reasoning start and end, with the reasoning redacted; text start and end
+- tool input and output, with the Salesforce agent, subagent and actions behind each Salesforce tool; errors; recovery messages; the outcome, including an answer written from a tool's result because the model wrote none
+- a failed or empty tool result names the system that answered (Aprimo, the knowledge graph, Salesforce) and whether the call failed or returned nothing usable
+- a closing line: the turn's total time, **tokens** (input plus output, summed over steps) and **tool calls**
 - **Workers Logs** for operators: a failed Salesforce or agent call is logged with its error and stack, even when the user sees a friendly message; a failed write or confirmation logs the step where it stopped. Request content is never logged.
+
+</details>
+
 - **Turn history** (Chat → History → Turns): each utterance with the orchestrator's interpretation, tool calls with inputs and results, the outcome, and the brand and role it ran under; each row shows seconds, tokens and tool calls. Filterable; kept 24 hours per user.
 - **Memory** (History → Memory): what the workspace remembers across chats, with provenance, **Reopen** and **Forget**. See *Long-term memory*.
 - **Audit export:** a JSON download of the user's confirmed writes, memory remembers, reopens and forgets, and turn summaries.
@@ -1261,7 +1419,15 @@ Latency and tokens are recorded before judging. The Evaluations view shows each 
 
 **Quantifying the qualitative.** Two judges from different families (GLM-5.3 and DeepSeek V4.1 Flash; a model never judges its own family) rate each answer 1 to 5 on anchored scales: context fidelity, accuracy, clarity, brand voice, engagement, marketer usefulness, and **would act**, which the judge answers as the audience persona on a standard purchase-intent scale (reported as top-2-box, the share of 4s and 5s). Ratings combine into a 0 to 100 **Quality Index** with a 95% bootstrap interval, alongside how often the judges agree. Before a run is published, `pnpm eval:calibrate` checks that each judge ranks hand-written strong, mediocre and weak answers in the right order. These are judge scores, not customer behavior: use them to rank models, not to forecast click rates.
 
+<details>
+<summary>Why one fixed model plays the Marketing Cloud agent</summary>
+
 **A fixed stand-in for the Marketing Cloud agent.** The real agent's copy doesn't depend on the orchestrator model, so every contestant would get the same canned text. One fixed reference model plays the agent, so what differs is what the orchestrator asked for (weather, time, menu, past results) and how it presents the result.
+
+</details>
+
+<details>
+<summary>How cost is estimated, capped and throttled</summary>
 
 **Cost.**
 - Every turn, judge call and simulated-agent call is priced from Cloudflare's published Workers AI per-million-token rates (neurons derived at $0.011 per 1,000): list rates before account-level allowances, shown to four decimal places.
@@ -1270,11 +1436,18 @@ Latency and tokens are recorded before judging. The Evaluations view shows each 
 - Kimi K2.6, GLM-5.3-Flash and DeepSeek V4 Pro left the roster when Workers AI retired them on November 20, 2026. GLM-4.7-Flash and Llama 4 Scout scored low and were retired in ADR-011.
 - Cloudflare limits paid frontier models to 20 requests a minute per model, so the runner throttles every call (turns, judges, simulator) per model, serves contestant turns before judge calls, and refreshes its sign-in token during long runs.
 
+</details>
+
+<details>
+<summary>Routing checks and the life-sciences scenarios</summary>
+
 **Routing checks.** `pnpm eval` runs the routing set through the production policy and intent routers, without a model, on every verify. In the live run, read-style Salesforce tools are fixtures, so scores measure orchestration, not Salesforce agent quality. A held-out set of paraphrases guards the router against overfitting. The first published run found a real routing bug: any prompt mentioning "campaign" forced the summary tool.
 
 **Life-sciences scenarios.** Four Lumera Therapeutics scenarios:
 - A target list, a claims check and a hospital plan, whose rubrics check that the answer cites the trial and MLR approval IDs the tools returned, blocks unsupported and off-label claims instead of rewording them, and names groups rather than clinicians.
 - One drug's materials compared across Aprimo, the claims library and the HCP website; the rubric checks that the answer names the systems, flags the page that is live with an expired approval, and says the systems are mocked.
+
+</details>
 
 **Try it**
 
@@ -1311,7 +1484,14 @@ flowchart TB
 > **Key idea:** Generated images stay private drafts until a person confirms, and Salesforce verifies the file's hash.
 
 **FLUX.2 klein** on Workers AI (following the top bar's **AI platform**) generates a 1024×1024 draft from a bounded prompt, with PII and injection checks on the concept. Each draft records which model drew it.
+
+<details>
+<summary>Where drafts are stored</summary>
+
 - Drafts are stored privately in **R2** for 7 days, with provenance (model, prompt version, content hash) in **D1**.
+
+</details>
+
 - The variant gallery lets you select, reject or revise.
 - **Attach to campaign** runs the confirmation flow: Apex checks the PNG's SHA-256 against the confirmed hash, creates one Salesforce file on the Campaign, and reads back its checksum and link.
 
@@ -1412,6 +1592,9 @@ flowchart TB
 
 **Beyond marketing.** Two use cases (sales outreach and severe-weather impact) each pair a free, keyless public API with the knowledge graph, and **the graph supplies the key element**. Both APIs are called live from the Worker through an in-process **external services** MCP server. An API failure comes back as a tool error, and the answer says so instead of guessing.
 
+<details>
+<summary>Sales outreach, weather impact and the inventory check, step by step</summary>
+
 **Sales: buyer-group outreach around local holidays.** "Plan outreach to Acme Outfitters' buyer group for the next month."
 1. `plan_account_outreach` walks from the account to its buying-role personas: each one's engagement, when they last engaged, and **the channels they have marketing consent for** (Persona → HAS_CONSENT → ConsentScope → FOR → Channel), plus the account's headquarters country.
 2. `get_public_holidays` asks **Nager.Date** for that country's upcoming public holidays.
@@ -1429,7 +1612,13 @@ flowchart TB
 4. **Code, not the model, decides what's low.** Each weather-lifted item's forecast need is its typical daily use, raised by the lift on days whose weather lifts a dish made with it; it's low when what's on hand won't cover that. The result becomes an **Inventory risk** card and an **action card**, and the answer step is told exactly this list.
 5. Accepting the card prepares a **Salesforce case** for the store manager. Its contents are hashed into the confirmation's request hash; after you confirm, the `create_inventory_case` Apex action re-hashes what it received, refuses any mismatch, finds the manager's Contact by title and restaurant, creates the Case as you, and reads it back. The graph and prompts carry the manager's name only, never contact details. Nothing is ordered.
 
+</details>
+
 **Financial services: Harborstone Wealth**, a fictional wealth-management brand under Northstar. Three use cases (filter **Financial services**) show the graph in a regulated industry, where only content a registered principal approved can go out, exactly as approved, with its required disclosures.
+
+<details>
+<summary>The three Harborstone use cases</summary>
+
 - **Market news to pre-approved content.** "The Fed just announced its rate decision. What pre-approved content can we send clients today?"
   1. `get_fed_announcements` reads the Federal Reserve's public press feed, finds the latest FOMC statement, reads its decision (raise, lower or maintain; the size; the new target range) and maps it to a market event.
   2. `match_news_to_approved_content` walks MarketEvent ← **RESPONDS_TO** ← ContentAsset → **APPROVED_UNDER** → Approval and → **REQUIRES** → Disclosure. It returns what's ready to send (approval IDs, expiry, disclosures); what's blocked and why (an expired or pending approval, or a **FAILED** compliance rule); reach per channel under marketing consent; and past responses, which show sends within hours of the news opened far better than next-day sends.
@@ -1437,11 +1626,19 @@ flowchart TB
 - **Acquisition announcement, released on time.** `prepare_deal_release` orders the embargoed package through **RELEASED_WITH** → Deal and checks each piece's audience through **ADDRESSED_TO** → Segment → **HAS_CONSENT**: advisors' FAQ first, then the press release, then client letters. The acquired firm's clients get service notices under their client agreement, never marketing, until they opt in, so an SMS that also failed its disclosure check is blocked for both reasons.
 - **Account plan to grow assets under management.** `build_aum_account_plan` walks Client → **HAS_SIGNAL** → Signal → **SUGGESTS** → Product for products the client doesn't hold, sizes each play from estimated assets held elsewhere, counts how many similar clients hold it, and finds approved content through Product ← **EXPLAINS** ← ContentAsset. Each contact gets a channel with approved content they consented to, so the 30/60/90-day sequence never sends content on an unapproved channel. "Activate the plan" drafts a Marketing Cloud brief from it.
 
+</details>
+
 **Life sciences: Lumera Therapeutics**, a third Northstar brand, shows pharmaceutical promotion, where a claim is only as good as the trial, label and MLR approval behind it. Everything is fictional: the drugs (Cardivance for heart failure, Glucora for type 2 diabetes, Neurelva for chronic migraine), the trials and their results.
+
+<details>
+<summary>The Lumera use cases, tool by tool</summary>
+
 - **Targets.** `build_hcp_target_list` ranks hospitals and prescriber groups for a drug by labeled-indication patients × (1 − Lumera's share) × a formulary access weight × decile. Where a drug isn't on formulary or is under P&T review, the approved value dossier comes before any detailing. Groups carry opted-in counts per channel (email, portal, rep visit), never people.
 - **Claims.** `check_clinical_claims` walks Drug ← **CLAIMS_ABOUT** ← ClinicalClaim ← **SUPPORTS** ← ClinicalTrial, then compares **INDICATED_FOR** (on label) with **INVESTIGATED_FOR** (not). Content that **CARRIES** a claim is usable only with a current MLR approval, the safety information and, for Cardivance, the boxed warning. The “superior to every ARB” claim has no trial; the HFpEF claim is off label and its trial has no results; an expired approval blocks a supported Glucora claim.
 - **Hospitals.** `plan_hospital_engagement` reads each drug's **ON_FORMULARY** status and days to P&T review at a hospital, the patients at stake, whether the value dossier is usable or still in MLR, and the prescriber groups' consent and engagement, then orders the next steps.
 - **In the Architecture view**, Lumera runs through the same lifecycle as Harborstone: the authoring agent refuses a claim whose approval is draft or rejected, the farm flags superiority language, and a module can't be approved while its study report has lapsed.
+
+</details>
 
 **Try it**
 
@@ -1523,9 +1720,17 @@ Most marketing tools copy things forward (plan to brief to module), and each cop
 
 **Workspaces are manifests**: who it's for, which objects it lists, which tiles it composes, which agents and services it calls. One renderer turns any manifest into a screen with the same loading, empty, error and permission-denied states. The **Command Center** lists every object by lifecycle stage with the person whose decision it awaits; **Brief Builder**, **Module Library**, **Approvals** and **Performance** are other manifests over the same objects. **Run as** in the header switches between a brand planner's, marketer's, reviewer's and brand lead's view: the role opens that person's workspace and is sent with each request, and the server enforces what it may do.
 
+<details>
+<summary>How each screen explains itself</summary>
+
 **Each screen explains itself.** The Architecture view opens with what you're looking at, why it beats copying claims by hand and reviewing over email, and where your role comes in: the seven steps, who decides at each, yours highlighted, and a button to your step's workspace. Each workspace opens with a card: what it is, why it's better, where it fits, something to try for the header's brand, and the technical idea it shows. The words live in `apps/web/src/architecture/guide.ts`, beside the manifests, so they follow brand and role as the data does.
 
+</details>
+
 **Journeys.** The **Journeys** view (beside Architecture in the workspace rail) gives each brand's goal to a real orchestrator, which plans the work and hands each step to a real subagent: a brief from an approved plan, content from approved claims (and what it refused), red-team probes, the evidence packet, submission, **your decision** as reviewer, then what comes next. You watch each subagent: who it acts for, its model, each tool call and the gateway's decision, and what it made. Nothing is scripted, so runs differ; one takes about a minute.
+
+<details>
+<summary>How the asset preview is built</summary>
 
 **The asset, as it is built.** Beside the steps, the asset composes itself from the agents' tool results, in its channel wrapper (an email with sender, audience, send date and subject, or a push or SMS on a phone).
 - The library's images (logo, banner, an image beside the claims) appear as placeholders with alt text and library ID, since the library is mocked.
@@ -1534,9 +1739,16 @@ Most marketing tools copy things forward (plan to brief to module), and each cop
 - Click a block for its author, the tool call and policy that allowed it, its source claim, and what the checks found. The atomization agent's channel versions appear as tabs, each with its character count against the channel limit.
 - The preview is derived on the page from the flow's events (`apps/web/src/architecture/asset.ts`); nothing extra is fetched.
 
+</details>
+
+<details>
+<summary>Channels and where the data lives</summary>
+
 **Channels.** An approval card is composed once with brand rules (accent, disclosure label, rule version), then rendered four ways: React, an **Adaptive Card** for Teams and Outlook, **data for a Lightning Web Component**, and an **MCP Apps** resource for MCP clients such as Claude. Change one brand rule and all four change. The preview renders the payloads on screen; nothing is sent to Teams, Outlook or Copilot.
 
 **Where the data lives.** Seed objects for the three brands (Harborstone Wealth, Coastline Kitchen, Lumera Therapeutics) ship in code; Lumera's brand rules label its disclosures as safety information. What you create (a plan, a module, a gap, a new claim version) and every approval state go to D1, scoped to you, and expire with the 24-hour audit. They are not in the Neo4j graph; making them graph nodes is a later step.
+
+</details>
 
 **Try it**
 
@@ -1608,13 +1820,21 @@ A governed system can't have side doors. **Every architecture capability, and ev
 - **Agents can never hold a decision.** A forbid covers `transition`, `supersede_claim` and `accept_optimization`. An agent may propose; only a person decides.
 - **Brand scope.** A call on a brand outside the signed-in user's scope is denied. With a brand chosen in the header, another brand's tools are denied by `forbid-out-of-scope-brand` and never offered to the model; shared tools such as the graph overview stay. The model is told what each brand sells, so "Cardivance" with Lumera selected is in scope, and "the Sweep Account" is named as Harborstone's when it is not.
 
+<details>
+<summary>How Cedar decides, for offered and called tools</summary>
+
 **Real Cedar, one decision for offering and calling.** The policies are Cedar files (`packages/architecture/policies/`), schema-checked in CI and evaluated by the Cedar engine (`@cedar-policy/cedar-wasm`) on both hosts (ADR-020). Before a model step, only permitted tools are **offered**; when the model calls one, the gateway checks it **again** in the same context. So a model is never shown a tool it may not use, nor uses one it wasn't shown. The context carries the brand, role, surface, the chat's classifier labels, the tools already run, and (in the pharma lifecycle) the stage, so a policy can say "claims first", "ground before drafting", or "at the content stage the copy lead reads the claims library, approved assets and brand guidelines". **Agents → Policies** shows the files; every decision is logged with the policy id that made it.
 
 **A model's calls get no shortcut.** For an agent running on a model, the gateway checks the run's central action before calling the model, then each tool call separately, as that agent. A tool outside its grants is denied like any caller's, and the denial returns to the model as the tool's result. The sample-flow orchestrator is checked before a flow starts or resumes and on every step; disabling or retiring it withholds its policy, so its kill switch stops a flow mid-way.
 
+</details>
+
 **2. Who is calling, and for whom?** The gateway mints a signed, **short-lived token per invocation** naming the caller (`agent:module-authoring`) and, in an `act` claim, the user it acts for (the OAuth token-exchange pattern). The service checks the token was minted for this action and user before running. No shared credentials; no agent acts as itself.
 
 **3. Was it recorded?** Every decision, allowed or denied, is logged with its policy, caller and correlation id. The **Trust** view draws any call's **identity chain**: user, surface (role, brand, market), Worker, gateway, agent, service. A denied call stops at the gateway and says so.
+
+<details>
+<summary>How each kind of caller passes the gate</summary>
 
 **Every caller, one gate.**
 - **The orchestrator** is an agent too: each tool the model calls is authorized as `tool:<name>`. Existing kill switches still apply, and `DISABLED_AGENTS` switches a whole agent off.
@@ -1622,7 +1842,14 @@ A governed system can't have side doors. **Every architecture capability, and ev
 - **Partner agents** are registered with a contract, identity, policy and an A2A-style **Agent Card** (see **Agents**). Their prompts stay with their owner; the gateway governs the call, not the thinking.
 - **The workbench as a channel:** `/mcp/workbench` exposes read tools, search and `propose_transition` to MCP clients through the gateway, and no tool that approves, publishes, sends or deletes.
 
+</details>
+
+<details>
+<summary>What the gateway doesn't cover yet</summary>
+
 **Not yet.** Confirmed Salesforce writes keep their own signed-confirmation audit, outside the gateway log. The Salesforce MCP portal call is authorized as the orchestrator calling that tool, not as a separate hop.
+
+</details>
 
 **Try it**
 
@@ -1693,11 +1920,16 @@ The lifecycle runs **Plan → Audience → Brief → Create → Substantiate →
 
 **What an agent may write.** Its words read as an email: a subject line, an opening before the claims (a greeting and the occasion, such as a meeting and its date) and a closing after them (what to do next, a sign-off). They may name the product, the occasion and dates, but may not assert anything a claim would have to support: a number, price, outcome, benefit, comparison or reason ("prevents", "well tolerated", "shows", "better", "because"). A fragment such as a bare "See" is rejected. A sentence that asserts is rejected with the words that did it, so the agent can try again. A topic with no substantiated claim is refused and recorded as a gap, even if the model leaves it out.
 
+<details>
+<summary>What each agent does, from plan to module</summary>
+
 **Plan and brief.** The *content plan agent* reads the calendar and past results and proposes waves as structured demand: theme, segment, channel, date, number of modules, and why. The *scenario agent* estimates what a change does (move a send, drop a channel, change an audience) from the audience size, the channel's baseline click rate and the brand's best past send, with a lift when a send lands on a market date. The *brief agent* drafts a brief that inherits the plan by reference.
 
 **Reuse and create.** The *reuse agent* ranks existing modules by meaning (a local hashing embedder; Vectorize would implement the same interface) and past results, and flags any that cite a superseded claim. The *module authoring agent* **cites or refuses**: every fact is an approved, substantiated claim or a disclosure the claim requires, and anything it can't cite becomes a **gap record**, not text. The *atomization agent* makes channel variants and never shortens a claim; if one doesn't fit a channel, it says so.
 
 **Images are chosen by the service, not the agent**, from the brand's asset library (mocked: Aprimo for Lumera and Harborstone, Marketing Cloud Content Builder for Coastline): the logo, a banner matched to the wave's theme, and an image beside the claims. It takes only images that are approved, in usage rights on the send date, and show no claim the module doesn't cite (a chart of a refused claim stays out), and lists every image it passed over with the reason. A push keeps only the banner; a text message has no image. The web app serves the files from `/library`: logos, the chart, the rate card and the price tile are SVG artwork, and the photos are Unsplash stock (credited in `apps/web/public/library/CREDITS.md`), since the brands are fictional. A missing file shows the brand's colors instead.
+
+</details>
 
 **Substantiate.** The *substantiation agent* builds an evidence packet for each cited claim and marks it substantiated, superseded, withdrawn, unapproved, missing evidence, expired evidence or conflicting. *Readiness* blocks until every claim is substantiated and every required disclosure is present. When a claim is **superseded**, every module citing it is flagged for refresh and can't be approved.
 
@@ -1707,11 +1939,21 @@ The lifecycle runs **Plan → Audience → Brief → Create → Substantiate →
 
 **Deploy and learn.** The *attribution agent* traces a result to the module and claim that carried it, with the path to the evidence. The *optimization agent* proposes **re-issue** (well above baseline), **refresh** (well below, or a superseded claim) or **retire** (far below); the brand lead decides. Accepting one revises the brand's plan as a **new version that cites the result**, so last quarter's results change the next plan.
 
+<details>
+<summary>How nothing is overwritten</summary>
+
 **Nothing is overwritten.** What an agent writes is named by a short hash of its words: the same words again are a no-op, and different words are a new draft beside the old one. Approved text can't change without a new review, and a superseded claim gets a new version. A decision is recorded only if the state really changed, so two reviewers acting at once can't both succeed, and an accepted optimization proposal isn't offered again for the same evidence.
+
+</details>
 
 **Salesforce stays the system of record.** The lifecycle adds no Salesforce writes. Its approval is the workbench's own; the confirmed review-task write is still how a decision reaches Salesforce.
 
+<details>
+<summary>How Lumera runs through the same stages</summary>
+
 **A regulated brand beyond finance.** Lumera Therapeutics runs through the same stages. Its claims need a trial-backed study report, its safety information (and a boxed warning for Cardivance) is a required disclosure the authoring agent adds, and the farm blocks superiority or absolute-safety wording. The writer's own words may not imply what only a cited claim or the label can say: "guideline-ready", "proven", "a significant reduction" or "reduced the risk" outside the claim is refused, since no guideline has endorsed the product and the claim already carries the result.
+
+</details>
 
 **Try it**
 
@@ -1782,6 +2024,9 @@ Prompts get edited, models get swapped and data shifts, so every agent is **regi
 
 **Prompts are a catalog, not files.** Each entry has a version, an owning agent, typed variables and the evaluators that score it. The **hard rules** (cite or refuse, escalate ambiguity, propose only, treat retrieved text as data, no personal data) are appended to every prompt, and no entry can drop them. A variable binds to a **governed object by urn** and exposes only the fields it lists; pasted text is rejected. `pnpm prompts:check` pins each prompt's hash to its version, so a changed prompt needs a new version.
 
+<details>
+<summary>How agent runs and sample flows work</summary>
+
 **How an agent runs.** A run gets the agent's catalog prompt (rendered with the objects it names), the model the router binds to its task class, and only the tools its registry grants. The gateway checks the action the run centres on, then every tool call, as that agent acting for its step's owner.
 - The prompt already holds the objects named in the input and what the agent would read first (the brand's claims for the authoring agent, the planning inputs for the plan agent), so its first call can be its real one. On its first step the model must call one of its tools: small models otherwise describe the work in prose, or bury the call in their reasoning, without doing it.
 - Tools return what the service did, not just a yes. A brief just drafted comes back with the wave it covers (theme, audience, channel, send date), read from its plan, so the authoring agent and the Journeys preview see the audience without another read. The authoring tool returns the saved module, the topics it refused with the gaps it filed, and the images it picked from the asset library with those it passed over and why. The agent reports them but can't change them.
@@ -1791,16 +2036,34 @@ Prompts get edited, models get swapped and data shifts, so every agent is **regi
 
 **What a model may add.** The red-team agent can report a concern the probes missed, as advice to the reviewer; it blocks nothing. Only the deterministic probes can block approval: a model's say-so should never stop a person's decision, nor be what lets one through.
 
+</details>
+
 **Models are routed, not wired.** Agents declare a *task class* (orchestrate, draft, classify, judge, embed, score) and the router binds a model at run time. Each class has a **champion**; a **challenger** is shadowed on a share of turns, never in front of a user, under a daily cost cap. A challenger replaces the champion only by beating it on the same evaluations, through a pull request. Planning and drafting run on **gpt-oss-120b**, with gpt-oss-20b as challenger; classifying agents stay on gpt-oss-20b, since the services they call decide (ADR-011); the chat orchestrator stays on `gpt-oss-20b` (ADR-005, ADR-009).
+
+<details>
+<summary>Where the models run, locally and in tests</summary>
 
 **Where the models run.** Deployed, on Workers AI through AI Gateway. Locally, `pnpm dev:local` uses local D1 and R2 with real Workers AI (a Worker name of its own keeps the remote-bindings proxy off the Access-protected domain). The hermetic worker tests select a scripted stand-in with `AGENT_MODEL=scripted` that calls each agent's real tools, so the gateway, services and persistence are tested; no deployed environment sets it. `AGENT_CHAMPIONS` can name another catalog model for a task class in one environment.
 
+</details>
+
+<details>
+<summary>The thirteen evaluators and the answer-quality judge</summary>
+
 **Thirteen evaluators:** tool selection, grounding, cite-or-refuse, claim accuracy, disclosure presence, brand rules, personal-data leakage, prompt-injection resistance, policy adherence, write discipline, answer quality (a judge), latency and cost. Every agent run is scored from its own trace. Answer quality is judged by **Clef**, Cloudflare's decision model (the *score* task class): it answers three typed questions about each run (did it do the task, is its summary grounded in the tool results, could a marketer act on it) with probabilities, not prose, and bills input tokens only. Clef gives no reasons and isn't calibrated yet, so its score is shown but not part of drift.
 
+</details>
+
 **Drift.** Each agent has a baseline. When an evaluator's mean over the last twenty runs falls more than 0.15 below it (with at least five runs), the agent moves to **constrain**: it keeps its reads and loses everything else until a person reviews it. The hourly job and the **Run drift watch** button run the same check.
+
+<details>
+<summary>How drift is measured for each evaluator</summary>
+
 - Deterministic evaluators have a baseline of 1; measured ones (latency, cost) use their threshold, since a model's timing varies (a run within 20 seconds scores 1 on latency).
 - Policy adherence counts only the gateway's denials; retrying wording a service sent back is the agent working. When the gateway refuses a subagent during a flow, the orchestrator is told it is policy and stops delegating to that agent rather than retrying.
 - Content scores (claim accuracy, disclosures, brand rules) count only factual statements in content the agent wrote or moved forward; its own framing is checked to state none when saved. An agent that reports a flawed module's flaws, such as the readiness agent refusing to submit an email whose evidence has expired, did its job, so those flaws aren't its drift.
+
+</details>
 
 **Staged autonomy.** Evidence also sets the autonomy an agent has *earned*: assistive, then orchestrated at twenty clean runs, then agentically led at a hundred. Raising a level is a pull request, and no level removes the human gate.
 
@@ -1879,7 +2142,12 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 - **copy lead**: the line, the recurring themes and copy for each placement
 - **channel planner**: the channels to buy, spend and dates for each, and the results to expect
 
+<details>
+<summary>How messages pass between the agents</summary>
+
 **How the agents talk.** Assignments, hand-backs and send-backs pass between the lead and a spoke. A spoke that builds on another's saved work first asks it with `ask_teammate`, and the other answers from its saved work (`answer_teammate`). Every message is logged and drawn live on the map. The lead acts through one tool, `next_step` (offered, not forced), and hands out a piece only once the pieces it depends on are kept. Each spoke is offered only its own reads, `ask_teammate` and its save; from its fifth step, only the save.
+
+</details>
 
 **Rules are code, not prompts.** Each spoke saves through one tool, and a service checks the work whatever the model wrote: findings must cite real data ids (cite or refuse); the palette must come from the brand book, and no image may show what it forbids; copy must fit each placement's character limits, avoid banned phrases and carry any required disclosure; the channel plan must respect minimum spends, the budget and the brief's window. A refused save comes back with every problem for the model to fix. A refusal for a missing field names the field and the values it accepts, because a model told only that its call was wrong tends to repeat it. Once the pieces are in, reconciliation finds clashes (a channel bought with no copy, copy for a channel not bought, an audience the analyst didn't recommend), and the lead resolves each or sends the piece back. The client gets a **proposal** and decides.
 
@@ -1892,22 +2160,43 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 - A request for changes reaches the lead in the person's words, and the lead sends back the affected pieces. Its limit of two send-backs per spoke resets after each decision.
 - A waiting run is saved with the lead's conversation and rebuilt from its event log when the person decides, so it survives a reload.
 
+<details>
+<summary>How a run is scored</summary>
+
 **Evals.** Every run is scored when it ends, from its own events: whether it reached an approved proposal, how often the rules refused a save, how well findings are grounded, whether the plan uses the budget well and puts money where the audience responds, whether every bought channel has copy, how the agents coordinated, whether spokes answered each other, and whether the team acted on people's requests for changes. A request isn't a failure (people ask for changes, and the eval runner asks on purpose): each scores by whether the same person approved the next version, and the detail still shows how many first versions were approved. A judge model scores the proposal on five criteria from 1 to 5; the overall score is 70% checks, 30% judge. The judge is always the Workers AI judge champion, whichever provider ran the squad, so providers are compared by the same yardstick.
-- The **Evals** tab shows the run's scorecard and this session's runs averaged per provider. Session metrics stay in this browser (local storage), never on the server, and count only runs this reader finished or stopped for a person and replays played or skipped to the end, scripted runs included, each labelled with its source. **Reset session metrics** starts afresh.
+- The **Evals** tab shows the run's scorecard and this session's runs averaged per provider. Session metrics stay in this browser (local storage), never on the server, and count only runs this reader finished or stopped for a person and replays played or skipped to the end, scripted runs included, each labelled with its source. **Reset session metrics** starts afresh, and **Reset session** at the top of the page also clears the run on the page (runs in the shared library stay).
 - `pnpm eval:team` runs the reference briefs on each provider against a running workbench, plays the people (`--feedback` has each ask for changes once) and writes a comparison report.
+
+</details>
 
 **The semantic layer.** No agent reads a raw table. Each data tool is a named query on a governed layer that defines every entity (segment, competitor, signal, channel, guideline) and metric once: formula, grain, unit, source and owner. `query_semantic_layer` queries it directly; `define_term` resolves a business word ("CPC", "lapsed loyalty members") to its meaning here. Projection formulas (impressions, clicks, cost per click) live only in the layer, so the channel planner, the lead's reconciliation and the proposal can't disagree about a number. The page shows which definitions each agent used.
 
-**Under the hood.** One panel holds each agent's grants and calls, the infrastructure, the semantic layer, the evals and people's decisions, as tabs that change only when you pick one. It lights the layers each event passes: the event stream to the page; the lead's coordination loop; the models, each call metered; the agentic gateway, which checks every tool call as `team:<tool>` and mints a token for it; tools and the semantic layer; the rule services; the agent-to-agent bus; the run's state, saved to D1; and operations, where an operator disables or constrains an agent without a deploy.
+<details>
+<summary>The platform layers each event passes</summary>
+
+**Under the hood.** One panel holds the agents at a glance (state, model, tool calls and guardrail hits; everything else is in each agent's details), a **tool library**, the infrastructure, the semantic layer, the evals and people's decisions, as tabs that change only when you pick one. The tool library lists every tool the gateway can grant the squad, with what it does, its kind and which agents hold it, and highlights the tools used in this run and earlier in this session. It lights the layers each event passes: the event stream to the page; the lead's coordination loop; the models, each call metered; the agentic gateway, which checks every tool call as `team:<tool>` and mints a token for it; tools and the semantic layer; the rule services; the agent-to-agent bus; the run's state, saved to D1; and operations, where an operator disables or constrains an agent without a deploy.
+
+</details>
 
 **Model providers.** A switch runs the same squad on open models, **Anthropic** (Claude through the official Anthropic SDK) or **OpenAI** (the Responses API). Only the model changes; tools, gateway, semantic layer, rules and bus stay the same.
+
+<details>
+<summary>How each provider's requests are sent</summary>
+
 - **Open models follow the top bar's AI platform:** Workers AI, through AI Gateway. Each run records that platform, so the switch, the run summary, each agent's details and the run library name the one it actually used, not the host's.
 - **Vendors follow the host.** Anthropic and OpenAI requests go through the Worker's AI binding to AI Gateway's provider endpoints with no vendor key on them, so the gateway supplies the key stored on it; Cloudflare-billed fallback is off.
 - Claude Opus 5.5 doesn't accept a forced tool choice, so a forced step asks for automatic choice and names the tool in a system message; Claude's thinking blocks are replayed unchanged on the next turn.
 
+</details>
+
+<details>
+<summary>Opening an agent and replaying a run</summary>
+
 **Opening an agent.** Click an agent on the team map (or press Enter on it) to see its role, tier and model, with the provider, AI Gateway and effort; the exact system prompts it sent, one per distinct prompt, with the tools offered, the tool choice and its settings (each recorded as a `prompt` event when first sent, so a replay shows it too); its usage (model calls, input, cached and output tokens, model time, its share of the run, and an estimated cost from the model's price); every message it sent and received, grouped by the other party; and every tool call with the gateway's decision, its input and result, plus the work it saved. Read tools such as `get_competitors` take no arguments, since the run's brand decides what they return, so they show "No arguments".
 
 **Replaying a recent run.** Every run, on any brand, mode or provider, goes into a shared run library in D1 (`team_run_library`): the last ten, newest first, readable by anyone who opens the page. Other transcripts expire after 24 hours; these ten stay until newer runs replace them. Each row holds the run's event log and when each event was sent. **Replay a recent run** plays one through the same reducer a live run uses, keeping the run's gaps between events (a person's wait or a slow model call is cut to a second and a half), at 1×, 2× or 5×, or all at once, with pause and skip to end. A replay calls no model and takes no decision.
+
+</details>
 
 **What it does not do yet.** The sample market data stands in for real segmentation, competitive and benchmark systems. Runs differ and take a few minutes. The squad writes nothing to Salesforce. One person plays every role from the same browser, and the judge is generous until it is calibrated against people's scores.
 
@@ -1921,7 +2210,7 @@ The **Campaign squad** page runs a hub-and-spoke team of agents on a client's br
 - Campaign squad → Under the hood → Agent infrastructure / Semantic layer / Evals / Decisions
 - Campaign squad → a Harborstone brief → approve or ask for changes as the compliance reviewer, then as the client
 - pnpm eval:team (with the workbench running)
-- Campaign squad → Under the hood → Agents: each agent's grants, tool calls and the gateway's decisions
+- Campaign squad → Under the hood → Agents (at a glance) and Tool library (every tool, with this session's use)
 - Campaign squad → Replay a recent run → pick one of the last ten runs, then change the speed or pause
 - Campaign squad → click an agent on the team map: prompt and config, usage, calls sent and received
 - packages/architecture/src/team.ts, team-semantic.ts, team-services.ts
@@ -1984,9 +2273,14 @@ flowchart TB
 
 The **Pharma lifecycle** mode of the Campaign squad page runs a prescription brand's campaign end to end: business focus, ideation, content and MLR review, audience selection, publishing and analytics. Agents do all the work; people take the decisions a brand team, an MLR committee and an operations team would.
 
+<details>
+<summary>How the page lays out the phases</summary>
+
 **The page.** One phase shows at a time. A stepper across the top lists all six, marks each agent step and each of your decisions, and stays in view as you scroll. The chosen phase shows its documented steps, your decision when it's your turn, and its outputs: one-line summaries that open to full detail, with earlier versions kept. The team map and conversation sit beside it; agents, infrastructure, semantic layer, evals and the decision log share one tabbed panel underneath. You can open any phase before or during a run; the page moves to the active phase only after you decide something.
 
-**Claims are records, not sentences.** Each claim in the library (`get_claims_library`) has an ID (CLM-CRD-0042), the passages that substantiate it (CARDIO-HF report p. 7, table 2), the context it can't be used without (endpoint, trial and absolute rates), its scope (audience, market, channels), the label version it was approved against, its expiry, and the claims it must never sit beside. A search also returns near twins approved for something else (a consumer version, a rep detail aid version, an old-label version), each refused for this campaign with the reason.
+</details>
+
+**Claims are records, not sentences.** Each claim in the library (`get_claims_library`) has an ID (CLM-CRD-0042), the passages that substantiate it (CARDIO-HF report p. 7, table 2), the context it can't be used without (endpoint, trial and absolute rates), its scope (audience, market, channels), the label version it was approved against, its expiry, and the claims it must never sit beside. A search also returns near twins approved for something else (a consumer version, a rep detail aid version, an old-label version), each refused for this campaign with the reason. Click any claim on the page, a concept's topic or a module's, placement's or result's claim ID, for a card with its approved text, status, scope, label, expiry, references and the disclosures it requires, as the run's agents read them from the library.
 
 **The path.**
 - **Business focus.** The audience analyst reads the segments, competitors, signals and last year's results and proposes two or three focus areas, each citing data ids and a success measure (`propose_focus_areas`). The **brand lead** chooses one.
@@ -1996,15 +2290,30 @@ The **Pharma lifecycle** mode of the Campaign squad page runs a prescription bra
 - **Publishing.** The channel planner schedules only approved modules, by material ID, to approved email and endemic HCP display, inside the window, before expiry and within budget (`get_approved_job`, `schedule_deployment`). The service stamps each placement with its material ID and claim IDs, so a claim's identity survives the handoff to the channels. The brand lead approves go-live; the MLR coordinator prepares **Form FDA 2253** with the scheduled materials and current PI version (`prepare_form_2253`), and **Regulatory** files it at first use. Only then does the schedule publish.
 - **Analytics.** Thirty days in market are simulated from the brand's benchmarks and segment affinities, and labelled so. Results carry claim IDs and roll up by claim. The performance analyst reads them (`get_campaign_results`, `get_past_results`) and recommends continue, optimize or retire, citing result lines (`report_performance`). The brand lead decides; the system lists where every claim is live with its expiry and re-review date, and retiring turns that list into a withdrawal plan by ID.
 
+<details>
+<summary>How the lead and the workers are kept to each step</summary>
+
 **How the lead moves.** The campaign lead has one tool, `lifecycle_step` (offered, not forced): assign the next agent step or ask the next person (`request_decision`). The server holds the lifecycle as data (`PHARMA_PHASES`) and a pure state machine, refuses any step out of order, and tells the lead what comes next after every result.
 
 **Different tools at each stage (ADR-019).** No agent sees the whole toolbox. A worker is offered that stage's reads, within its own grants, and that stage's save: the analyst gets segments, competitors, signals and past results to propose focus areas, then only the HCP universe to build the audience; the copy lead gets the claims library, approved assets and brand guidelines; the channel planner gets the approved job and channel benchmarks. The worker chooses what to read and when to save, but its first step must use one of these tools, and from its fifth step (or when nudged after a refusal) only the save is left and it must call it. A save names claims by topic: a claim ID such as `CLM-CRD-0042` is mapped to its topic, and a refusal for missing claims lists the topics this campaign may use. The guardrails are the state machine, the rule services and people's decisions, not the order of reads.
 
+</details>
+
+<details>
+<summary>Which role takes each decision</summary>
+
 **People.** Each human step is a gateway action only its role may take: the brand lead (`team:decide_focus`, `decide_concept`, `approve_go_live`, `decide_next_action`); Medical (the reviewer persona: the early concept review, `team:review_concept`, and the MLR review); Legal (senior); Regulatory (compliance); and marketing operations (marketer). Choice steps take one of the agents' options. Asking for changes sends the phase back to its first step, with the person's words, in a new round; a resubmitted MLR job gets a new job code.
+
+</details>
+
+<details>
+<summary>Models, caching and scoring</summary>
 
 **Models.** Coordinators (the campaign lead and MLR coordinator) run on each provider's top model, workers on a smaller one: Opus 5.5 and Sonnet 5.5 on Anthropic, gpt-6-astra and gpt-5.4-mini on OpenAI, GLM-5.3 and DeepSeek V4.1 Flash on Workers AI (a worker re-sends a growing prompt, and DeepSeek's cached input costs $0.006 per million tokens). The open-model tier uses the AI platform chosen in the top bar when the run starts, and the run records it. Each agent's calls share a growing prefix, so they are cached: Anthropic requests carry top-level `cache_control`, OpenAI requests a per-agent `promptCacheKey`, and the cost estimate prices cache reads at the cached rate.
 
 **Scoring.** The scorecard counts phases finished, saves accepted on the first try and gateway denials, and scores how the team acted on requests for changes from the MLR reviewers and the brand team: a request counts as met when that person approves the next version.
+
+</details>
 
 **What it does not do.** No channel is called and no Form 2253 is filed; the results, the HCP universe and its consent rates are fictional. One person plays every role.
 
@@ -2070,12 +2379,17 @@ A new chat starts with an empty workspace, but some work should outlive it: the 
 - a Salesforce save, review task or image attachment you confirmed and Salesforce read back
 - a request to remember the draft in focus: say "remember this draft", or use **History → Memory**
 
+<details>
+<summary>How memory is stored in the graph</summary>
+
 **How it's stored.** Each memory is a small subgraph in its own dataset, next to the demo graph:
 - a `Draft` node per version, linked to the version it replaced (`SUPERSEDES`)
 - a `Decision` node, linked to the draft it saved (`DECIDED_ON`) and the Salesforce record it created (`RECORDED_IN`)
 - `ABOUT` links to the `Campaign` and `Brand` nodes involved, so "what did we decide about Coastline?" is a graph question
 
 Every node carries its workspace and an expiry; the person who acted is stored only as a hash.
+
+</details>
 
 **How it's recalled.** Ask about earlier work ("what did we decide…", "last time…", "what have we worked on recently?") and the intent router offers `recall_decisions`, `recall_recent_work` and `explain_memory`. The server gives these tools the workspace, so the model can't read another workspace's memory. Each item comes back **dated and sourced**, with provenance paths, and the model is told to treat it as past work and re-check Salesforce before reusing it.
 

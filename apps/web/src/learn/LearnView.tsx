@@ -3,6 +3,7 @@ import { Markdown } from "../Markdown";
 import { pageHost } from "@northstar/contracts";
 import { useAiPlatform } from "../ai-platform";
 import { LEARN_PARTS as COURSE, type LearnPart, type LearnSection } from "./content";
+import { lessonParts } from "./details";
 import { Diagram } from "./diagrams";
 import { learnFor } from "./host";
 import { PART_LESSONS, type PartLesson, SECTION_LESSONS, type TryIt } from "./lessons";
@@ -303,7 +304,16 @@ function Lesson({
       )}
 
       <div className="learn-prose">
-        <Markdown text={section.body} />
+        {lessonParts(section.body).map((item, index) =>
+          item.kind === "text" ? (
+            <Markdown key={`text-${index}`} text={item.text} />
+          ) : (
+            <details key={`more-${index}`} className="learn-more">
+              <summary>{item.title}</summary>
+              <Markdown text={item.text} />
+            </details>
+          ),
+        )}
       </div>
 
       {lesson?.tryIt && (

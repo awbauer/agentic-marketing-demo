@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GLOSSARY, LEARN_PARTS } from "./content";
 import { DIAGRAM_SPECS } from "./diagram-specs";
+import { detailsAsHtml, lessonParts, unclosedDetails } from "./details";
 import { diagramSpecsFor, HOST_NEUTRAL_SECTIONS, learnFor } from "./host";
 import { learnSetting, markersIn, parseMarker, resolveFor, resolveText } from "./variants";
 import { DIAGRAM_IDS } from "./diagrams";
@@ -52,6 +53,17 @@ describe("learn page content", () => {
       for (const resource of section.resources)
         expect(resource.url, resource.label).toMatch(/^https:\/\//);
     }
+  });
+
+  it("closes every collapsible detail block and gives it a title", () => {
+    for (const section of sections) {
+      expect(unclosedDetails(section.body), section.id).toBe(0);
+      for (const part of lessonParts(section.body))
+        if (part.kind === "details") expect(part.title.length, section.id).toBeGreaterThan(3);
+    }
+    const body = "Lead.\n\n::: details More\nDeep.\n:::\n\nTail.";
+    expect(lessonParts(body).map((part) => part.kind)).toEqual(["text", "details", "text"]);
+    expect(detailsAsHtml(body)).toContain("<details>\n<summary>More</summary>\n\nDeep.");
   });
 
   it("keeps the glossary sorted for scanning, as written for Cloudflare", () => {
