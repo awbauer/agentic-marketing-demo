@@ -1,4 +1,5 @@
 import {
+  type AiPlatformId,
   TURN_TRACE_PART_ID,
   TURN_TRACE_PART_TYPE,
   type TurnTrace,
@@ -56,7 +57,7 @@ export type TurnTraceOptions = {
   /** Set on Google Cloud, so the route map shows IAP and Vertex AI instead of Cloudflare's hops. */
   host?: "google-cloud";
   /** Where the turn's models ran, when it called any (ADR-021). */
-  aiPlatform?: "workers-ai" | "vertex";
+  aiPlatform?: AiPlatformId;
   /** The classifier's labels for the request, and which stage produced them (ADR-020). */
   classification?: { intents: string[]; by: "rules" | "model" | "rules+model" | "none" };
   timeoutSeconds: number;

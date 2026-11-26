@@ -458,6 +458,7 @@ Feature code asks \`dataPlatform(env)\` for repositories (D1, or the Firestore t
 
 **The AI platform is chosen apart from the host (ADR-021).** Workers AI and Vertex AI are AI SDK providers in one registry, so code asks for \`workers-ai:@cf/openai/gpt-oss-120b\` or \`vertex:@cf/openai/gpt-oss-120b\` the same way.
 - The top bar's **AI platform** menu (beside Brand and Run as) lists what this server can reach and sends the choice with every chat message and workspace request. Cloudflare offers Workers AI, plus Vertex AI once it holds Google credentials; Google Cloud offers Vertex AI.
+- **Azure AI Foundry and Amazon Bedrock (ADR-023)** join the menu once the server holds their credentials, while the page and the database stay where they are. Each is called directly: gpt-oss-120b as a Foundry deployment through its OpenAI-compatible API, and gpt-oss-120b and 20b through Bedrock's. Images come from GPT Image on Azure and Nova Canvas on Bedrock. They use a resource key or Entra service principal, and a Bedrock API key: stored secrets, unlike Vertex's federation, because both clouds' keyless routes need a public token issuer the Worker doesn't publish yet.
 
 ::: details Credentials, tracing and narrowing the menu
 - The Worker needs no Google key: through **Workload Identity Federation** it signs its own short-lived token, which Google's Security Token Service exchanges for an hour's access as a service account that may only call Vertex AI.

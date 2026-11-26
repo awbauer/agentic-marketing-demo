@@ -42,6 +42,17 @@ export function teamProviderLabel(provider: TeamProvider, host: string = "cloudf
     openai: "OpenAI Responses API",
   }[provider];
 }
+/** The AI platforms the open-model tier can run on (ADR-021, ADR-023), and their names. */
+export const OPEN_MODEL_PLATFORMS = {
+  "workers-ai": "Cloudflare Workers AI",
+  vertex: "Vertex AI (open models)",
+  azure: "Azure AI Foundry (open models)",
+  bedrock: "Amazon Bedrock (open models)",
+} as const;
+export type OpenModelPlatform = keyof typeof OPEN_MODEL_PLATFORMS;
+const isOpenModelPlatform = (value: unknown): value is OpenModelPlatform =>
+  typeof value === "string" && Object.hasOwn(OPEN_MODEL_PLATFORMS, value);
+
 /**
  * Where a run's open-model tier ran: the AI platform chosen in the top bar (ADR-021), recorded on
  * the run. Runs from before it was recorded fall back to the host's own platform.
@@ -49,8 +60,8 @@ export function teamProviderLabel(provider: TeamProvider, host: string = "cloudf
 export function teamOpenModels(
   aiPlatform: string | null | undefined,
   host: string = "cloudflare",
-): "workers-ai" | "vertex" {
-  if (aiPlatform === "vertex" || aiPlatform === "workers-ai") return aiPlatform;
+): OpenModelPlatform {
+  if (isOpenModelPlatform(aiPlatform)) return aiPlatform;
   return host === "google-cloud" ? "vertex" : "workers-ai";
 }
 
@@ -61,13 +72,11 @@ export function teamRunProviderLabel(
   host: string = "cloudflare",
 ) {
   if (provider !== "cloudflare") return teamProviderLabel(provider, host);
-  return teamOpenModels(aiPlatform, host) === "vertex"
-    ? teamProviderLabel("cloudflare", "google-cloud")
-    : TEAM_PROVIDER_LABELS.cloudflare;
+  return OPEN_MODEL_PLATFORMS[teamOpenModels(aiPlatform, host)];
 }
 
 /** The platform the open-model tier ran on, from a run's start event, if it was recorded. */
-export function runAiPlatform(events: readonly TeamEvent[]): "workers-ai" | "vertex" | undefined {
+export function runAiPlatform(events: readonly TeamEvent[]): OpenModelPlatform | undefined {
   const start = events[0];
   return start?.type === "start" ? start.infra?.aiPlatform : undefined;
 }
@@ -796,7 +805,7 @@ export type TeamEvent =
       infra: {
         provider: TeamProvider;
         /** Where the open-model tier ran, when the run used it (ADR-021). */
-        aiPlatform?: "workers-ai" | "vertex";
+        aiPlatform?: OpenModelPlatform;
         aiGateway: string | null;
         policies: number;
         store: string;

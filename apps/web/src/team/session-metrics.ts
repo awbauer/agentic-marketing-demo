@@ -2,7 +2,13 @@
 // finishes, and each replay they watch to the end (or skip to the end of), is recorded here and
 // nowhere else: nothing is sent to the server, other people's runs never appear, and Reset starts
 // a fresh session. Replays and scripted (synthetic) runs count, each labelled so.
-import type { AgentEvidence, TeamMode, TeamProvider, TeamScorecard } from "@northstar/architecture";
+import type {
+  AgentEvidence,
+  OpenModelPlatform,
+  TeamMode,
+  TeamProvider,
+  TeamScorecard,
+} from "@northstar/architecture";
 import { useSyncExternalStore } from "react";
 
 export type SessionRun = {
@@ -14,7 +20,7 @@ export type SessionRun = {
   mode: TeamMode;
   provider: TeamProvider;
   /** Where the open-model tier ran (ADR-021); absent on entries recorded before it was kept. */
-  aiPlatform?: "workers-ai" | "vertex";
+  aiPlatform?: OpenModelPlatform;
   source: "live" | "replay";
   /** The run ran on the scripted test model, not a real one. */
   scripted: boolean;

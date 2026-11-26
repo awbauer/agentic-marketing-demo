@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AI_PLATFORMS } from "./host.ts";
 
 export * from "./host.ts";
 
@@ -974,7 +975,7 @@ export const TurnTraceEventSchema = z.discriminatedUnion("kind", [
     /** Where the turn ran; absent means Cloudflare (ADR-018). The route map names hops by it. */
     host: z.enum(["cloudflare", "google-cloud"]).optional(),
     /** Where the turn's models ran; absent means the host's own (ADR-021). */
-    aiPlatform: z.enum(["workers-ai", "vertex"]).optional(),
+    aiPlatform: z.enum(AI_PLATFORMS).optional(),
     /** What the classifier labelled the request, and which stage did (ADR-020). */
     intents: z.array(z.string()).optional(),
     classifiedBy: z.enum(["rules", "model", "rules+model", "none"]).optional(),

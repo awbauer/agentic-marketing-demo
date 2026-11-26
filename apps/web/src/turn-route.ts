@@ -1,4 +1,6 @@
 import {
+  AI_PLATFORM_TERMS,
+  type AiPlatformId,
   pageHost,
   SALESFORCE_AGENTS,
   type ToolServer,
@@ -201,10 +203,12 @@ export function routeMap(
   const google = (seen?.start ? seen.start.host : pageHost()) === "google-cloud";
   // The models run where the turn's trace says (ADR-021); before the first turn, where the top
   // bar points; failing both, on the host's own platform.
-  const vertex =
-    (seen?.start?.aiPlatform ??
-      (seen?.start ? null : currentAiPlatform()) ??
-      (google ? "vertex" : "workers-ai")) === "vertex";
+  const platform =
+    AI_PLATFORM_TERMS[
+      (seen?.start?.aiPlatform ??
+        (seen?.start ? null : currentAiPlatform()) ??
+        (google ? "vertex" : "workers-ai")) as AiPlatformId
+    ];
 
   const node = (
     id: string,
@@ -281,11 +285,12 @@ export function routeMap(
           ...(seen?.start?.intents?.length
             ? [node("classifier", "Classifier", "done", seen.start.intents.join(", "))]
             : []),
-          // Vertex AI is called directly, from either host; only Workers AI goes through AI Gateway.
-          ...(vertex ? [] : [node("ai-gateway", "AI Gateway", modelState)]),
+          // Only Workers AI goes through AI Gateway; Vertex AI, Azure AI Foundry and Amazon
+          // Bedrock are called directly, from either host.
+          ...(platform.gateway ? [node("ai-gateway", platform.gateway, modelState)] : []),
           node(
             "model",
-            vertex ? "Vertex AI" : "Workers AI",
+            platform.label,
             modelState,
             viaModel ? (seen?.start?.model.split("/").pop() ?? "") : "",
           ),
@@ -316,10 +321,9 @@ function routeSummary(
     if (!seen?.start) return "The policy router is reading the request";
     if (running.length > 0) return runningSummary(running);
     const models =
-      (seen.start.aiPlatform ?? (seen.start.host === "google-cloud" ? "vertex" : "workers-ai")) ===
-      "vertex"
-        ? "Vertex AI"
-        : "Workers AI";
+      AI_PLATFORM_TERMS[
+        seen.start.aiPlatform ?? (seen.start.host === "google-cloud" ? "vertex" : "workers-ai")
+      ].label;
     if (seen.open.text.size > 0) return `${models} is writing the answer`;
     if (seen.open.reasoning.size > 0) return `${models} is reasoning`;
     return `${models} is choosing the next step`;

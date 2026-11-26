@@ -22,6 +22,8 @@ export default {
         staticAssets: Boolean(env.ASSETS),
         workersAi: Boolean(env.AI),
         vertexAi: Boolean(aiPlatforms(env).available.vertex),
+        azureAi: Boolean(aiPlatforms(env).available.azure),
+        bedrock: Boolean(aiPlatforms(env).available.bedrock),
         d1: Boolean(env.APP_DB),
         r2: Boolean(env.CAMPAIGN_ASSETS),
       }),

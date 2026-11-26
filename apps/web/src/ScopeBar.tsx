@@ -5,6 +5,7 @@ import {
   PERSONAS,
   type Persona,
 } from "@northstar/architecture";
+import { isAiPlatformId } from "@northstar/contracts";
 import { useEffect, useState } from "react";
 import { useAiPlatform } from "./ai-platform";
 import { useScope } from "./scope";
@@ -73,7 +74,7 @@ export function ScopeBar() {
               .join("\n")}
             onChange={(event) => {
               const next = event.target.value;
-              if (next === "workers-ai" || next === "vertex") ai.setPlatform(next);
+              if (isAiPlatformId(next)) ai.setPlatform(next);
             }}
           >
             {ai.options.platforms.map((platform) => (
