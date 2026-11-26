@@ -46,11 +46,17 @@ Connect the existing `northstar-marketing-workbench-pot` Worker to this reposito
 
 Keep preview builds disabled until separate preview D1, R2, Access, and Salesforce OAuth resources are configured. A branch preview must never share the production proof database, bucket, secrets, or upstream writes.
 
-The runtime secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `CONFIRMATION_SIGNING_KEY` and `GOOGLE_WORKLOAD_IDENTITY` (Vertex AI federation, ADR-021; put on the Worker on 2026-11-25) already belong to the Worker and must remain runtime secrets. Do not copy their values into repository settings, build variables, source control, or build logs. The non-secret runtime values and all resource bindings are owned by `wrangler.jsonc`; do not duplicate them in the dashboard.
+The runtime secrets `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `CONFIRMATION_SIGNING_KEY` and `GOOGLE_WORKLOAD_IDENTITY` (Vertex AI federation, ADR-021; put on the Worker on 2026-11-25) already belong to the Worker and must remain runtime secrets. Do not copy their values into repository settings, build variables, source control, or build logs. The non-secret runtime values and all resource bindings are owned by `wrangler.jsonc`; do not duplicate them in the dashboard. The one exception is the operator settings below, which the dashboard owns: `wrangler.jsonc` sets `keep_vars`, so a deploy keeps a variable that exists only in the dashboard.
+
+## Dashboard-owned settings
+
+Set these in the dashboard (Workers & Pages → `northstar-marketing-workbench-pot` → Settings → Variables and Secrets, type Text) and select Deploy. They take effect at once, survive every Workers Builds deploy, and must never be added to `wrangler.jsonc`, whose value would overwrite the dashboard's on the next merge.
+
+- `AI_PLATFORMS_ENABLED`: which AI platforms the top bar's menu offers, comma-separated (`workers-ai`, `vertex`). A platform left out is neither listed nor run, even if a request asks for it. Unset or blank offers every platform the Worker can reach. `AI_PLATFORM` (optional, also here) names the default among them.
 
 ## Operator kill switches
 
-Two optional runtime switches pause risky behavior without a code change. They are Worker secrets rather than `wrangler.jsonc` variables because Workers Builds redeploys `vars` from source on every merge, which would reset them. When unset, everything is enabled.
+Two optional runtime switches pause risky behavior without a code change. They are Worker secrets rather than `wrangler.jsonc` variables because Workers Builds redeploys `vars` from source on every merge, which would reset them; secrets also stay hidden in the dashboard. When unset, everything is enabled.
 
 - `WRITES_ENABLED`: set it to `false` to pause every confirmed Salesforce write: the Marketing Cloud agent's brief and campaign saves, review tasks, and image attachments. Preflight and execute return `503 WRITES_DISABLED`, and the UI shows a paused notice and disables the write buttons.
 - `DISABLED_TOOLS`: a comma-separated list of curated tool names, for example `attach_campaign_image,summarize_campaign`. Disabled read tools are removed from the model's tool set, and a routed request explains that an operator turned the tool off. Disabled write tools are blocked like paused writes. Unknown names are ignored.
@@ -84,7 +90,7 @@ The knowledge graph (ADR-006) reads from Neo4j AuraDB through the Query API.
 
 ## Vertex AI from the Worker (ADR-021)
 
-The top bar's AI platform menu offers Vertex AI once the Worker holds a federation credential. No Google key is involved: the Worker signs its own short-lived token, and Google's workload identity pool `northstar-workers` (provider `cloudflare-worker`, project `burner-andbauer-7311`) exchanges it for an access token of `northstar-vertex-worker`, which holds `roles/aiplatform.user` only. To hide a platform from the menu, and stop requests from choosing it, remove it from `AI_PLATFORMS_ENABLED` in `wrangler.jsonc` (`workers-ai,vertex`) and deploy.
+The top bar's AI platform menu offers Vertex AI once the Worker holds a federation credential. No Google key is involved: the Worker signs its own short-lived token, and Google's workload identity pool `northstar-workers` (provider `cloudflare-worker`, project `burner-andbauer-7311`) exchanges it for an access token of `northstar-vertex-worker`, which holds `roles/aiplatform.user` only. To hide a platform from the menu, set `AI_PLATFORMS_ENABLED` in the dashboard (see Dashboard-owned settings).
 
 Put the credential on the Worker straight from Secret Manager, without writing it to disk or a terminal:
 

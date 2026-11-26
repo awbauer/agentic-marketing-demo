@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-26T14:58:04.336Z",
+  "generatedAt": "2026-11-26T16:39:04.822Z",
   "status": "passed",
   "baseRef": "origin/main",
-  "mergeBase": "698332bbb52e00a3164cbd36748e92a33fd3790b",
+  "mergeBase": "309cf3422c6a50e093fe69a2847504d7342a0f01",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,42 +13,10 @@
   },
   "drift": [
     {
-      "section": "campaign-squad",
+      "section": "two-hosts",
       "status": "updated",
       "paths": [
-        "apps/edge/src/team/api.ts",
-        "apps/edge/src/team/evals.ts",
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts",
-        "apps/edge/src/team/run.ts",
-        "apps/edge/src/team/scripted.ts",
-        "apps/web/src/team/TeamLifecycle.tsx",
-        "apps/web/src/team/TeamPeople.tsx",
-        "apps/web/src/team/TeamPlatform.tsx",
-        "apps/web/src/team/TeamView.tsx",
-        "apps/web/src/team/session-metrics.ts",
-        "apps/web/src/team/team-state.ts",
-        "apps/web/src/team/team.css",
-        "packages/architecture/src/team-evals.ts",
-        "packages/architecture/src/team.ts"
-      ]
-    },
-    {
-      "section": "pharma-lifecycle",
-      "status": "updated",
-      "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts",
-        "apps/edge/src/team/lifecycle.ts",
-        "apps/web/src/team/TeamLifecycle.tsx",
-        "packages/architecture/src/team-governance.ts",
-        "packages/architecture/src/team-pharma.ts"
-      ]
-    },
-    {
-      "section": "object-model",
-      "status": "reviewed",
-      "paths": [
-        "packages/architecture/src/index.ts"
+        "docs/decisions/ADR-021-ai-platform-apart-from-host.md"
       ]
     }
   ],
