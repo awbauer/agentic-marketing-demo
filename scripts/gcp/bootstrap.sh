@@ -55,6 +55,13 @@ if ! g storage buckets describe "gs://$BUCKET" >/dev/null 2>&1; then
   g storage buckets create "gs://$BUCKET" --location="$REGION" \
     --uniform-bucket-level-access --public-access-prevention
 fi
+# Generated images are kept seven days, then deleted (AGENTS.md); chat snapshots are not touched.
+LIFECYCLE="$(mktemp)"
+cat >"$LIFECYCLE" <<'JSON'
+{"rule": [{"action": {"type": "Delete"}, "condition": {"age": 7, "matchesPrefix": ["drafts/"]}}]}
+JSON
+g storage buckets update "gs://$BUCKET" --lifecycle-file="$LIFECYCLE" >/dev/null
+rm -f "$LIFECYCLE"
 
 say "Artifact Registry repository $REPO"
 if ! g artifacts repositories describe "$REPO" --location="$REGION" >/dev/null 2>&1; then

@@ -41,6 +41,8 @@ export function collections(prefix = "") {
     audit: name("confirmation_audit"),
     auditKeys: name("confirmation_idempotency"),
     imageDrafts: name("campaign_image_drafts"),
+    // One counter per workspace for the 100-image proof cap. Drafts expire (TTL); this does not.
+    imageCounts: name("campaign_image_counts"),
     objects: name("arch_objects"),
     state: name("arch_state"),
     history: name("arch_history"),
@@ -227,15 +229,31 @@ const imageRow = (data: Data): ImageDraftRow => ({
 
 function imageDraftRepository(db: Firestore, names: Collections): ImageDraftRepository {
   const drafts = () => db.collection(names.imageDrafts);
+  const counter = (workspaceId: string) => db.collection(names.imageCounts).doc(workspaceId);
+  // Drafts are deleted by TTL after seven days, so counting them would refill the proof's
+  // 100-image allowance. The cap counts every image ever made in the workspace instead; a
+  // workspace with drafts from before the counter existed starts it from those drafts.
+  const rowCount = async (workspaceId: string) =>
+    (await drafts().where("workspace_id", "==", workspaceId).count().get()).data().count;
   return {
     async countForWorkspace(workspaceId) {
-      const result = await drafts().where("workspace_id", "==", workspaceId).count().get();
-      return result.data().count;
+      const snapshot = await counter(workspaceId).get();
+      return snapshot.exists ? Number(snapshot.get("count")) : rowCount(workspaceId);
     },
     async insert(draft) {
-      await drafts()
-        .doc(draft.image_id)
-        .create({ ...draft, expireAt: Timestamp.fromMillis(Date.parse(draft.expires_at)) });
+      const seed = (await counter(draft.workspace_id).get()).exists
+        ? null
+        : await rowCount(draft.workspace_id);
+      await db.runTransaction(async (transaction) => {
+        const ref = counter(draft.workspace_id);
+        const current = await transaction.get(ref);
+        const count = current.exists ? Number(current.get("count")) : (seed ?? 0);
+        transaction.create(drafts().doc(draft.image_id), {
+          ...draft,
+          expireAt: Timestamp.fromMillis(Date.parse(draft.expires_at)),
+        });
+        transaction.set(ref, { count: count + 1, updated_at: draft.created_at });
+      });
     },
     async find(imageId, workspaceId, principalSubject) {
       const snapshot = await drafts().doc(imageId).get();

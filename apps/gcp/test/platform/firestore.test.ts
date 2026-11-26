@@ -61,7 +61,7 @@ describe.skipIf(!emulator)("Firestore repositories", () => {
   });
 
   it("stores image drafts per person and lists unexpired ones newest first", async () => {
-    const { data } = fresh();
+    const { db, prefix, data } = fresh();
     const draft = (id: string, createdOffset: number, expiresOffset: number) => ({
       image_id: id,
       workspace_id: "w",
@@ -83,6 +83,9 @@ describe.skipIf(!emulator)("Firestore repositories", () => {
     await data.imageDrafts.insert(draft("a", 0, 60_000));
     await data.imageDrafts.insert(draft("b", 1_000, 60_000));
     await data.imageDrafts.insert(draft("old", 2_000, -1_000));
+    expect(await data.imageDrafts.countForWorkspace("w")).toBe(3);
+    // Expired drafts are deleted by TTL; the proof's image cap still counts them.
+    await db.collection(`${prefix}campaign_image_drafts`).doc("old").delete();
     expect(await data.imageDrafts.countForWorkspace("w")).toBe(3);
     const listed = await data.imageDrafts.listForCampaign("w", "p", "701000000000001", iso(), 24);
     expect(listed.map((row) => row.image_id)).toEqual(["b", "a"]);
