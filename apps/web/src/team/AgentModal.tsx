@@ -377,6 +377,10 @@ function Calls({ state, id }: { state: TeamState; id: TeamAgentId }) {
   );
 }
 
+/** Whether a tool call was sent anything: `{}` (a read tool's whole input) counts as nothing. */
+const hasArguments = (input: unknown) =>
+  input != null && !(typeof input === "object" && Object.keys(input).length === 0);
+
 function Work({ state, id }: { state: TeamState; id: TeamAgentId }) {
   const view = state.agents[id];
   const lifecycle = state.mode === "lifecycle";
@@ -399,10 +403,19 @@ function Work({ state, id }: { state: TeamState; id: TeamAgentId }) {
                   : "not checked"}
               </span>
               {step.error && <small className="team-tool-error">{step.error}</small>}
-              {step.input != null && (
+              {hasArguments(step.input) ? (
                 <details>
                   <summary>Input</summary>
                   <pre className="team-json">{JSON.stringify(step.input, null, 2)}</pre>
+                </details>
+              ) : (
+                // Read tools such as get_competitors take none: the run's brand decides what they return.
+                <small className="arch-note"> No arguments.</small>
+              )}
+              {step.output !== undefined && (
+                <details>
+                  <summary>Output</summary>
+                  <pre className="team-json">{JSON.stringify(step.output, null, 2)}</pre>
                 </details>
               )}
             </li>

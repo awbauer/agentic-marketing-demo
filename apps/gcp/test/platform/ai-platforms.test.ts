@@ -56,6 +56,27 @@ describe("AI platforms", () => {
     expect(aiPlatformOptions(env).platforms.map((platform) => platform.id)).toEqual(["vertex"]);
   });
 
+  it("lists and runs only what AI_PLATFORMS_ENABLED allows", () => {
+    const both = { AI: fakeAi, VERTEX_PROJECT: "p", GOOGLE_ACCESS_TOKEN: async () => "t" };
+    const vertexOnly = { ...both, AI_PLATFORMS_ENABLED: "vertex" };
+    expect(aiPlatformOptions(vertexOnly)).toMatchObject({
+      default: "vertex",
+      platforms: [{ id: "vertex", available: true }],
+    });
+    // A request can't choose a platform the setting leaves out.
+    expect(modelPlatform(vertexOnly, "workers-ai")?.kind).toBe("vertex");
+    const workersOnly = { ...both, AI_PLATFORMS_ENABLED: " workers-ai " };
+    expect(aiPlatformOptions(workersOnly).platforms.map((platform) => platform.id)).toEqual([
+      "workers-ai",
+    ]);
+    expect(modelPlatform(workersOnly, "vertex")?.kind).toBe("workers-ai");
+    // Blank means every platform; unknown ids are ignored.
+    expect(aiPlatformOptions({ ...both, AI_PLATFORMS_ENABLED: "" }).platforms).toHaveLength(2);
+    expect(
+      aiPlatformOptions({ ...both, AI_PLATFORMS_ENABLED: "vertex,openrouter" }).platforms,
+    ).toHaveLength(1);
+  });
+
   it("has no platform when nothing is configured", () => {
     expect(modelPlatform({})).toBeNull();
     expect(aiPlatformOptions({}).default).toBeNull();
