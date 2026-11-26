@@ -47,7 +47,7 @@ const SUMMARIES = new Map(
 const EXTRA: Record<string, { summary: string; agents: string[] }> = {
   lifecycle_step: {
     summary:
-      "The pharma campaign lead's one tool: assign the next agent step, or ask the next person to decide. Offered, not forced; the server refuses a step out of order.",
+      "The pharma campaign lead's one tool: assign the next agent step, or ask the next person to decide. Offered, not forced, except on a nudge after a turn that ended without it; the server refuses a step out of order.",
     agents: ["Campaign lead"],
   },
 };

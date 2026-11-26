@@ -80,6 +80,71 @@ describe("Vertex AI models", () => {
     });
   });
 
+  it("recovers a call Vertex dropped from a must-call step, by asking for it as JSON", async () => {
+    // Vertex sometimes ends such a step with reasoning only: no text and no tool call.
+    const { calls, fetcher } = recorder((call) =>
+      call.body.response_format ? chatReply('{"q":"Cardivance"}') : chatReply(""),
+    );
+    const models = vertexModels({
+      project: "p",
+      location: "us-central1",
+      fetch: fetcher,
+      accessToken: async () => "t",
+    });
+    const lookup = tool({ description: "Look up", inputSchema: z.object({ q: z.string() }) });
+    const result = await generateText({
+      model: models.chat("@cf/openai/gpt-oss-120b"),
+      prompt: "find it",
+      tools: { lookup },
+      toolChoice: { type: "tool", toolName: "lookup" },
+    });
+    expect(result.toolCalls.map((call) => [call.toolName, call.input])).toEqual([
+      ["lookup", { q: "Cardivance" }],
+    ]);
+    const retry = calls[1]?.body as { tools?: unknown; response_format?: { type: string } };
+    expect(retry.tools).toBeUndefined();
+    expect(retry.response_format?.type).toBe("json_schema");
+  });
+
+  it("picks the tool too when any tool would do, and leaves an unreadable reply alone", async () => {
+    const { fetcher } = recorder((call) =>
+      call.body.response_format ? chatReply('{"tool":"other","arguments":{}}') : chatReply(""),
+    );
+    const models = vertexModels({
+      project: "p",
+      location: "us-central1",
+      fetch: fetcher,
+      accessToken: async () => "t",
+    });
+    const tools = {
+      lookup: tool({ description: "Look up", inputSchema: z.object({ q: z.string() }) }),
+      other: tool({ description: "Other", inputSchema: z.object({}) }),
+    };
+    const anyTool = await generateText({
+      model: models.chat("@cf/openai/gpt-oss-120b"),
+      prompt: "go",
+      tools,
+      toolChoice: "required",
+    });
+    expect(anyTool.toolCalls.map((call) => call.toolName)).toEqual(["other"]);
+
+    const broken = recorder(() => chatReply(""));
+    // Nothing to recover: the step ends without a call, which the AI SDK reports as before.
+    const unreadable = generateText({
+      model: vertexModels({
+        project: "p",
+        location: "us-central1",
+        fetch: broken.fetcher,
+        accessToken: async () => "t",
+      }).chat("@cf/openai/gpt-oss-120b"),
+      prompt: "go",
+      tools,
+      toolChoice: "required",
+    });
+    await expect(unreadable).rejects.toThrow(/tool call/);
+    expect(broken.calls).toHaveLength(2);
+  });
+
   it("never sends a forced tool choice, which Vertex's gpt-oss refuses", async () => {
     const { calls, fetcher } = recorder(() => chatReply("ok"));
     const models = vertexModels({
@@ -114,7 +179,8 @@ describe("Vertex AI models", () => {
       tools,
       toolChoice: "required",
     }).catch(() => undefined);
-    const required = calls[1]?.body as { tool_choice?: unknown; tools?: unknown[] };
+    const required = calls.find((call) => (call.body.tools as unknown[] | undefined)?.length === 2)
+      ?.body as { tool_choice?: unknown; tools?: unknown[] };
     expect(required.tool_choice).toBe("auto");
     expect(required.tools).toHaveLength(2);
   });

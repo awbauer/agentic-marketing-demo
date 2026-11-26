@@ -5,7 +5,13 @@
 // token: on Cloud Run the service account's own (ADC, no key stored); elsewhere one minted from a
 // service-account key (google-token.ts).
 import { createOpenAI } from "@ai-sdk/openai";
-import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
+import type {
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  LanguageModelV4StreamPart,
+  LanguageModelV4ToolCall,
+  LanguageModelV4Usage,
+} from "@ai-sdk/provider";
 import { generateText, type LanguageModel, wrapLanguageModel } from "ai";
 import type { ImageRequest, JudgeVerdict, ModelPlatform } from "./models";
 
@@ -79,6 +85,125 @@ export function unforcedToolChoice(params: CallParams): CallParams {
     ...(tools ? { tools } : {}),
     toolChoice: { type: "auto" },
     prompt: [...params.prompt, { role: "system", content: instruction }],
+    // Remembered for the fallback below: which tool the step had to call ("*" for any).
+    providerOptions: {
+      ...params.providerOptions,
+      northstar: { mustCall: choice.type === "tool" ? choice.toolName : "*" },
+    },
+  };
+}
+
+type Part = LanguageModelV4StreamPart;
+type Tool = NonNullable<CallParams["tools"]>[number];
+type GenerateResult = Awaited<ReturnType<LanguageModelV4["doGenerate"]>>;
+
+const mustCallOf = (params: CallParams) =>
+  (params.providerOptions?.northstar as { mustCall?: string } | undefined)?.mustCall;
+
+const sumUsage = (a: LanguageModelV4Usage, b: LanguageModelV4Usage): LanguageModelV4Usage => {
+  const add = (x: number | undefined, y: number | undefined) =>
+    x === undefined && y === undefined ? undefined : (x ?? 0) + (y ?? 0);
+  return {
+    inputTokens: {
+      total: add(a.inputTokens.total, b.inputTokens.total),
+      noCache: add(a.inputTokens.noCache, b.inputTokens.noCache),
+      cacheRead: add(a.inputTokens.cacheRead, b.inputTokens.cacheRead),
+      cacheWrite: add(a.inputTokens.cacheWrite, b.inputTokens.cacheWrite),
+    },
+    outputTokens: {
+      total: add(a.outputTokens.total, b.outputTokens.total),
+      text: add(a.outputTokens.text, b.outputTokens.text),
+      reasoning: add(a.outputTokens.reasoning, b.outputTokens.reasoning),
+    },
+  };
+};
+
+/**
+ * Vertex's gpt-oss endpoint sometimes ends a step that had to call a tool with neither text nor a
+ * call: the model wrote the call, and the endpoint dropped it on the way out (finish "stop", the
+ * completion tokens spent, only reasoning returned). Seen on about a third of such steps in
+ * testing, and on every try of some lifecycle saves, so retrying the same request doesn't help.
+ * The same request in JSON-schema mode returns the arguments reliably, so when a must-call step
+ * comes back without a call, this asks for the call that way and hands it on as the tool call.
+ * Null when there's nothing to recover (the reply can't be read, or names no offered tool).
+ */
+export async function recoverDroppedCall(
+  model: LanguageModelV4,
+  params: CallParams,
+  mustCall: string,
+): Promise<{ call: LanguageModelV4ToolCall; usage: LanguageModelV4Usage } | null> {
+  const tools = (params.tools ?? []).filter(
+    (tool): tool is Extract<Tool, { type: "function" }> => tool.type === "function",
+  );
+  const target =
+    mustCall !== "*"
+      ? tools.find((tool) => tool.name === mustCall)
+      : tools.length === 1
+        ? tools[0]
+        : undefined;
+  const schema = target
+    ? target.inputSchema
+    : {
+        type: "object",
+        properties: {
+          tool: { type: "string", enum: tools.map((tool) => tool.name) },
+          arguments: { type: "object" },
+        },
+        required: ["tool", "arguments"],
+      };
+  const ask = target
+    ? `Reply with the arguments for the \`${target.name}\` tool as one JSON object, nothing else.`
+    : `Reply with one JSON object naming the tool to call ("tool") and its arguments ("arguments"), nothing else. Tools: ${tools
+        .map((tool) => `${tool.name}: ${tool.description ?? ""}`)
+        .join("; ")}`;
+  const { providerOptions, ...rest } = params;
+  const { northstar: _, ...forProvider } = providerOptions ?? {};
+  let result: GenerateResult;
+  try {
+    result = await model.doGenerate({
+      ...rest,
+      providerOptions: forProvider,
+      tools: undefined,
+      toolChoice: undefined,
+      responseFormat: { type: "json", schema: schema as never, name: target?.name ?? "tool_call" },
+      prompt: [
+        // Drop the "call a tool now" instruction: this request offers no tools.
+        ...params.prompt.slice(0, -1),
+        { role: "user", content: [{ type: "text", text: ask }] },
+      ],
+    });
+  } catch (error) {
+    console.warn(
+      `[vertex] could not recover a dropped call: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  }
+  const text = result.content
+    .map((part) => (part.type === "text" ? part.text : ""))
+    .join("")
+    .trim();
+  let value: unknown;
+  try {
+    value = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  } catch {
+    return null;
+  }
+  const chosen = target
+    ? { name: target.name, input: value }
+    : (() => {
+        const pick = value as { tool?: unknown; arguments?: unknown };
+        const name = tools.find((tool) => tool.name === pick.tool)?.name;
+        return name ? { name, input: pick.arguments ?? {} } : null;
+      })();
+  if (!chosen) return null;
+  return {
+    call: {
+      type: "tool-call",
+      toolCallId: `vertex-recovered-${crypto.randomUUID()}`,
+      toolName: chosen.name,
+      input: JSON.stringify(chosen.input),
+    },
+    usage: result.usage,
   };
 }
 
@@ -104,6 +229,65 @@ function reasoningFromWorkersAi(model: Exclude<LanguageModel, string>) {
     middleware: {
       specificationVersion: "v3",
       transformParams: async ({ params }) => vertexCompatibleParams(params),
+      // A must-call step that came back without a call gets one recovered (recoverDroppedCall).
+      wrapGenerate: async ({ doGenerate, params, model: inner }) => {
+        const result = await doGenerate();
+        const mustCall = mustCallOf(params as CallParams);
+        if (!mustCall || result.content.some((part) => part.type === "tool-call")) return result;
+        const recovered = await recoverDroppedCall(
+          inner as unknown as LanguageModelV4,
+          params as CallParams,
+          mustCall,
+        );
+        if (!recovered) return result;
+        console.warn(`[vertex] recovered a dropped ${recovered.call.toolName} call`);
+        return {
+          ...result,
+          content: [...result.content, recovered.call],
+          finishReason: { unified: "tool-calls", raw: "tool_calls" },
+          usage: sumUsage(result.usage as LanguageModelV4Usage, recovered.usage) as never,
+        };
+      },
+      wrapStream: async ({ doStream, params, model: inner }) => {
+        const result = await doStream();
+        const mustCall = mustCallOf(params as CallParams);
+        if (!mustCall) return result;
+        // A must-call step's parts are held until it's known whether a call came back.
+        const parts: Part[] = [];
+        const reader = (result.stream as ReadableStream<Part>).getReader();
+        for (let next = await reader.read(); !next.done; next = await reader.read())
+          parts.push(next.value);
+        let out = parts;
+        if (!parts.some((part) => part.type === "tool-call")) {
+          const recovered = await recoverDroppedCall(
+            inner as unknown as LanguageModelV4,
+            params as CallParams,
+            mustCall,
+          );
+          if (recovered) {
+            console.warn(`[vertex] recovered a dropped ${recovered.call.toolName} call`);
+            const finish = parts.find((part) => part.type === "finish");
+            out = [
+              ...parts.filter((part) => part.type !== "finish"),
+              recovered.call,
+              {
+                type: "finish",
+                finishReason: { unified: "tool-calls", raw: "tool_calls" },
+                usage: finish ? sumUsage(finish.usage, recovered.usage) : recovered.usage,
+              },
+            ];
+          }
+        }
+        return {
+          ...result,
+          stream: new ReadableStream({
+            start(controller) {
+              for (const part of out) controller.enqueue(part);
+              controller.close();
+            },
+          }) as typeof result.stream,
+        };
+      },
     },
   });
 }
