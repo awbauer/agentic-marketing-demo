@@ -18,12 +18,17 @@ function useCourse() {
 
 type View = "graph" | "history" | "evaluations" | "journeys" | "architecture" | "team" | "playbook";
 const READ_KEY = "northstar.learn.read.v1";
+const SECTION_IDS: ReadonlySet<unknown> = new Set(
+  COURSE.flatMap((part) => part.sections.map((section) => section.id)),
+);
 
 // Reading progress is a per-viewer convenience; it must work when storage is unavailable.
-function loadRead(): Set<string> {
+// Saved progress can name lessons that have since been retired; count only the current ones.
+export function loadRead(): Set<string> {
   try {
     const raw = window.localStorage.getItem(READ_KEY);
-    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    const saved = raw ? (JSON.parse(raw) as unknown) : [];
+    return new Set(Array.isArray(saved) ? saved.filter((id) => SECTION_IDS.has(id)) : []);
   } catch {
     return new Set();
   }
