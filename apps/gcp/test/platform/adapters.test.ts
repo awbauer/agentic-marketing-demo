@@ -106,10 +106,17 @@ describe("Vertex AI models", () => {
     expect(retry.response_format?.type).toBe("json_schema");
   });
 
-  it("picks the tool too when any tool would do, and leaves an unreadable reply alone", async () => {
-    const { fetcher } = recorder((call) =>
-      call.body.response_format ? chatReply('{"tool":"other","arguments":{}}') : chatReply(""),
-    );
+  it("when any tool would do, picks the tool and then asks for its arguments under its own schema", async () => {
+    type Format = {
+      json_schema?: { name?: string; schema?: { properties?: Record<string, unknown> } };
+    };
+    const { calls, fetcher } = recorder((call) => {
+      const format = call.body.response_format as Format | undefined;
+      if (!format) return chatReply("");
+      return format.json_schema?.name === "tool_choice"
+        ? chatReply('{"tool":"lookup"}')
+        : chatReply('{"q":"Cardivance"}');
+    });
     const models = vertexModels({
       project: "p",
       location: "us-central1",
@@ -126,7 +133,13 @@ describe("Vertex AI models", () => {
       tools,
       toolChoice: "required",
     });
-    expect(anyTool.toolCalls.map((call) => call.toolName)).toEqual(["other"]);
+    expect(anyTool.toolCalls.map((call) => [call.toolName, call.input])).toEqual([
+      ["lookup", { q: "Cardivance" }],
+    ]);
+    // The arguments were asked for under lookup's own input schema, not a free-form object.
+    const argsRequest = calls.at(-1)?.body.response_format as Format;
+    expect(argsRequest.json_schema?.name).toBe("lookup");
+    expect(Object.keys(argsRequest.json_schema?.schema?.properties ?? {})).toEqual(["q"]);
 
     const broken = recorder(() => chatReply(""));
     // Nothing to recover: the step ends without a call, which the AI SDK reports as before.

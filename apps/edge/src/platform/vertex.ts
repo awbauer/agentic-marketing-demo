@@ -135,75 +135,81 @@ export async function recoverDroppedCall(
   const tools = (params.tools ?? []).filter(
     (tool): tool is Extract<Tool, { type: "function" }> => tool.type === "function",
   );
-  const target =
+  const { providerOptions, ...rest } = params;
+  const { northstar: _, ...forProvider } = providerOptions ?? {};
+  let usage: LanguageModelV4Usage | null = null;
+  /** One JSON-schema request over the step's own context, without its tools; null if unreadable. */
+  const askJson = async (schema: unknown, name: string, ask: string) => {
+    let result: GenerateResult;
+    try {
+      result = await model.doGenerate({
+        ...rest,
+        providerOptions: forProvider,
+        tools: undefined,
+        toolChoice: undefined,
+        responseFormat: { type: "json", schema: schema as never, name },
+        prompt: [
+          // Drop the "call a tool now" instruction: this request offers no tools.
+          ...params.prompt.slice(0, -1),
+          { role: "user", content: [{ type: "text", text: ask }] },
+        ],
+      });
+    } catch (error) {
+      console.warn(
+        `[vertex] could not recover a dropped call: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+    usage = usage
+      ? sumUsage(usage, result.usage as LanguageModelV4Usage)
+      : (result.usage as LanguageModelV4Usage);
+    const text = result.content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("")
+      .trim();
+    try {
+      return JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as unknown;
+    } catch {
+      return null;
+    }
+  };
+  let target =
     mustCall !== "*"
       ? tools.find((tool) => tool.name === mustCall)
       : tools.length === 1
         ? tools[0]
         : undefined;
-  const schema = target
-    ? target.inputSchema
-    : {
+  if (!target && mustCall === "*" && tools.length > 1) {
+    // Any tool would do: first which one, then its arguments under that tool's own schema, so the
+    // call is shaped as the tool requires rather than as a free-form object.
+    const pick = (await askJson(
+      {
         type: "object",
-        properties: {
-          tool: { type: "string", enum: tools.map((tool) => tool.name) },
-          arguments: { type: "object" },
-        },
-        required: ["tool", "arguments"],
-      };
-  const ask = target
-    ? `Reply with the arguments for the \`${target.name}\` tool as one JSON object, nothing else.`
-    : `Reply with one JSON object naming the tool to call ("tool") and its arguments ("arguments"), nothing else. Tools: ${tools
+        properties: { tool: { type: "string", enum: tools.map((tool) => tool.name) } },
+        required: ["tool"],
+      },
+      "tool_choice",
+      `Which tool do you call now? Reply with one JSON object naming it ("tool"), nothing else. Tools: ${tools
         .map((tool) => `${tool.name}: ${tool.description ?? ""}`)
-        .join("; ")}`;
-  const { providerOptions, ...rest } = params;
-  const { northstar: _, ...forProvider } = providerOptions ?? {};
-  let result: GenerateResult;
-  try {
-    result = await model.doGenerate({
-      ...rest,
-      providerOptions: forProvider,
-      tools: undefined,
-      toolChoice: undefined,
-      responseFormat: { type: "json", schema: schema as never, name: target?.name ?? "tool_call" },
-      prompt: [
-        // Drop the "call a tool now" instruction: this request offers no tools.
-        ...params.prompt.slice(0, -1),
-        { role: "user", content: [{ type: "text", text: ask }] },
-      ],
-    });
-  } catch (error) {
-    console.warn(
-      `[vertex] could not recover a dropped call: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return null;
+        .join("; ")}`,
+    )) as { tool?: unknown } | null;
+    target = tools.find((tool) => tool.name === pick?.tool);
   }
-  const text = result.content
-    .map((part) => (part.type === "text" ? part.text : ""))
-    .join("")
-    .trim();
-  let value: unknown;
-  try {
-    value = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
-  } catch {
-    return null;
-  }
-  const chosen = target
-    ? { name: target.name, input: value }
-    : (() => {
-        const pick = value as { tool?: unknown; arguments?: unknown };
-        const name = tools.find((tool) => tool.name === pick.tool)?.name;
-        return name ? { name, input: pick.arguments ?? {} } : null;
-      })();
-  if (!chosen) return null;
+  if (!target) return null;
+  const input = await askJson(
+    target.inputSchema,
+    target.name,
+    `Reply with the arguments for the \`${target.name}\` tool as one JSON object, nothing else.`,
+  );
+  if (input === null || !usage) return null;
   return {
     call: {
       type: "tool-call",
       toolCallId: `vertex-recovered-${crypto.randomUUID()}`,
-      toolName: chosen.name,
-      input: JSON.stringify(chosen.input),
+      toolName: target.name,
+      input: JSON.stringify(input),
     },
-    usage: result.usage,
+    usage,
   };
 }
 
