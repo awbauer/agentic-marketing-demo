@@ -6,6 +6,8 @@
 // - data ids in parentheses ("(lt-seg-hf-specialists)") move out of the sentence into source chips;
 //   ids written into a sentence stay where they are, as code.
 
+import { SourceId } from "./Sources";
+
 /** A governed data id: a brand prefix, a kind, and a name. */
 const ID = /\b(?:lt|ck|hs)-(?:seg|sig|comp|result|img|disc|ev|mod|claim)-[a-z0-9-]+\b/g;
 /** A parenthetical that holds at least one id, e.g. "(signal lt-sig-congress-data)". */
@@ -37,13 +39,7 @@ function Inline({ text }: { text: string }) {
   return (
     <>
       {parts.map((part, index) =>
-        index % 2 === 1 ? (
-          <code key={`${part}-${index}`} className="team-rich-id">
-            {part}
-          </code>
-        ) : (
-          part
-        ),
+        index % 2 === 1 ? <SourceId key={`${part}-${index}`} id={part} /> : part,
       )}
     </>
   );
@@ -164,7 +160,7 @@ export function SourceChips({ ids }: { ids: readonly string[] }) {
     <p className="team-rich-sources">
       <span>Sources</span>
       {unique.map((id) => (
-        <code key={id}>{id}</code>
+        <SourceId key={id} id={id} />
       ))}
     </p>
   );

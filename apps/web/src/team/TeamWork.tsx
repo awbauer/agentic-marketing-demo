@@ -15,6 +15,7 @@ import {
   teamMarket,
 } from "@northstar/architecture";
 import { useState } from "react";
+import { SourceId } from "./Sources";
 
 const usd = (value: number) =>
   value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -43,9 +44,7 @@ function Research({ work, brief }: { work: ResearchReport; brief: CampaignBrief 
           <li key={insight.text}>
             {insight.text}{" "}
             {insight.sources.map((source) => (
-              <code key={source} className="team-source">
-                {source}
-              </code>
+              <SourceId key={source} id={source} />
             ))}
           </li>
         ))}
@@ -62,7 +61,7 @@ function Research({ work, brief }: { work: ResearchReport; brief: CampaignBrief 
           <ul>
             {work.competitorWatch.map((item) => (
               <li key={item.competitorId}>
-                <code className="team-source">{item.competitorId}</code> {item.implication}
+                <SourceId id={item.competitorId} /> {item.implication}
               </li>
             ))}
           </ul>

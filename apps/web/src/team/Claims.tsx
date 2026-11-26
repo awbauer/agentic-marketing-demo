@@ -4,7 +4,8 @@
 // requires. The details come from the run's own get_claims_library reads, so they match what the
 // agents saw; a claim no agent has read yet shows the library's record.
 import { CLAIM_RECORDS, type LibraryClaim } from "@northstar/architecture";
-import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
+import { createContext, useContext } from "react";
+import { IdCard } from "./IdCard";
 import type { TeamState } from "./team-state";
 
 export type ClaimInfo = Partial<LibraryClaim> & {
@@ -116,117 +117,87 @@ export function claimIndex(state: Pick<TeamState, "agents">): ClaimIndex {
 
 const ClaimsContext = createContext<ClaimIndex>(fromRecords());
 export const ClaimsProvider = ClaimsContext.Provider;
+/** The claims the page knows, by topic and by claim ID. */
+export const useClaims = () => useContext(ClaimsContext);
 
 const referenceText = (reference: NonNullable<ClaimInfo["references"]>[number]) =>
   `${reference.source}${reference.anchor ? `, ${reference.anchor}` : ""}${
     reference.expiresOn ? ` (until ${reference.expiresOn})` : ""
   }`;
 
-/** A claim's topic or ID. Click it (or press Enter) for the library's details; Escape closes. */
+/** A claim's topic or ID. Click or tap it for the library's details. */
 export function Claim({ id, label }: { id: string; label?: string }) {
   const claim = useContext(ClaimsContext).get(id);
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLSpanElement>(null);
-  const panelId = useId();
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    const onPointer = (event: MouseEvent) => {
-      if (!box.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onPointer);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onPointer);
-    };
-  }, [open]);
   if (!claim) return <code>{label ?? id}</code>;
   const status = claim.status
     ? `${claim.status} · ${claim.usable ? "usable in this campaign" : "not usable here"}`
     : "Not read by an agent in this run yet";
   return (
-    <span className="team-claim" ref={box}>
-      <button
-        type="button"
-        className={`team-claim-chip${claim.usable === false ? " unusable" : ""}`}
-        aria-expanded={open}
-        aria-controls={panelId}
-        title="Show this claim's details"
-        onClick={() => setOpen((value) => !value)}
-      >
-        {label ?? id}
-      </button>
-      {open && (
-        <span
-          id={panelId}
-          className="team-claim-card"
-          role="dialog"
-          aria-label={`Claim ${claim.claimId ?? claim.topic}`}
-        >
-          <strong>
-            {claim.claimId ?? "No library ID"} · <code>{claim.topic}</code>
-          </strong>
-          {claim.text ? <q>{claim.text}</q> : null}
-          <span className="team-claim-status">
-            {status}
-            {claim.type ? ` · ${claim.type}` : ""}
-          </span>
-          {claim.issues?.length ? (
-            <span className="team-claim-issues">{claim.issues.join(" ")}</span>
-          ) : null}
-          <dl>
-            {claim.scope && (
-              <>
-                <dt>Scope</dt>
-                <dd>
-                  {[
-                    claim.scope.audiences.join(", "),
-                    claim.scope.markets.join(", "),
-                    claim.scope.channels.join(", "),
-                    claim.scope.indication,
-                  ].join(" · ")}
-                </dd>
-              </>
-            )}
-            {claim.labelVersion && (
-              <>
-                <dt>Label</dt>
-                <dd>
-                  {claim.labelVersion}
-                  {claim.expiresOn ? ` · claim expires ${claim.expiresOn}` : ""}
-                </dd>
-              </>
-            )}
-            {claim.references?.length ? (
-              <>
-                <dt>References</dt>
-                <dd>{claim.references.map(referenceText).join("; ")}</dd>
-              </>
-            ) : null}
-            {claim.requires?.length ? (
-              <>
-                <dt>Requires</dt>
-                <dd>{claim.requires.join(", ")}</dd>
-              </>
-            ) : null}
-            {claim.mustNotAppearWith?.length ? (
-              <>
-                <dt>Never with</dt>
-                <dd>{claim.mustNotAppearWith.join(", ")}</dd>
-              </>
-            ) : null}
-            {claim.context && (
-              <>
-                <dt>Context</dt>
-                <dd>{claim.context}</dd>
-              </>
-            )}
-          </dl>
-        </span>
-      )}
-    </span>
+    <IdCard
+      label={label ?? id}
+      cardLabel={`Claim ${claim.claimId ?? claim.topic}`}
+      hint="Show this claim's details"
+      tone={claim.usable === false ? "warn" : undefined}
+    >
+      <strong>
+        {claim.claimId ?? "No library ID"} · <code>{claim.topic}</code>
+      </strong>
+      {claim.text ? <q>{claim.text}</q> : null}
+      <span className="team-claim-status">
+        {status}
+        {claim.type ? ` · ${claim.type}` : ""}
+      </span>
+      {claim.issues?.length ? (
+        <span className="team-claim-issues">{claim.issues.join(" ")}</span>
+      ) : null}
+      <dl>
+        {claim.scope && (
+          <>
+            <dt>Scope</dt>
+            <dd>
+              {[
+                claim.scope.audiences.join(", "),
+                claim.scope.markets.join(", "),
+                claim.scope.channels.join(", "),
+                claim.scope.indication,
+              ].join(" · ")}
+            </dd>
+          </>
+        )}
+        {claim.labelVersion && (
+          <>
+            <dt>Label</dt>
+            <dd>
+              {claim.labelVersion}
+              {claim.expiresOn ? ` · claim expires ${claim.expiresOn}` : ""}
+            </dd>
+          </>
+        )}
+        {claim.references?.length ? (
+          <>
+            <dt>References</dt>
+            <dd>{claim.references.map(referenceText).join("; ")}</dd>
+          </>
+        ) : null}
+        {claim.requires?.length ? (
+          <>
+            <dt>Requires</dt>
+            <dd>{claim.requires.join(", ")}</dd>
+          </>
+        ) : null}
+        {claim.mustNotAppearWith?.length ? (
+          <>
+            <dt>Never with</dt>
+            <dd>{claim.mustNotAppearWith.join(", ")}</dd>
+          </>
+        ) : null}
+        {claim.context && (
+          <>
+            <dt>Context</dt>
+            <dd>{claim.context}</dd>
+          </>
+        )}
+      </dl>
+    </IdCard>
   );
 }
