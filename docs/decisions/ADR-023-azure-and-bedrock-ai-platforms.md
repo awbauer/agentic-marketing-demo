@@ -33,7 +33,7 @@ Add two platforms to the registry in `apps/edge/src/platform/models.ts`, built l
   - the Architecture agents;
   - the squad's open-model tier.
 
-  The squad's Anthropic and OpenAI vendors keep the host's route: AI Gateway on Cloudflare. The trace, the route map and each squad run name the platform.
+  The squad's Anthropic and OpenAI vendors keep the host's route: AI Gateway on Cloudflare, Claude on Vertex AI on Google Cloud. Azure and Bedrock have no vendor route, so making either the default (`AI_PLATFORM`) leaves the vendors on the host's route (`vendorPlatform`) rather than turning them off. The trace, the route map and each squad run name the platform.
 
 ## Consequences
 

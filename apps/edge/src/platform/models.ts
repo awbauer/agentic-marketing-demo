@@ -157,6 +157,18 @@ export function modelPlatform(env: ModelBindings, choice?: unknown): ModelPlatfo
   return platforms.default ? (platforms.available[platforms.default] ?? null) : null;
 }
 
+/**
+ * The platform the squad's Anthropic and OpenAI vendors route through. That is the default
+ * platform's own route, or, when the default has none (Azure AI Foundry, Amazon Bedrock), the
+ * host's: Vertex AI on Google Cloud, or null for the AI Gateway on Cloudflare. Changing the default
+ * never takes away a vendor the host could otherwise reach (ADR-023).
+ */
+export function vendorPlatform(env: ModelBindings & { HOST?: string }): ModelPlatform | null {
+  const platform = modelPlatform(env);
+  if (!platform || platform.vendor || platform.kind === "workers-ai") return platform;
+  return serverHost(env) === "google-cloud" ? (aiPlatforms(env).available.vertex ?? null) : null;
+}
+
 /** What the top bar's AI platform menu lists. */
 export function aiPlatformOptions(env: ModelBindings): AiPlatformOptions {
   const platforms = aiPlatforms(env);

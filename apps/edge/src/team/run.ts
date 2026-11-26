@@ -33,7 +33,7 @@ import type { HostId } from "@northstar/contracts";
 import { type LanguageModel, type LanguageModelMiddleware, wrapLanguageModel } from "ai";
 import { modelFactory } from "../architecture/agent-runtime";
 import { ArchError, type Ctx, invoke, overridesFor } from "../architecture/context";
-import { modelPlatform, serverHost } from "../platform/models";
+import { modelPlatform, serverHost, vendorPlatform } from "../platform/models";
 import { anthropicModel, DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
 import { modelPrice } from "./evals";
 import { bindingCanFetch, GATEWAY_HELD_KEY, gatewayFetch } from "./gateway";
@@ -274,10 +274,11 @@ export function providerStatus(ctx: Ctx) {
   const env = providerEnv(ctx);
   const scripted = ctx.env.AGENT_MODEL === "scripted";
   const platform = modelPlatform(ctx.env);
+  const vendorRoute = vendorPlatform(ctx.env);
   const vendor = (id: "anthropic" | "openai"): { available: boolean; reason?: string } => {
     if (scripted) return { available: true };
-    if (platform?.vendor) {
-      const route = platform.vendor(id, {});
+    if (vendorRoute?.vendor) {
+      const route = vendorRoute.vendor(id, {});
       return "reason" in route ? { available: false, reason: route.reason } : { available: true };
     }
     if (!ctx.env.AI)
@@ -313,7 +314,7 @@ export function providerStatus(ctx: Ctx) {
   // server's own route (the AI Gateway on Cloudflare, Claude on Vertex on Google Cloud).
   const chosen = modelPlatform(ctx.env, ctx.aiPlatform) ?? platform;
   return TEAM_PROVIDERS.map((id) => {
-    const vertex = (id === "cloudflare" ? chosen : platform)?.kind === "vertex";
+    const vertex = (id === "cloudflare" ? chosen : vendorRoute)?.kind === "vertex";
     return {
       id,
       label: teamProviderLabel(id, vertex ? "google-cloud" : "cloudflare"),
@@ -356,7 +357,7 @@ export function teamModel(
   if (ctx.env.AGENT_MODEL === "scripted") return teamScriptedModel();
   const modelId = teamModels(ctx, provider)[agent];
   if (provider === "cloudflare") return modelFactory(ctx.env, ctx.aiPlatform)(modelId);
-  const platform = modelPlatform(ctx.env);
+  const platform = vendorPlatform(ctx.env);
   if (platform?.vendor) {
     const route = platform.vendor(provider, { run: run.id, agent });
     if ("reason" in route) throw new ArchError(503, "PROVIDER_UNAVAILABLE", route.reason);

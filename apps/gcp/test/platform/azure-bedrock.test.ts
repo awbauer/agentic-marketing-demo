@@ -7,6 +7,7 @@ import {
 } from "@northstar/architecture";
 import { generateText } from "ai";
 import { describe, expect, it } from "vitest";
+import type { Ctx } from "../../../edge/src/architecture/context";
 import {
   azureBase,
   azureDeployment,
@@ -19,7 +20,13 @@ import {
   bedrockModels,
   bedrockServedCatalogId,
 } from "../../../edge/src/platform/bedrock";
-import { aiPlatformOptions, aiPlatforms, modelPlatform } from "../../../edge/src/platform/models";
+import {
+  aiPlatformOptions,
+  aiPlatforms,
+  modelPlatform,
+  vendorPlatform,
+} from "../../../edge/src/platform/models";
+import { providerStatus } from "../../../edge/src/team/run";
 
 type Call = { url: string; init: RequestInit | undefined; body: Record<string, unknown> };
 
@@ -103,6 +110,26 @@ describe("Azure and Bedrock on the AI platform menu", () => {
       "workers-ai",
     ]);
     expect(modelPlatform(narrowed, "azure")?.kind).toBe("workers-ai");
+  });
+
+  it("keeps the host's vendor route when Azure or Bedrock is the default", () => {
+    const bedrock = { AI_PLATFORM: "bedrock", BEDROCK_API_KEY: "b" };
+    // Google Cloud: Claude stays on Vertex AI.
+    const google = {
+      HOST: "google-cloud",
+      VERTEX_PROJECT: "p",
+      GOOGLE_ACCESS_TOKEN: async () => "t",
+      ...bedrock,
+    };
+    expect(modelPlatform(google)?.kind).toBe("bedrock");
+    expect(vendorPlatform(google)?.kind).toBe("vertex");
+    const anthropic = providerStatus({ env: google } as unknown as Ctx).find(
+      (item) => item.id === "anthropic",
+    );
+    expect(anthropic).toMatchObject({ available: true, label: "Claude on Vertex AI" });
+    // Cloudflare: the vendors go through the AI Gateway, as with Workers AI as the default.
+    expect(vendorPlatform({ AI: fakeAi, ...bedrock })).toBeNull();
+    expect(vendorPlatform({ AI: fakeAi, BEDROCK_API_KEY: "b" })?.kind).toBe("workers-ai");
   });
 
   it("names the open-model tier for the platform a squad run used", () => {
