@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-26T00:39:59.887Z",
+  "generatedAt": "2026-11-26T02:05:30.678Z",
   "status": "failed",
   "baseRef": "upstream/main",
-  "mergeBase": "565ffd318bb54fc444c1ea7b55593b57008edbc4",
+  "mergeBase": "a04900a419f98c389f82cdfafd737c2e24509f14",
   "inventory": {
     "Tool": 109,
     "Write action": 5,
@@ -13,23 +13,33 @@
   },
   "drift": [
     {
+      "section": "two-hosts",
+      "status": "stale",
+      "paths": [
+        "apps/edge/src/platform/vertex.ts"
+      ]
+    },
+    {
       "section": "pharma-lifecycle",
       "status": "updated",
       "paths": [
         "apps/edge/src/team/lifecycle-workers.ts",
-        "packages/architecture/src/team-pharma.ts"
+        "apps/edge/src/team/lifecycle.ts"
       ]
     },
     {
       "section": "campaign-squad",
-      "status": "stale",
+      "status": "updated",
       "paths": [
-        "apps/edge/src/team/lifecycle-workers.ts"
+        "apps/edge/src/team/lifecycle-workers.ts",
+        "apps/edge/src/team/lifecycle.ts",
+        "apps/web/src/team/TeamView.tsx",
+        "apps/web/src/team/ToolLibrary.tsx"
       ]
     }
   ],
   "notices": [],
   "failures": [
-    "Learn drift: this branch changes code that these Learn sections explain, but the sections didn't change:\n  • campaign-squad (“The campaign squad: a lead, four spokes, and the platform under them”) ← apps/edge/src/team/lifecycle-workers.ts\nUpdate each section in apps/web/src/learn/content.ts (or its lesson or reference entries) so it teaches the change.\nIf nothing a reader learns has changed, say so in a commit trailer:\n  Learn-Reviewed: campaign-squad (why no Learn update is needed)"
+    "Learn drift: this branch changes code that these Learn sections explain, but the sections didn't change:\n  • two-hosts (“Two hosts: Cloudflare and Google Cloud”) ← apps/edge/src/platform/vertex.ts\nUpdate each section in apps/web/src/learn/content.ts (or its lesson or reference entries) so it teaches the change.\nIf nothing a reader learns has changed, say so in a commit trailer:\n  Learn-Reviewed: two-hosts (why no Learn update is needed)"
   ]
 }

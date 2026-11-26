@@ -298,9 +298,12 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       system: systemFor(run.brief),
       messages,
       tools,
-      // lifecycle_step is how the lead acts; it isn't forced, and a turn that ends in prose gets
-      // a nudge (ADR-019).
+      // lifecycle_step is how the lead acts. It isn't forced on the lead's own turn (ADR-019); a turn
+      // that ends without it gets a nudge, and the nudge's first step must call a tool, so a call
+      // the model meant to make (and Vertex dropped) is recovered rather than lost.
       stopWhen: [stepCountIs(16), halted],
+      prepareStep: ({ stepNumber }) =>
+        attempt > 0 && stepNumber === 0 ? { toolChoice: "required" as const } : {},
       ...AGENT_GENERATION,
     });
     try {

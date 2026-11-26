@@ -102,6 +102,32 @@ function namedClaimTopics(
   ];
 }
 
+/** One content module as a worker drafts it, before the service checks it. */
+const moduleDraft = z.looseObject({
+  headline: z.string(),
+  opening: z.string(),
+  claimTopics: words.describe(
+    'Claim topics from get_claims_library, e.g. ["cardivance-mortality", "cardivance-safety"]. The service inserts their text.',
+  ),
+  closing: z.string(),
+  cta: z.string(),
+  assets: many(z.object({ assetId: z.string(), use: z.string().optional() })).optional(),
+});
+
+/** The drafted modules as a list, whether listed or keyed by channel ({ email, display }). */
+export function modulesList(value: unknown): Array<Record<string, unknown>> {
+  if (value && typeof value === "object" && !Array.isArray(value) && !("channel" in value)) {
+    const byChannel = value as Record<string, unknown>;
+    if ("email" in byChannel || "display" in byChannel)
+      return (["email", "display"] as const).flatMap((channel) =>
+        byChannel[channel] && typeof byChannel[channel] === "object"
+          ? [{ ...(byChannel[channel] as Record<string, unknown>), channel }]
+          : [],
+      );
+  }
+  return list(value as Array<Record<string, unknown>> | Record<string, unknown>);
+}
+
 /** A field's text under whichever key a model used for it, with objects flattened to text. */
 function fieldText(item: Record<string, unknown>, key: RegExp): string {
   const flat = (value: unknown): string =>
@@ -376,23 +402,15 @@ function saveTool(
       description:
         "Save the content modules: one email and one display module, each with a headline, an opening line, the claim topics it uses (the service inserts each claim's exact approved text and references), a closing line, a call to action and the approved assets it uses. The service attaches the ISI, boxed warning and PI link.",
       schema: z.object({
-        modules: many(
-          z.looseObject({
-            channel: z.enum(["email", "display"]),
-            headline: z.string(),
-            opening: z.string(),
-            claimTopics: words.describe(
-              'Claim topics from get_claims_library, e.g. ["cardivance-mortality", "cardivance-safety"]. The service inserts their text.',
-            ),
-            closing: z.string(),
-            cta: z.string(),
-            assets: many(z.object({ assetId: z.string(), use: z.string().optional() })).optional(),
-          }),
-        ),
+        modules: z.union([
+          many(moduleDraft.extend({ channel: z.enum(["email", "display"]) })),
+          // gpt-oss sometimes keys the modules by channel instead of listing them.
+          z.object({ email: moduleDraft.optional(), display: moduleDraft.optional() }),
+        ]),
       }),
       run: async (input: { modules: unknown }) => {
         const world = await lifecycleWorld(run);
-        const drafts = list(input.modules as Array<Record<string, unknown>>);
+        const drafts = modulesList(input.modules);
         const problems: string[] = [];
         const modules: PharmaModule[] = [];
         if (!drafts.some((draft) => draft.channel === "email"))

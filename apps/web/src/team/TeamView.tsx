@@ -843,7 +843,6 @@ export function TeamView({ onClose }: { onClose: () => void }) {
       <p className="team-diagram-hint arch-note">
         Click an agent for its prompt, model, usage and calls.
       </p>
-      <GuardrailPanel hits={state.guardrails} />
       <dl className="team-stats compact" aria-live="polite">
         <div>
           <dt>Messages</dt>
@@ -1156,7 +1155,7 @@ export function TeamView({ onClose }: { onClose: () => void }) {
   );
 }
 
-type HoodTab = "agents" | "tools" | "infra" | "semantic" | "evals" | "decisions";
+type HoodTab = "agents" | "guardrails" | "tools" | "infra" | "semantic" | "evals" | "decisions";
 
 /**
  * Everything under the agents, in one panel: each agent's grants and calls, the infrastructure,
@@ -1173,6 +1172,10 @@ function UnderTheHood({
   const [tab, setTab] = useState<HoodTab>("agents");
   const tabs: Array<[HoodTab, string]> = [
     ["agents", "Agents"],
+    [
+      "guardrails",
+      `Guardrails${state.guardrails.length ? ` · ${state.guardrails.reduce((sum, hit) => sum + hit.count, 0)} caught` : ""}`,
+    ],
     ["tools", "Tool library"],
     ["infra", "Agent infrastructure"],
     ["semantic", "Semantic layer"],
@@ -1203,6 +1206,16 @@ function UnderTheHood({
       <div role="tabpanel">
         {tab === "agents" ? (
           <AgentRoster state={state} onOpen={onOpen} />
+        ) : tab === "guardrails" ? (
+          state.guardrails.length ? (
+            <GuardrailPanel hits={state.guardrails} />
+          ) : (
+            <p className="arch-note">
+              No guardrail has stopped an agent on this run yet. When a rule check refuses a save,
+              the policy gateway denies a call or a tool rejects its input, it shows here with what
+              the rule protects.
+            </p>
+          )
         ) : tab === "tools" ? (
           <ToolLibrary state={state} />
         ) : tab === "infra" ? (
