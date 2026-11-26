@@ -4,6 +4,7 @@
 // until the person at the browser decides, acting as the role the step needs. The MLR system
 // routes a submitted job to Medical, Legal and Regulatory in turn without waiting on the lead.
 import {
+  TEAM_STEP_CAPS,
   teamAgentsFor,
   applyDecision,
   approveJob,
@@ -284,7 +285,7 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
   const turnStart = run.events.length;
   const limited = () => leadTurnLimit(run, TEAM_DIRECTOR, turnStart) ?? runLimit(run);
   const halted = () => Boolean(run.waiting) || run.finished || stopped || limited() !== null;
-  for (let attempt = 0; attempt < 3 && !halted(); attempt += 1) {
+  for (let attempt = 0; attempt < TEAM_STEP_CAPS.tries && !halted(); attempt += 1) {
     if (attempt > 0)
       messages.push({
         role: "user",
@@ -305,7 +306,7 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       // lifecycle_step is how the lead acts. It isn't forced on the lead's own turn (ADR-019); a turn
       // that ends without it gets a nudge, and the nudge's first step must call a tool, so a call
       // the model meant to make (and Vertex dropped) is recovered rather than lost.
-      stopWhen: [stepCountIs(16), halted],
+      stopWhen: [stepCountIs(TEAM_STEP_CAPS.lifecycleLeadStepsPerTry), halted],
       prepareStep: ({ stepNumber }) =>
         attempt > 0 && stepNumber === 0 ? { toolChoice: "required" as const } : {},
       ...AGENT_GENERATION,

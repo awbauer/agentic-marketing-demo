@@ -3,6 +3,7 @@
 // saves its deliverable. The services behind the deliverable tools check the work, so a model that
 // breaks a rule is refused and told why, and has to fix it.
 import {
+  TEAM_STEP_CAPS,
   assetChoices,
   type Brand,
   buildTeamPolicies,
@@ -598,7 +599,7 @@ export async function runSpecialist(
   // nudges, each offering only the save (ADR-019).
   for (
     let attempt = 0;
-    attempt < 3 && !saved.done && !stuckOnRefusal(saved) && !limited();
+    attempt < TEAM_STEP_CAPS.tries && !saved.done && !stuckOnRefusal(saved) && !limited();
     attempt += 1
   ) {
     if (attempt > 0)
@@ -619,7 +620,7 @@ export async function runSpecialist(
       messages,
       tools,
       stopWhen: [
-        stepCountIs(10),
+        stepCountIs(TEAM_STEP_CAPS.workerStepsPerTry),
         () => saved.done,
         () => stuckOnRefusal(saved),
         () => limited() !== null,

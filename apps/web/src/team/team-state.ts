@@ -202,7 +202,7 @@ export type InfraLayer =
   | "state"
   | "people";
 
-const SAVE_TOOLS = new Set([
+export const SAVE_TOOLS = new Set([
   "report_research",
   "propose_creative",
   "write_copy",

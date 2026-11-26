@@ -3,6 +3,7 @@
 // reconciles the pieces where they disagree, and sends the client one proposal. It never does a
 // spoke's work itself.
 import {
+  TEAM_STEP_CAPS,
   teamAgentsFor,
   buildTeamPolicies,
   CLIENT_ROUNDS,
@@ -396,7 +397,7 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
   const turnStart = run.events.length;
   const limited = () => leadTurnLimit(run, TEAM_DIRECTOR, turnStart) ?? runLimit(run);
   const halted = () => Boolean(run.waiting) || run.finished || stopped || limited() !== null;
-  for (let attempt = 0; attempt < 3 && !halted(); attempt += 1) {
+  for (let attempt = 0; attempt < TEAM_STEP_CAPS.tries && !halted(); attempt += 1) {
     if (attempt > 0)
       messages.push({
         role: "user",
@@ -417,7 +418,7 @@ async function drive(run: TeamRun, messages: ModelMessage[]) {
       tools,
       // next_step is how the lead acts; it isn't forced, and a turn that ends in prose gets a
       // nudge (ADR-019).
-      stopWhen: [stepCountIs(24), halted],
+      stopWhen: [stepCountIs(TEAM_STEP_CAPS.squadLeadStepsPerTry), halted],
       ...AGENT_GENERATION,
     });
     // A model that won't make the required call ends this turn; the next one nudges it.

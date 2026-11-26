@@ -2153,6 +2153,7 @@
 }
 .team-modal-list {
   padding-left: 18px;
+  font-size: 13px;
 }
 
 /* The Evals tab's session bar: what this browser's session holds, and Reset. */
@@ -2359,4 +2360,18 @@
 }
 .team-claim-card code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* The agent modal's Guardrails tab: an allowance near or at its limit stands out. */
+.team-allowances td small {
+  display: block;
+  color: var(--muted);
+}
+.team-allowances tr.near-limit td:nth-child(3) {
+  color: #8a4b0f;
+  font-weight: 600;
+}
+.team-allowances tr.at-limit td:nth-child(3) {
+  color: #a3261b;
+  font-weight: 700;
 }

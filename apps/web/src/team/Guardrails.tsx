@@ -9,7 +9,7 @@ import {
 } from "@northstar/architecture";
 import type { GuardrailHit } from "./team-state";
 
-const KINDS: Record<GuardrailHit["kind"], { label: string; explain: string }> = {
+export const KINDS: Record<GuardrailHit["kind"], { label: string; explain: string }> = {
   rule: {
     label: "Rule check refused the save",
     explain:
@@ -33,7 +33,7 @@ const KINDS: Record<GuardrailHit["kind"], { label: string; explain: string }> = 
 };
 
 /** What each save's rule check protects, in a reviewer's words. */
-const PROTECTS: Record<string, string> = {
+export const PROTECTS: Record<string, string> = {
   report_research: "Findings must cite real data ids from the semantic layer: cite or refuse.",
   propose_creative:
     "The palette and imagery must come from the brand book, and nothing it forbids.",
@@ -50,7 +50,7 @@ const PROTECTS: Record<string, string> = {
 };
 
 /** Each hard limit in words. */
-const LIMIT_NAMES: Record<TeamLimit, string> = {
+export const LIMIT_NAMES: Record<TeamLimit, string> = {
   assignmentToolCalls: "tool calls in one assignment",
   assignmentFailures: "failed tool calls in one assignment",
   sameRefusals: "the same refusal in a row",

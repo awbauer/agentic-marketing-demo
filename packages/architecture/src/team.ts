@@ -747,7 +747,6 @@ export type TeamToolStep = {
   error?: string;
 };
 
-/** What a team run streams while it works, in order. */
 /**
  * Hard limits on how much work the squad does before it stops and says why (team/limits.ts).
  * They sit above the per-step caps, so a model that keeps calling tools without finishing can't
@@ -772,6 +771,18 @@ export const TEAM_LIMITS = {
 } as const;
 export type TeamLimit = keyof typeof TEAM_LIMITS;
 
+/**
+ * The per-step caps under the hard limits: each assignment or lead turn gets up to `tries` model
+ * loops, each stopping after this many steps (a step is one model call and the tools it calls).
+ */
+export const TEAM_STEP_CAPS = {
+  tries: 3,
+  workerStepsPerTry: 10,
+  squadLeadStepsPerTry: 24,
+  lifecycleLeadStepsPerTry: 16,
+} as const;
+
+/** What a team run streams while it works, in order. */
 export type TeamEvent =
   | {
       type: "start";

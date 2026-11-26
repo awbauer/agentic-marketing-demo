@@ -4,8 +4,10 @@
 // refusal says so, and the third ends the assignment: the lead is told the exact problem and can
 // reassign with clearer instructions or ask a person, instead of the worker burning its steps.
 
+import { TEAM_LIMITS } from "@northstar/architecture";
+
 /** Identical refusals in a row that end a worker's assignment. */
-export const SAME_REFUSAL_LIMIT = 3;
+export const SAME_REFUSAL_LIMIT = TEAM_LIMITS.sameRefusals;
 
 export type SaveState = {
   done: boolean;

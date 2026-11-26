@@ -5,6 +5,7 @@
 // unsupported claim, an unapproved image, a contact without consent or a module past its expiry is
 // refused with the reason, and the agent has to fix it.
 import {
+  TEAM_STEP_CAPS,
   type ApprovedJob,
   buildTeamPolicies,
   type GatewayContext,
@@ -738,7 +739,7 @@ export async function runLifecycleWorker(
   const messages: ModelMessage[] = [{ role: "user", content: prompt }];
   for (
     let attempt = 0;
-    attempt < 3 && !saved.done && !stuckOnRefusal(saved) && !limited();
+    attempt < TEAM_STEP_CAPS.tries && !saved.done && !stuckOnRefusal(saved) && !limited();
     attempt += 1
   ) {
     if (attempt > 0)
@@ -759,7 +760,7 @@ export async function runLifecycleWorker(
       messages,
       tools,
       stopWhen: [
-        stepCountIs(10),
+        stepCountIs(TEAM_STEP_CAPS.workerStepsPerTry),
         () => saved.done,
         () => stuckOnRefusal(saved),
         () => limited() !== null,
